@@ -2,44 +2,27 @@ import type { ConnectionPoint, ConnectionPointType, ConnectionPointValue } from 
 import type { NodeAssetBlock } from "./nodeAssetBlock";
 
 export class AssetGraphBuildState {
-    private readonly _buildingBlocks = new Set<NodeAssetBlock>();
-    private readonly _builtBlocks = new Set<NodeAssetBlock>();
+    private readonly _outputValues = new Map<ConnectionPoint<ConnectionPointType, "output">, ConnectionPointValue<ConnectionPointType>>();
 
     public async buildBlockAsync(block: NodeAssetBlock): Promise<void> {
-        if (this._builtBlocks.has(block)) {
-            return;
-        }
-
-        if (this._buildingBlocks.has(block)) {
-            throw new Error(`Cannot build block "${block.name}" because the graph contains a cycle.`);
-        }
-
-        this._buildingBlocks.add(block);
-        try {
-            await block._buildWithStateAsync(this);
-            this._builtBlocks.add(block);
-        } finally {
-            this._buildingBlocks.delete(block);
-        }
+        await block._buildWithStateAsync(this);
     }
 
     public async resolveInputAsync<TType extends ConnectionPointType>(input: ConnectionPoint<TType, "input">): Promise<ConnectionPointValue<TType>> {
         const output = input._getConnectedOutput();
-        if (output === undefined) {
-            throw new Error(`Input connection point "${input._block.name}.${input.name}" is not connected.`);
+        if (output !== undefined) {
+            await this.buildBlockAsync(output._block);
         }
 
-        await this.buildBlockAsync(output._block);
-
-        const value = output._getValue();
+        const value = output === undefined ? undefined : this._outputValues.get(output);
         if (value === undefined) {
-            throw new Error(`Output connection point "${output._block.name}.${output.name}" did not produce a value during the build.`);
+            throw new Error(`Input connection point "${input._block.name}.${input.name}" did not produce a value during this build.`);
         }
 
-        return value;
+        return value as ConnectionPointValue<TType>;
     }
 
     public setOutputValue<TType extends ConnectionPointType>(output: ConnectionPoint<TType, "output">, value: ConnectionPointValue<TType>): void {
-        output._setValue(value);
+        this._outputValues.set(output, value);
     }
 }

@@ -19,13 +19,8 @@ export class NodeAsset {
     public async buildAsync(): Promise<void> {
         this._throwIfDisposed();
 
-        if (this._outputBlocks.length === 0) {
-            throw new Error(`NodeAsset "${this.name}" cannot build because it has no output blocks.`);
-        }
-
         for (const outputBlock of this._outputBlocks) {
             outputBlock._clearData();
-            outputBlock._clearBuildValues();
         }
 
         const state = new AssetGraphBuildState();
@@ -36,7 +31,6 @@ export class NodeAsset {
         } catch (error) {
             for (const outputBlock of this._outputBlocks) {
                 outputBlock._clearData();
-                outputBlock._clearBuildValues();
             }
             throw error;
         }
@@ -50,7 +44,6 @@ export class NodeAsset {
         this._disposed = true;
         for (const outputBlock of this._outputBlocks) {
             outputBlock._clearData();
-            outputBlock._clearBuildValues();
         }
     }
 

@@ -1,4 +1,4 @@
-import { ConnectionPoint, type ConnectionPointType } from "./connectionPoint";
+import { ConnectionPoint, type ConnectionPointType, type ConnectionPointValue } from "./connectionPoint";
 import type { AssetGraphBuildState } from "./assetGraphBuildState";
 
 export abstract class NodeAssetBlock {
@@ -6,6 +6,7 @@ export abstract class NodeAssetBlock {
 
     private readonly _inputs: ConnectionPoint<ConnectionPointType, "input">[] = [];
     private readonly _outputs: ConnectionPoint<ConnectionPointType, "output">[] = [];
+    private _buildState: AssetGraphBuildState | undefined;
 
     public constructor(name: string) {
         this.name = name;
@@ -25,19 +26,29 @@ export abstract class NodeAssetBlock {
 
     /** @internal */
     public async _buildWithStateAsync(state: AssetGraphBuildState): Promise<void> {
-        await this._buildAsync(state);
-    }
-
-    /** @internal */
-    public _clearBuildValues(): void {
-        for (const input of this._inputs) {
-            input._clearValue();
-        }
-
-        for (const output of this._outputs) {
-            output._clearValue();
+        this._buildState = state;
+        try {
+            await this._buildAsync();
+        } finally {
+            this._buildState = undefined;
         }
     }
 
-    protected abstract _buildAsync(state: AssetGraphBuildState): Promise<void>;
+    protected readInputAsync<TType extends ConnectionPointType>(input: ConnectionPoint<TType, "input">): Promise<ConnectionPointValue<TType>> {
+        return this._getBuildState().resolveInputAsync(input);
+    }
+
+    protected writeOutput<TType extends ConnectionPointType>(output: ConnectionPoint<TType, "output">, value: ConnectionPointValue<TType>): void {
+        this._getBuildState().setOutputValue(output, value);
+    }
+
+    private _getBuildState(): AssetGraphBuildState {
+        if (this._buildState === undefined) {
+            throw new Error(`Block "${this.name}" can only read or write values during a graph build.`);
+        }
+
+        return this._buildState;
+    }
+
+    protected abstract _buildAsync(): Promise<void>;
 }

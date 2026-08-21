@@ -1,6 +1,5 @@
 import { type ConnectionPoint, type File } from "./connectionPoint";
 import { NodeAssetBlock } from "./nodeAssetBlock";
-import type { AssetGraphBuildState } from "./assetGraphBuildState";
 
 export class InputBlock extends NodeAssetBlock {
     public readonly output: ConnectionPoint<"File", "output">;
@@ -11,12 +10,12 @@ export class InputBlock extends NodeAssetBlock {
         this.output = this.registerOutput("output", "File");
     }
 
-    protected override _buildAsync(state: AssetGraphBuildState): Promise<void> {
+    protected override _buildAsync(): Promise<void> {
         if (!(this.source instanceof Uint8Array)) {
             throw new Error(`Input block "${this.name}" requires an in-memory Uint8Array source.`);
         }
 
-        state.setOutputValue(this.output, this.source);
+        this.writeOutput(this.output, this.source);
         return Promise.resolve();
     }
 }
