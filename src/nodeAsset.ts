@@ -30,22 +30,24 @@ export class NodeAsset {
 
         this._buildInProgress = true;
         const buildVersion = ++this._buildVersion;
+        const outputBlock = this._outputBlock;
+        let ownsOutputBuild = false;
         try {
-            const outputBlock = this._outputBlock;
             if (outputBlock === undefined) {
                 return;
             }
 
-            outputBlock._clearData();
-
             const state = new AssetGraphBuildState();
-            try {
-                await state.buildBlockAsync(outputBlock);
-                this._throwIfBuildWasDisposed(buildVersion);
-            } catch (error) {
+            outputBlock._assertBuildAvailable(state);
+            ownsOutputBuild = true;
+            outputBlock._clearData();
+            await state.buildBlockAsync(outputBlock);
+            this._throwIfBuildWasDisposed(buildVersion);
+        } catch (error) {
+            if (outputBlock !== undefined && ownsOutputBuild) {
                 outputBlock._clearData();
-                throw error;
             }
+            throw error;
         } finally {
             this._buildInProgress = false;
         }

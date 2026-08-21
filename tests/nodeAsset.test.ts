@@ -73,6 +73,17 @@ class DelayedBlock extends NodeAssetBlock {
     }
 }
 
+class PublishingOutputBlock extends OutputBlock {
+    public afterPublish: (() => Promise<void>) | undefined;
+
+    protected override async _buildAsync(): Promise<void> {
+        await super._buildAsync();
+        if (this.afterPublish !== undefined) {
+            await this.afterPublish();
+        }
+    }
+}
+
 describe("NodeAsset", () => {
     it("flows input bytes to an output block", async () => {
         const bytes = new Uint8Array([0, 1, 2, 255]);
@@ -205,6 +216,35 @@ describe("NodeAsset", () => {
 
         await secondAsset.buildAsync();
         expect(output.data).toEqual(new Uint8Array([12, 13]));
+    });
+
+    it("preserves a published output when a competing graph starts afterward", async () => {
+        const input = new InputBlock("source");
+        input.source = new Uint8Array([14, 15]);
+        const output = new PublishingOutputBlock("shared destination");
+        input.output.connectTo(output.input);
+
+        const firstAsset = new NodeAsset("first graph");
+        const secondAsset = new NodeAsset("second graph");
+        firstAsset.addOutputBlock(output);
+        secondAsset.addOutputBlock(output);
+
+        let competingError: Error | undefined;
+        output.afterPublish = async () => {
+            try {
+                await secondAsset.buildAsync();
+            } catch (error) {
+                if (error instanceof Error) {
+                    competingError = error;
+                } else {
+                    throw error;
+                }
+            }
+        };
+
+        await expect(firstAsset.buildAsync()).resolves.toBeUndefined();
+        expect(competingError).toHaveProperty("message", 'Block "shared destination" cannot be built concurrently because it is already executing.');
+        expect(output.data).toEqual(new Uint8Array([14, 15]));
     });
 
     it("makes disposal terminal for an active build", async () => {

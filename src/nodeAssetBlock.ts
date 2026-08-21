@@ -25,10 +25,15 @@ export abstract class NodeAssetBlock {
     }
 
     /** @internal */
-    public async _buildWithStateAsync(state: AssetGraphBuildState): Promise<void> {
+    public _assertBuildAvailable(state: AssetGraphBuildState): void {
         if (this._buildState !== undefined && this._buildState !== state) {
             throw new Error(`Block "${this.name}" cannot be built concurrently because it is already executing.`);
         }
+    }
+
+    /** @internal */
+    public async _buildWithStateAsync(state: AssetGraphBuildState): Promise<void> {
+        this._assertBuildAvailable(state);
 
         const ownsBuildState = this._buildState === undefined;
         if (ownsBuildState) {
