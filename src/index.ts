@@ -1,3 +1,5 @@
-// Placeholder entry point. See https://github.com/orgs/BabylonJS/projects/158
-// for planned pipeline blocks.
-export {};
+export { ConnectionPoint, type ConnectionPointDirection, type ConnectionPointType, type ConnectionPointValue, type File, type SceneAsset } from "./connectionPoint";
+export { InputBlock } from "./inputBlock";
+export { NodeAsset } from "./nodeAsset";
+export { NodeAssetBlock } from "./nodeAssetBlock";
+export { OutputBlock } from "./outputBlock";

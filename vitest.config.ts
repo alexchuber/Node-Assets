@@ -9,7 +9,10 @@ export default defineConfig({
     test: {
         environment: "node",
         include: ["tests/**/*.test.ts"],
-        passWithNoTests: true,
+        coverage: {
+            provider: "v8",
+            reporter: ["text", "lcov"],
+        },
         reporters: process.env.CI ? ["default", "junit"] : ["default"],
         outputFile: {
             junit: "test-results/junit.xml",

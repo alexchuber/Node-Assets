@@ -8,6 +8,7 @@ yarn.lock
 dist/
 docs/
 test-results/
+coverage/
 *.tsbuildinfo
 .vite/
 
