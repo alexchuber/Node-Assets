@@ -37,6 +37,42 @@ class SingleUseBlock extends NodeAssetBlock {
     }
 }
 
+class DelayedBlock extends NodeAssetBlock {
+    public readonly input: ConnectionPoint<"File", "input"> = this.registerInput("input", "File");
+    public readonly output: ConnectionPoint<"File", "output"> = this.registerOutput("output", "File");
+    public readonly started: Promise<void>;
+
+    private _releaseBuild!: () => void;
+    private readonly _releasePromise: Promise<void>;
+    private _buildCount = 0;
+
+    public constructor(name: string) {
+        super(name);
+        this._releasePromise = new Promise<void>((resolve) => {
+            this._releaseBuild = resolve;
+        });
+        this.started = new Promise<void>((resolve) => {
+            this._startBuild = resolve;
+        });
+    }
+
+    private _startBuild!: () => void;
+
+    public release(): void {
+        this._releaseBuild();
+    }
+
+    protected override async _buildAsync(): Promise<void> {
+        this._buildCount += 1;
+        this._startBuild();
+        if (this._buildCount === 1) {
+            await this._releasePromise;
+        }
+
+        this.writeOutput(this.output, await this.readInputAsync(this.input));
+    }
+}
+
 describe("NodeAsset", () => {
     it("flows input bytes to an output block", async () => {
         const bytes = new Uint8Array([0, 1, 2, 255]);
@@ -118,6 +154,72 @@ describe("NodeAsset", () => {
 
         await expect(asset.buildAsync()).rejects.toThrow("did not produce a value during this build.");
         expect(() => output.data).toThrow('Output block "destination"');
+    });
+
+    it("rejects overlapping builds without corrupting the original build", async () => {
+        const input = new InputBlock("source");
+        input.source = new Uint8Array([6, 7]);
+        const delayed = new DelayedBlock("delayed");
+        const output = new OutputBlock("destination");
+        input.output.connectTo(delayed.input);
+        delayed.output.connectTo(output.input);
+
+        const asset = new NodeAsset("graph");
+        asset.addOutputBlock(output);
+        const firstBuild = asset.buildAsync();
+        await delayed.started;
+
+        const secondBuild = asset.buildAsync();
+        delayed.release();
+
+        await expect(secondBuild).rejects.toThrow('NodeAsset "graph" cannot build because a build is already in progress.');
+        await expect(firstBuild).resolves.toBeUndefined();
+        expect(output.data).toEqual(new Uint8Array([6, 7]));
+    });
+
+    it("makes disposal terminal for an active build", async () => {
+        const input = new InputBlock("source");
+        input.source = new Uint8Array([8, 9]);
+        const delayed = new DelayedBlock("delayed");
+        const output = new OutputBlock("destination");
+        input.output.connectTo(delayed.input);
+        delayed.output.connectTo(output.input);
+
+        const asset = new NodeAsset("graph");
+        asset.addOutputBlock(output);
+        const build = asset.buildAsync();
+        await delayed.started;
+
+        asset.dispose();
+        delayed.release();
+
+        await expect(build).rejects.toThrow('NodeAsset "graph" was disposed while a build was in progress.');
+        expect(() => output.data).toThrow('Output block "destination"');
+        await expect(asset.buildAsync()).rejects.toThrow('NodeAsset "graph" has been disposed');
+        expect(() => asset.addOutputBlock(new OutputBlock("later"))).toThrow('NodeAsset "graph" has been disposed');
+    });
+
+    it("clears output data when disposing a completed graph", async () => {
+        const input = new InputBlock("source");
+        input.source = new Uint8Array([10, 11]);
+        const output = new OutputBlock("destination");
+        input.output.connectTo(output.input);
+
+        const asset = new NodeAsset("graph");
+        asset.addOutputBlock(output);
+        await asset.buildAsync();
+        expect(output.data).toEqual(new Uint8Array([10, 11]));
+
+        asset.dispose();
+
+        expect(() => output.data).toThrow('Output block "destination"');
+    });
+
+    it("rejects a second distinct output root in the single-output tracer", () => {
+        const asset = new NodeAsset("graph");
+        asset.addOutputBlock(new OutputBlock("first"));
+
+        expect(() => asset.addOutputBlock(new OutputBlock("second"))).toThrow('NodeAsset "graph" supports only one output block in this version.');
     });
 
     it("clears output data after a failed rebuild", async () => {

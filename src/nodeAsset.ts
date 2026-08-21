@@ -4,8 +4,10 @@ import type { OutputBlock } from "./outputBlock";
 export class NodeAsset {
     public readonly name: string;
 
-    private readonly _outputBlocks: OutputBlock[] = [];
+    private _outputBlock: OutputBlock | undefined;
     private _disposed = false;
+    private _buildInProgress = false;
+    private _buildVersion = 0;
 
     public constructor(name: string) {
         this.name = name;
@@ -13,26 +15,39 @@ export class NodeAsset {
 
     public addOutputBlock(outputBlock: OutputBlock): void {
         this._throwIfDisposed();
-        this._outputBlocks.push(outputBlock);
+        if (this._outputBlock !== undefined && this._outputBlock !== outputBlock) {
+            throw new Error(`NodeAsset "${this.name}" supports only one output block in this version.`);
+        }
+
+        this._outputBlock = outputBlock;
     }
 
     public async buildAsync(): Promise<void> {
         this._throwIfDisposed();
-
-        for (const outputBlock of this._outputBlocks) {
-            outputBlock._clearData();
+        if (this._buildInProgress) {
+            throw new Error(`NodeAsset "${this.name}" cannot build because a build is already in progress.`);
         }
 
-        const state = new AssetGraphBuildState();
+        this._buildInProgress = true;
+        const buildVersion = ++this._buildVersion;
         try {
-            for (const outputBlock of this._outputBlocks) {
+            const outputBlock = this._outputBlock;
+            if (outputBlock === undefined) {
+                return;
+            }
+
+            outputBlock._clearData();
+
+            const state = new AssetGraphBuildState();
+            try {
                 await state.buildBlockAsync(outputBlock);
-            }
-        } catch (error) {
-            for (const outputBlock of this._outputBlocks) {
+                this._throwIfBuildWasDisposed(buildVersion);
+            } catch (error) {
                 outputBlock._clearData();
+                throw error;
             }
-            throw error;
+        } finally {
+            this._buildInProgress = false;
         }
     }
 
@@ -42,14 +57,21 @@ export class NodeAsset {
         }
 
         this._disposed = true;
-        for (const outputBlock of this._outputBlocks) {
-            outputBlock._clearData();
+        this._buildVersion += 1;
+        if (this._outputBlock !== undefined) {
+            this._outputBlock._clearData();
         }
     }
 
     private _throwIfDisposed(): void {
         if (this._disposed) {
             throw new Error(`NodeAsset "${this.name}" has been disposed and cannot be used.`);
+        }
+    }
+
+    private _throwIfBuildWasDisposed(buildVersion: number): void {
+        if (this._disposed || buildVersion !== this._buildVersion) {
+            throw new Error(`NodeAsset "${this.name}" was disposed while a build was in progress.`);
         }
     }
 }
