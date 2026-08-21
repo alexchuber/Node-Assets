@@ -23,7 +23,7 @@ pnpm format        # Write Prettier formatting
 pnpm test          # Run Vitest
 pnpm test:watch    # Run Vitest in watch mode
 pnpm build         # Build with Vite and emit dist/
-pnpm typedocs      # Generate the TypeDoc API reference
+pnpm docs           # Generate the TypeDoc API reference
 ```
 
 Run `pnpm lint`, `pnpm test`, and `pnpm build` before opening a pull request.
