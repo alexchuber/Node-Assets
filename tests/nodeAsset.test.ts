@@ -177,6 +177,36 @@ describe("NodeAsset", () => {
         expect(output.data).toEqual(new Uint8Array([6, 7]));
     });
 
+    it("rejects concurrent builds that share a block across assets", async () => {
+        const input = new InputBlock("source");
+        input.source = new Uint8Array([12, 13]);
+        const delayed = new DelayedBlock("delayed");
+        const output = new OutputBlock("shared destination");
+        input.output.connectTo(delayed.input);
+        delayed.output.connectTo(output.input);
+
+        const firstAsset = new NodeAsset("first graph");
+        const secondAsset = new NodeAsset("second graph");
+        firstAsset.addOutputBlock(output);
+        secondAsset.addOutputBlock(output);
+
+        const firstBuild = firstAsset.buildAsync();
+        await delayed.started;
+        const secondBuild = secondAsset.buildAsync();
+        delayed.release();
+
+        const results = await Promise.allSettled([firstBuild, secondBuild]);
+        expect(results[0]?.status).toBe("fulfilled");
+        expect(results[1]?.status).toBe("rejected");
+        if (results[1]?.status === "rejected") {
+            expect(results[1].reason).toHaveProperty("message", 'Block "shared destination" cannot be built concurrently because it is already executing.');
+        }
+        expect(output.data).toEqual(new Uint8Array([12, 13]));
+
+        await secondAsset.buildAsync();
+        expect(output.data).toEqual(new Uint8Array([12, 13]));
+    });
+
     it("makes disposal terminal for an active build", async () => {
         const input = new InputBlock("source");
         input.source = new Uint8Array([8, 9]);
