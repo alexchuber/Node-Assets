@@ -114,7 +114,74 @@ describe("NodeAsset", () => {
         expect(() => {
             // @ts-expect-error File and SceneAsset connection points are incompatible.
             input.output.connectTo(sceneInput.input);
-        }).toThrow('Cannot connect "source.output" of type "File"');
+        }).toThrow('Cannot connect these two connectors. source: "source".output, target: "scene consumer".input');
+    });
+
+    it("rejects output-to-output connections at connect time", () => {
+        const source = new InputBlock("source");
+        const otherSource = new InputBlock("other source");
+
+        let thrown: unknown;
+        try {
+            // @ts-expect-error Output connection points can only connect to inputs.
+            source.output.connectTo(otherSource.output);
+        } catch (error) {
+            thrown = error;
+        }
+
+        expect(thrown).toBeInstanceOf(Error);
+        expect(thrown).toHaveProperty("message", 'Cannot connect these two connectors. source: "source".output, target: "other source".output');
+    });
+
+    it("rejects input-to-input connections at connect time", () => {
+        const first = new OutputBlock("first");
+        const second = new OutputBlock("second");
+
+        let thrown: unknown;
+        try {
+            // @ts-expect-error Input connection points cannot be sources.
+            first.input.connectTo(second.input);
+        } catch (error) {
+            thrown = error;
+        }
+
+        expect(thrown).toBeInstanceOf(Error);
+        expect(thrown).toHaveProperty("message", 'Cannot connect these two connectors. source: "first".input, target: "second".input');
+    });
+
+    it("rejects a second connection to an occupied input at connect time", () => {
+        const firstSource = new InputBlock("first source");
+        const secondSource = new InputBlock("second source");
+        const destination = new OutputBlock("destination");
+        firstSource.output.connectTo(destination.input);
+
+        let thrown: unknown;
+        try {
+            secondSource.output.connectTo(destination.input);
+        } catch (error) {
+            thrown = error;
+        }
+
+        expect(thrown).toBeInstanceOf(Error);
+        expect(thrown).toHaveProperty("message", 'Cannot connect these two connectors. source: "second source".output, target: "destination".input');
+    });
+
+    it("rejects a connection that would create a cycle at connect time", () => {
+        const first = new PrefixBlock("first");
+        const middle = new PrefixBlock("middle");
+        const last = new PrefixBlock("last");
+        first.output.connectTo(middle.input);
+        middle.output.connectTo(last.input);
+
+        let thrown: unknown;
+        try {
+            last.output.connectTo(first.input);
+        } catch (error) {
+            thrown = error;
+        }
+
+        expect(thrown).toBeInstanceOf(Error);
+        expect(thrown).toHaveProperty("message", 'Cannot connect these two connectors. source: "last".output, target: "first".input');
     });
 
     it("supports custom blocks through the exported authoring seam", async () => {
