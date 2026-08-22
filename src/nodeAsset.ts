@@ -43,10 +43,10 @@ export class NodeAsset {
             }
 
             ownsOutputBuild = true;
-            this._validateOutputBlockNames(outputBlocks);
             for (const outputBlock of outputBlocks) {
                 outputBlock._clearData();
             }
+            this._validateOutputBlockNames(outputBlocks);
             for (const outputBlock of outputBlocks) {
                 await state.buildBlockAsync(outputBlock);
             }

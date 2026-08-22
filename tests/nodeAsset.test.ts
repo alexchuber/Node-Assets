@@ -456,6 +456,31 @@ describe("NodeAsset", () => {
         expect(() => secondOutput.data).toThrow('Output block "a.glb"');
     });
 
+    it("invalidates prior artifacts before duplicate-name validation", async () => {
+        const input = new InputBlock("source");
+        input.source = new Uint8Array([24]);
+        const counting = new CountingPassThroughBlock("counting");
+        const firstOutput = new OutputBlock("first.glb");
+        const secondOutput = new OutputBlock("second.glb");
+        input.output.connectTo(counting.input);
+        counting.output.connectTo(firstOutput.input);
+        counting.output.connectTo(secondOutput.input);
+
+        const asset = new NodeAsset("graph");
+        asset.addOutputBlock(firstOutput);
+        asset.addOutputBlock(secondOutput);
+        await asset.buildAsync();
+        expect(firstOutput.data).toEqual(new Uint8Array([24]));
+        expect(secondOutput.data).toEqual(new Uint8Array([24]));
+
+        asset.addOutputBlock(new OutputBlock("first.glb"));
+        await expect(asset.buildAsync()).rejects.toThrow('NodeAsset "graph" has duplicate output block names: "first.glb".');
+
+        expect(counting.buildCount).toBe(1);
+        expect(() => firstOutput.data).toThrow('Output block "first.glb"');
+        expect(() => secondOutput.data).toThrow('Output block "second.glb"');
+    });
+
     it("clears output data after a failed rebuild", async () => {
         const input = new InputBlock("source");
         input.source = new Uint8Array([1]);
