@@ -3,9 +3,10 @@ import type { NodeAssetBlock } from "./nodeAssetBlock";
 
 export class AssetGraphBuildState {
     private readonly _outputValues = new Map<ConnectionPoint<ConnectionPointType, "output">, ConnectionPointValue<ConnectionPointType>>();
+    private readonly _blockBuilds = new Map<NodeAssetBlock, Promise<void>>();
 
     /** @internal */
-    public _assertGraphValid(root: NodeAssetBlock, graphName: string): void {
+    public _assertGraphValid(roots: readonly NodeAssetBlock[], graphName: string): void {
         const missingInputs: Array<{ block: NodeAssetBlock; input: ConnectionPoint<ConnectionPointType, "input"> }> = [];
         const visitedBlocks = new Set<NodeAssetBlock>();
 
@@ -26,7 +27,10 @@ export class AssetGraphBuildState {
             }
         };
 
-        visit(root);
+        for (const root of roots) {
+            visit(root);
+        }
+
         if (missingInputs.length > 0) {
             const details = missingInputs.map(({ block, input }) => `Block "${block.name}" has an unconnected required input "${input.name}".`);
             throw new Error(`NodeAsset "${graphName}" cannot build because the graph has structural errors:\n${details.join("\n")}`);
@@ -34,7 +38,16 @@ export class AssetGraphBuildState {
     }
 
     public async buildBlockAsync(block: NodeAssetBlock): Promise<void> {
-        await block._buildWithStateAsync(this);
+        block._assertBuildAvailable(this);
+        const existingBuild = this._blockBuilds.get(block);
+        if (existingBuild !== undefined) {
+            await existingBuild;
+            return;
+        }
+
+        const build = block._buildWithStateAsync(this);
+        this._blockBuilds.set(block, build);
+        await build;
     }
 
     public async resolveInputAsync<TType extends ConnectionPointType>(input: ConnectionPoint<TType, "input">): Promise<ConnectionPointValue<TType>> {

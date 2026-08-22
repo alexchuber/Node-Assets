@@ -51,6 +51,32 @@ class MergeBlock extends NodeAssetBlock {
     }
 }
 
+class CountingPassThroughBlock extends NodeAssetBlock {
+    public readonly input: ConnectionPoint<"File", "input"> = this.registerInput("input", "File");
+    public readonly output: ConnectionPoint<"File", "output"> = this.registerOutput("output", "File");
+    public buildCount = 0;
+
+    protected override async _buildAsync(): Promise<void> {
+        this.buildCount += 1;
+        this.writeOutput(this.output, await this.readInputAsync(this.input));
+    }
+}
+
+class DuplicateInputBlock extends NodeAssetBlock {
+    public readonly firstInput: ConnectionPoint<"File", "input"> = this.registerInput("first input", "File");
+    public readonly secondInput: ConnectionPoint<"File", "input"> = this.registerInput("second input", "File");
+    public readonly output: ConnectionPoint<"File", "output"> = this.registerOutput("output", "File");
+
+    protected override async _buildAsync(): Promise<void> {
+        const firstInput = await this.readInputAsync(this.firstInput);
+        const secondInput = await this.readInputAsync(this.secondInput);
+        const output = new Uint8Array(firstInput.length + secondInput.length);
+        output.set(firstInput);
+        output.set(secondInput, firstInput.length);
+        this.writeOutput(this.output, output);
+    }
+}
+
 class SingleUseBlock extends NodeAssetBlock {
     public readonly input: ConnectionPoint<"File", "input"> = this.registerInput("input", "File");
     public readonly output: ConnectionPoint<"File", "output"> = this.registerOutput("output", "File");
@@ -112,6 +138,58 @@ class PublishingOutputBlock extends OutputBlock {
     }
 }
 
+class DelayedOutputBlock extends OutputBlock {
+    public readonly started: Promise<void>;
+
+    private readonly _releasePromise: Promise<void>;
+    private _releaseBuild!: () => void;
+    private _startBuild!: () => void;
+
+    public constructor(name: string) {
+        super(name);
+        this._releasePromise = new Promise<void>((resolve) => {
+            this._releaseBuild = resolve;
+        });
+        this.started = new Promise<void>((resolve) => {
+            this._startBuild = resolve;
+        });
+    }
+
+    public release(): void {
+        this._releaseBuild();
+    }
+
+    protected override async _buildAsync(): Promise<void> {
+        await super._buildAsync();
+        this._startBuild();
+        await this._releasePromise;
+    }
+}
+
+class GatedOutputBlock extends OutputBlock {
+    public started: Promise<void> = Promise.resolve();
+
+    private _releaseBuild!: () => void;
+    private _startBuild!: () => void;
+
+    public release(): void {
+        this._releaseBuild();
+    }
+
+    protected override async _buildAsync(): Promise<void> {
+        const releasePromise = new Promise<void>((resolve) => {
+            this._releaseBuild = resolve;
+        });
+        this.started = new Promise<void>((resolve) => {
+            this._startBuild = resolve;
+        });
+
+        await super._buildAsync();
+        this._startBuild();
+        await releasePromise;
+    }
+}
+
 describe("NodeAsset", () => {
     it("rejects a build with no registered output block", async () => {
         const asset = new NodeAsset("graph");
@@ -167,6 +245,29 @@ describe("NodeAsset", () => {
         expect(left.buildCount).toBe(0);
         expect(merge.buildCount).toBe(0);
         expect(output.buildCount).toBe(0);
+    });
+
+    it("aggregates missing required inputs across multiple output roots", async () => {
+        const first = new PrefixBlock("first");
+        const second = new PrefixBlock("second");
+        const firstOutput = new TrackingOutputBlock("first.glb");
+        const secondOutput = new TrackingOutputBlock("second.glb");
+        first.output.connectTo(firstOutput.input);
+        second.output.connectTo(secondOutput.input);
+
+        const asset = new NodeAsset("graph");
+        asset.addOutputBlock(firstOutput);
+        asset.addOutputBlock(secondOutput);
+
+        await expect(asset.buildAsync()).rejects.toThrow(
+            'NodeAsset "graph" cannot build because the graph has structural errors:\n' +
+                'Block "first" has an unconnected required input "input".\n' +
+                'Block "second" has an unconnected required input "input".'
+        );
+        expect(first.buildCount).toBe(0);
+        expect(second.buildCount).toBe(0);
+        expect(firstOutput.buildCount).toBe(0);
+        expect(secondOutput.buildCount).toBe(0);
     });
 
     it("flows input bytes to an output block", async () => {
@@ -284,6 +385,44 @@ describe("NodeAsset", () => {
         expect(output.data).toEqual(new Uint8Array([9, 1, 2]));
     });
 
+    it("evaluates a shared File-producing block once when its output fans out", async () => {
+        const input = new InputBlock("source");
+        input.source = new Uint8Array([1, 2]);
+        const counting = new CountingPassThroughBlock("counting");
+        const duplicate = new DuplicateInputBlock("duplicate");
+        const output = new OutputBlock("destination");
+
+        input.output.connectTo(counting.input);
+        counting.output.connectTo(duplicate.firstInput);
+        counting.output.connectTo(duplicate.secondInput);
+        duplicate.output.connectTo(output.input);
+
+        const asset = new NodeAsset("graph");
+        asset.addOutputBlock(output);
+        await asset.buildAsync();
+
+        expect(output.data).toEqual(new Uint8Array([1, 2, 1, 2]));
+        expect(counting.buildCount).toBe(1);
+    });
+
+    it("builds multiple output blocks and retains each artifact", async () => {
+        const input = new InputBlock("source");
+        input.source = new Uint8Array([3, 4]);
+        const firstOutput = new OutputBlock("first.glb");
+        const secondOutput = new OutputBlock("second.glb");
+
+        input.output.connectTo(firstOutput.input);
+        input.output.connectTo(secondOutput.input);
+
+        const asset = new NodeAsset("graph");
+        asset.addOutputBlock(firstOutput);
+        asset.addOutputBlock(secondOutput);
+        await asset.buildAsync();
+
+        expect(firstOutput.data).toEqual(new Uint8Array([3, 4]));
+        expect(secondOutput.data).toEqual(new Uint8Array([3, 4]));
+    });
+
     it("uses fresh build state when rebuilding the graph", async () => {
         const input = new InputBlock("source");
         const output = new OutputBlock("destination");
@@ -298,6 +437,29 @@ describe("NodeAsset", () => {
         await asset.buildAsync();
 
         expect(output.data).toEqual(new Uint8Array([2, 3]));
+    });
+
+    it("refreshes every output on a sequential rebuild", async () => {
+        const input = new InputBlock("source");
+        const counting = new CountingPassThroughBlock("counting");
+        const firstOutput = new OutputBlock("first.glb");
+        const secondOutput = new OutputBlock("second.glb");
+        input.output.connectTo(counting.input);
+        counting.output.connectTo(firstOutput.input);
+        counting.output.connectTo(secondOutput.input);
+
+        const asset = new NodeAsset("graph");
+        asset.addOutputBlock(firstOutput);
+        asset.addOutputBlock(secondOutput);
+
+        input.source = new Uint8Array([17]);
+        await asset.buildAsync();
+        input.source = new Uint8Array([18, 19]);
+        await asset.buildAsync();
+
+        expect(firstOutput.data).toEqual(new Uint8Array([18, 19]));
+        expect(secondOutput.data).toEqual(new Uint8Array([18, 19]));
+        expect(counting.buildCount).toBe(2);
     });
 
     it("does not reuse transient values after a failed rebuild", async () => {
@@ -398,6 +560,129 @@ describe("NodeAsset", () => {
         expect(output.data).toEqual(new Uint8Array([14, 15]));
     });
 
+    it("does not clear another graph's published output after a multi-output overlap", async () => {
+        const firstInput = new InputBlock("first source");
+        firstInput.source = new Uint8Array([22]);
+        const secondInput = new InputBlock("second source");
+        secondInput.source = new Uint8Array([23]);
+        const firstOutput = new PublishingOutputBlock("first destination");
+        const sharedOutput = new DelayedOutputBlock("shared destination");
+        firstInput.output.connectTo(firstOutput.input);
+        secondInput.output.connectTo(sharedOutput.input);
+
+        const firstAsset = new NodeAsset("first graph");
+        const secondAsset = new NodeAsset("second graph");
+        firstAsset.addOutputBlock(firstOutput);
+        firstAsset.addOutputBlock(sharedOutput);
+        secondAsset.addOutputBlock(sharedOutput);
+
+        let competingBuild: Promise<void> | undefined;
+        firstOutput.afterPublish = async () => {
+            competingBuild = secondAsset.buildAsync();
+            await sharedOutput.started;
+        };
+
+        await expect(firstAsset.buildAsync()).rejects.toThrow('Block "shared destination" cannot be built concurrently because it is already executing.');
+        expect(sharedOutput.data).toEqual(new Uint8Array([23]));
+        sharedOutput.release();
+        if (competingBuild !== undefined) {
+            await expect(competingBuild).resolves.toBeUndefined();
+        }
+    });
+
+    it("preserves a newer shared output when an older graph is disposed", async () => {
+        const input = new InputBlock("source");
+        const sharedOutput = new GatedOutputBlock("shared destination");
+        const firstOnlyOutput = new OutputBlock("first-only destination");
+        input.output.connectTo(sharedOutput.input);
+        input.output.connectTo(firstOnlyOutput.input);
+
+        const firstAsset = new NodeAsset("first graph");
+        const secondAsset = new NodeAsset("second graph");
+        firstAsset.addOutputBlock(sharedOutput);
+        firstAsset.addOutputBlock(firstOnlyOutput);
+        secondAsset.addOutputBlock(sharedOutput);
+
+        input.source = new Uint8Array([25]);
+        const firstBuild = firstAsset.buildAsync();
+        await sharedOutput.started;
+        sharedOutput.release();
+        await expect(firstBuild).resolves.toBeUndefined();
+
+        input.source = new Uint8Array([26]);
+        const secondBuild = secondAsset.buildAsync();
+        await sharedOutput.started;
+        expect(sharedOutput.data).toEqual(new Uint8Array([26]));
+
+        firstAsset.dispose();
+        expect(() => firstOnlyOutput.data).toThrow('Output block "first-only destination"');
+        await expect(firstAsset.buildAsync()).rejects.toThrow('NodeAsset "first graph" has been disposed');
+        expect(sharedOutput.data).toEqual(new Uint8Array([26]));
+
+        sharedOutput.release();
+        await expect(secondBuild).resolves.toBeUndefined();
+        expect(sharedOutput.data).toEqual(new Uint8Array([26]));
+    });
+
+    it("snapshots output roots before a hook can add a duplicate", async () => {
+        const input = new InputBlock("source");
+        input.source = new Uint8Array([27]);
+        const firstOutput = new PublishingOutputBlock("artifact.glb");
+        const secondOutput = new OutputBlock("artifact.glb");
+        input.output.connectTo(firstOutput.input);
+        input.output.connectTo(secondOutput.input);
+
+        const asset = new NodeAsset("graph");
+        asset.addOutputBlock(firstOutput);
+        let hookCalls = 0;
+        firstOutput.afterPublish = () => {
+            hookCalls += 1;
+            if (hookCalls === 1) {
+                asset.addOutputBlock(secondOutput);
+            }
+            return Promise.resolve();
+        };
+
+        await expect(asset.buildAsync()).resolves.toBeUndefined();
+        expect(firstOutput.data).toEqual(new Uint8Array([27]));
+        expect(() => secondOutput.data).toThrow('Output block "artifact.glb"');
+        expect(hookCalls).toBe(1);
+
+        await expect(asset.buildAsync()).rejects.toThrow('NodeAsset "graph" has duplicate output block names: "artifact.glb".');
+        expect(hookCalls).toBe(1);
+        expect(() => firstOutput.data).toThrow('Output block "artifact.glb"');
+        expect(() => secondOutput.data).toThrow('Output block "artifact.glb"');
+    });
+
+    it("defers a hook-added unique output until the next build", async () => {
+        const input = new InputBlock("source");
+        input.source = new Uint8Array([28]);
+        const firstOutput = new PublishingOutputBlock("first.glb");
+        const secondOutput = new OutputBlock("second.glb");
+        input.output.connectTo(firstOutput.input);
+        input.output.connectTo(secondOutput.input);
+
+        const asset = new NodeAsset("graph");
+        asset.addOutputBlock(firstOutput);
+        let outputAdded = false;
+        firstOutput.afterPublish = () => {
+            if (!outputAdded) {
+                outputAdded = true;
+                asset.addOutputBlock(secondOutput);
+            }
+            return Promise.resolve();
+        };
+
+        await asset.buildAsync();
+        expect(firstOutput.data).toEqual(new Uint8Array([28]));
+        expect(() => secondOutput.data).toThrow('Output block "second.glb"');
+
+        input.source = new Uint8Array([29]);
+        await asset.buildAsync();
+        expect(firstOutput.data).toEqual(new Uint8Array([29]));
+        expect(secondOutput.data).toEqual(new Uint8Array([29]));
+    });
+
     it("makes disposal terminal for an active build", async () => {
         const input = new InputBlock("source");
         input.source = new Uint8Array([8, 9]);
@@ -436,11 +721,55 @@ describe("NodeAsset", () => {
         expect(() => output.data).toThrow('Output block "destination"');
     });
 
-    it("rejects a second distinct output root in the single-output tracer", () => {
-        const asset = new NodeAsset("graph");
-        asset.addOutputBlock(new OutputBlock("first"));
+    it("reports duplicate output names before executing the graph", async () => {
+        const input = new InputBlock("source");
+        input.source = new Uint8Array([16]);
+        const counting = new CountingPassThroughBlock("counting");
+        const firstOutput = new OutputBlock("z.glb");
+        const secondOutput = new OutputBlock("a.glb");
+        const thirdOutput = new OutputBlock("z.glb");
+        const fourthOutput = new OutputBlock("a.glb");
+        input.output.connectTo(counting.input);
+        counting.output.connectTo(firstOutput.input);
+        counting.output.connectTo(secondOutput.input);
+        counting.output.connectTo(thirdOutput.input);
+        counting.output.connectTo(fourthOutput.input);
 
-        expect(() => asset.addOutputBlock(new OutputBlock("second"))).toThrow('NodeAsset "graph" supports only one output block in this version.');
+        const asset = new NodeAsset("graph");
+        asset.addOutputBlock(firstOutput);
+        asset.addOutputBlock(secondOutput);
+        asset.addOutputBlock(thirdOutput);
+        asset.addOutputBlock(fourthOutput);
+
+        await expect(asset.buildAsync()).rejects.toThrow('NodeAsset "graph" has duplicate output block names: "a.glb", "z.glb".');
+        expect(counting.buildCount).toBe(0);
+        expect(() => firstOutput.data).toThrow('Output block "z.glb"');
+        expect(() => secondOutput.data).toThrow('Output block "a.glb"');
+    });
+
+    it("invalidates prior artifacts before duplicate-name validation", async () => {
+        const input = new InputBlock("source");
+        input.source = new Uint8Array([24]);
+        const counting = new CountingPassThroughBlock("counting");
+        const firstOutput = new OutputBlock("first.glb");
+        const secondOutput = new OutputBlock("second.glb");
+        input.output.connectTo(counting.input);
+        counting.output.connectTo(firstOutput.input);
+        counting.output.connectTo(secondOutput.input);
+
+        const asset = new NodeAsset("graph");
+        asset.addOutputBlock(firstOutput);
+        asset.addOutputBlock(secondOutput);
+        await asset.buildAsync();
+        expect(firstOutput.data).toEqual(new Uint8Array([24]));
+        expect(secondOutput.data).toEqual(new Uint8Array([24]));
+
+        asset.addOutputBlock(new OutputBlock("first.glb"));
+        await expect(asset.buildAsync()).rejects.toThrow('NodeAsset "graph" has duplicate output block names: "first.glb".');
+
+        expect(counting.buildCount).toBe(1);
+        expect(() => firstOutput.data).toThrow('Output block "first.glb"');
+        expect(() => secondOutput.data).toThrow('Output block "second.glb"');
     });
 
     it("clears output data after a failed rebuild", async () => {
@@ -456,6 +785,29 @@ describe("NodeAsset", () => {
         input.source = undefined;
         await expect(asset.buildAsync()).rejects.toThrow('Input block "source"');
         expect(() => output.data).toThrow('Output block "destination"');
+    });
+
+    it("guards every output when a multi-output rebuild fails", async () => {
+        const firstInput = new InputBlock("first source");
+        firstInput.source = new Uint8Array([20]);
+        const secondInput = new InputBlock("second source");
+        secondInput.source = new Uint8Array([21]);
+        const firstOutput = new OutputBlock("first.glb");
+        const secondOutput = new OutputBlock("second.glb");
+        firstInput.output.connectTo(firstOutput.input);
+        secondInput.output.connectTo(secondOutput.input);
+
+        const asset = new NodeAsset("graph");
+        asset.addOutputBlock(firstOutput);
+        asset.addOutputBlock(secondOutput);
+        await asset.buildAsync();
+        expect(firstOutput.data).toEqual(new Uint8Array([20]));
+        expect(secondOutput.data).toEqual(new Uint8Array([21]));
+
+        secondInput.source = undefined;
+        await expect(asset.buildAsync()).rejects.toThrow('Input block "second source"');
+        expect(() => firstOutput.data).toThrow('Output block "first.glb"');
+        expect(() => secondOutput.data).toThrow('Output block "second.glb"');
     });
 
     it("rejects graph use after disposal", async () => {
