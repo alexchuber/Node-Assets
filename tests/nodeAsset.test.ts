@@ -450,6 +450,65 @@ describe("NodeAsset", () => {
         expect(sharedOutput.data).toEqual(new Uint8Array([26]));
     });
 
+    it("snapshots output roots before a hook can add a duplicate", async () => {
+        const input = new InputBlock("source");
+        input.source = new Uint8Array([27]);
+        const firstOutput = new PublishingOutputBlock("artifact.glb");
+        const secondOutput = new OutputBlock("artifact.glb");
+        input.output.connectTo(firstOutput.input);
+        input.output.connectTo(secondOutput.input);
+
+        const asset = new NodeAsset("graph");
+        asset.addOutputBlock(firstOutput);
+        let hookCalls = 0;
+        firstOutput.afterPublish = () => {
+            hookCalls += 1;
+            if (hookCalls === 1) {
+                asset.addOutputBlock(secondOutput);
+            }
+            return Promise.resolve();
+        };
+
+        await expect(asset.buildAsync()).resolves.toBeUndefined();
+        expect(firstOutput.data).toEqual(new Uint8Array([27]));
+        expect(() => secondOutput.data).toThrow('Output block "artifact.glb"');
+        expect(hookCalls).toBe(1);
+
+        await expect(asset.buildAsync()).rejects.toThrow('NodeAsset "graph" has duplicate output block names: "artifact.glb".');
+        expect(hookCalls).toBe(1);
+        expect(() => firstOutput.data).toThrow('Output block "artifact.glb"');
+        expect(() => secondOutput.data).toThrow('Output block "artifact.glb"');
+    });
+
+    it("defers a hook-added unique output until the next build", async () => {
+        const input = new InputBlock("source");
+        input.source = new Uint8Array([28]);
+        const firstOutput = new PublishingOutputBlock("first.glb");
+        const secondOutput = new OutputBlock("second.glb");
+        input.output.connectTo(firstOutput.input);
+        input.output.connectTo(secondOutput.input);
+
+        const asset = new NodeAsset("graph");
+        asset.addOutputBlock(firstOutput);
+        let outputAdded = false;
+        firstOutput.afterPublish = () => {
+            if (!outputAdded) {
+                outputAdded = true;
+                asset.addOutputBlock(secondOutput);
+            }
+            return Promise.resolve();
+        };
+
+        await asset.buildAsync();
+        expect(firstOutput.data).toEqual(new Uint8Array([28]));
+        expect(() => secondOutput.data).toThrow('Output block "second.glb"');
+
+        input.source = new Uint8Array([29]);
+        await asset.buildAsync();
+        expect(firstOutput.data).toEqual(new Uint8Array([29]));
+        expect(secondOutput.data).toEqual(new Uint8Array([29]));
+    });
+
     it("makes disposal terminal for an active build", async () => {
         const input = new InputBlock("source");
         input.source = new Uint8Array([8, 9]);

@@ -9,7 +9,9 @@ export class NodeAsset {
     private _buildInProgress = false;
     private _buildVersion = 0;
     private _buildState: AssetGraphBuildState | undefined;
+    private _activeOutputBlocks: readonly OutputBlock[] | undefined;
     private _successfulBuildState: AssetGraphBuildState | undefined;
+    private _successfulOutputBlocks: readonly OutputBlock[] | undefined;
 
     public constructor(name: string) {
         this.name = name;
@@ -26,9 +28,10 @@ export class NodeAsset {
             throw new Error(`NodeAsset "${this.name}" cannot build because a build is already in progress.`);
         }
 
+        const outputBlocks: readonly OutputBlock[] = [...this._outputBlocks];
         this._buildInProgress = true;
         const buildVersion = ++this._buildVersion;
-        const outputBlocks = this._outputBlocks;
+        this._activeOutputBlocks = outputBlocks;
         let ownsOutputBuild = false;
         let buildState: AssetGraphBuildState | undefined;
         try {
@@ -45,6 +48,7 @@ export class NodeAsset {
 
             ownsOutputBuild = true;
             this._successfulBuildState = undefined;
+            this._successfulOutputBlocks = undefined;
             for (const outputBlock of outputBlocks) {
                 outputBlock._invalidateData();
             }
@@ -54,6 +58,7 @@ export class NodeAsset {
             }
             this._throwIfBuildWasDisposed(buildVersion);
             this._successfulBuildState = state;
+            this._successfulOutputBlocks = outputBlocks;
         } catch (error) {
             if (ownsOutputBuild && buildState !== undefined) {
                 for (const outputBlock of outputBlocks) {
@@ -64,6 +69,9 @@ export class NodeAsset {
         } finally {
             if (buildState !== undefined && this._buildState === buildState) {
                 this._buildState = undefined;
+            }
+            if (this._activeOutputBlocks === outputBlocks) {
+                this._activeOutputBlocks = undefined;
             }
             this._buildInProgress = false;
         }
@@ -77,9 +85,11 @@ export class NodeAsset {
         this._disposed = true;
         this._buildVersion += 1;
         const ownershipState = this._buildState ?? this._successfulBuildState;
+        const ownedOutputBlocks = this._buildState !== undefined ? this._activeOutputBlocks : this._successfulOutputBlocks;
         this._successfulBuildState = undefined;
-        if (ownershipState !== undefined) {
-            for (const outputBlock of this._outputBlocks) {
+        this._successfulOutputBlocks = undefined;
+        if (ownershipState !== undefined && ownedOutputBlocks !== undefined) {
+            for (const outputBlock of ownedOutputBlocks) {
                 outputBlock._clearData(ownershipState);
             }
         }
