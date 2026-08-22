@@ -3,7 +3,9 @@ import { LoadAssetContainerAsync } from "@babylonjs/core/Loading/sceneLoader.js"
 import { Color3 } from "@babylonjs/core/Maths/math.color.js";
 import { PBRMaterial } from "@babylonjs/core/Materials/PBR/pbrMaterial.js";
 import { PBRMetallicRoughnessMaterial } from "@babylonjs/core/Materials/PBR/pbrMetallicRoughnessMaterial.js";
+import type { AbstractMesh } from "@babylonjs/core/Meshes/abstractMesh.js";
 import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder.js";
+import { VertexBuffer } from "@babylonjs/core/Buffers/buffer.js";
 import { Scene } from "@babylonjs/core/scene.js";
 import { registerBuiltInLoaders } from "@babylonjs/loaders/dynamic.js";
 import { GLTF2Export } from "@babylonjs/serializers/glTF/2.0/glTFSerializer.js";
@@ -27,6 +29,7 @@ export interface MeshStructure {
     readonly position: readonly [number, number, number];
     readonly rotationQuaternion: readonly [number, number, number, number];
     readonly scaling: readonly [number, number, number];
+    readonly triangleSignatures: readonly string[];
     readonly vertexCount: number;
 }
 
@@ -52,6 +55,20 @@ export const GLB_FIXTURE_STRUCTURE: SceneStructure = {
             position: [3, -2, 5],
             rotationQuaternion: [0.034270798550482096, -0.10602051106179565, 0.1534393020242226, 0.981856172866081],
             scaling: [1.5, 0.75, 2],
+            triangleSignatures: [
+                "-1,1,1,-1,0,0|-1,-1,-1,-1,0,0|-1,-1,1,-1,0,0",
+                "-1,1,1,-1,0,0|-1,1,-1,-1,0,0|-1,-1,-1,-1,0,0",
+                "-1,1,1,0,1,0|1,1,-1,0,1,0|-1,1,-1,0,1,0",
+                "-1,1,1,0,1,0|1,1,1,0,1,0|1,1,-1,0,1,0",
+                "1,-1,1,0,-1,0|-1,-1,-1,0,-1,0|1,-1,-1,0,-1,0",
+                "1,-1,1,0,-1,0|-1,-1,1,0,-1,0|-1,-1,-1,0,-1,0",
+                "1,-1,1,0,0,1|-1,1,1,0,0,1|-1,-1,1,0,0,1",
+                "1,-1,1,0,0,1|1,1,1,0,0,1|-1,1,1,0,0,1",
+                "1,1,-1,0,0,-1|-1,-1,-1,0,0,-1|-1,1,-1,0,0,-1",
+                "1,1,-1,0,0,-1|1,-1,-1,0,0,-1|-1,-1,-1,0,0,-1",
+                "1,1,-1,1,0,0|1,-1,1,1,0,0|1,-1,-1,1,0,0",
+                "1,1,-1,1,0,0|1,1,1,1,0,0|1,-1,1,1,0,0",
+            ],
             vertexCount: 24,
         },
     ],
@@ -108,6 +125,46 @@ export async function readGlbStructureAsync(bytes: Uint8Array): Promise<SceneStr
     }
 }
 
+export async function readGlbStructureWithSwappedFirstTriangleAsync(bytes: Uint8Array): Promise<SceneStructure> {
+    registerBuiltInLoaders();
+
+    const engine = new NullEngine();
+    const scene = new Scene(engine);
+    scene.useRightHandedSystem = true;
+
+    try {
+        const container = await LoadAssetContainerAsync(bytes, scene, {
+            name: "fixture.glb",
+            pluginExtension: ".glb",
+        });
+        container.addAllToScene();
+        const mesh = scene.meshes.find((candidate) => candidate.getTotalVertices() > 0);
+        if (mesh === undefined) {
+            throw new Error("Expected the fixture mesh to reload.");
+        }
+
+        const indices = mesh.getIndices();
+        if (indices === null || indices.length < 3) {
+            throw new Error("Expected the fixture mesh to have a triangle.");
+        }
+
+        const first = indices[1];
+        const second = indices[2];
+        if (first === undefined || second === undefined) {
+            throw new Error("Expected the fixture triangle indices to be readable.");
+        }
+
+        const swappedIndices = indices.slice();
+        swappedIndices[1] = second;
+        swappedIndices[2] = first;
+        mesh.setIndices(swappedIndices, mesh.getTotalVertices());
+        return readSceneStructure(scene);
+    } finally {
+        scene.dispose();
+        engine.dispose();
+    }
+}
+
 function readSceneStructure(scene: Scene): SceneStructure {
     return {
         materials: scene.materials
@@ -140,10 +197,57 @@ function readSceneStructure(scene: Scene): SceneStructure {
                         ? toTuple4(0, 0, 0, 1)
                         : toTuple4(mesh.rotationQuaternion.x, mesh.rotationQuaternion.y, mesh.rotationQuaternion.z, mesh.rotationQuaternion.w),
                 scaling: toTuple3(mesh.scaling.x, mesh.scaling.y, mesh.scaling.z),
+                triangleSignatures: getTriangleSignatures(mesh),
                 vertexCount: mesh.getTotalVertices(),
             }))
             .sort((left, right) => left.name.localeCompare(right.name)),
     };
+}
+
+function getTriangleSignatures(mesh: AbstractMesh): readonly string[] {
+    const positions = mesh.getVerticesData(VertexBuffer.PositionKind);
+    const normals = mesh.getVerticesData(VertexBuffer.NormalKind);
+    const indices = mesh.getIndices();
+    if (positions === null || normals === null || indices === null || indices.length % 3 !== 0) {
+        throw new Error(`Expected mesh "${mesh.name}" to have complete triangle data.`);
+    }
+
+    const signatures: string[] = [];
+    for (let index = 0; index < indices.length; index += 3) {
+        const first = indices[index];
+        const second = indices[index + 1];
+        const third = indices[index + 2];
+        if (first === undefined || second === undefined || third === undefined) {
+            throw new Error(`Expected mesh "${mesh.name}" triangle indices to be readable.`);
+        }
+
+        signatures.push([first, second, third].map((vertexIndex) => formatTriangleVertex(positions, normals, vertexIndex)).join("|"));
+    }
+
+    return signatures.sort();
+}
+
+function formatTriangleVertex(positions: ArrayLike<number>, normals: ArrayLike<number>, vertexIndex: number): string {
+    const offset = vertexIndex * 3;
+    return [
+        readArrayValue(positions, offset),
+        readArrayValue(positions, offset + 1),
+        readArrayValue(positions, offset + 2),
+        readArrayValue(normals, offset),
+        readArrayValue(normals, offset + 1),
+        readArrayValue(normals, offset + 2),
+    ]
+        .map((value) => String(Number(value.toFixed(6))))
+        .join(",");
+}
+
+function readArrayValue(values: ArrayLike<number>, index: number): number {
+    const value = values[index];
+    if (value === undefined) {
+        throw new Error("Expected mesh vertex data to be complete.");
+    }
+
+    return value;
 }
 
 function toTuple3(x: number, y: number, z: number): [number, number, number] {

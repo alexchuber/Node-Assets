@@ -1,10 +1,5 @@
 import { AssetContainer } from "@babylonjs/core/assetContainer.js";
 import { Scene } from "@babylonjs/core/scene.js";
-import type { AbstractMesh } from "@babylonjs/core/Meshes/abstractMesh.js";
-import type { BaseTexture } from "@babylonjs/core/Materials/Textures/baseTexture.js";
-import type { Camera } from "@babylonjs/core/Cameras/camera.js";
-import type { Material } from "@babylonjs/core/Materials/material.js";
-import type { MorphTargetManager } from "@babylonjs/core/Morph/morphTargetManager.js";
 import { GLTFLoader } from "@babylonjs/loaders/glTF/2.0/glTFLoader.pure.js";
 import { registerBuiltInLoaders } from "@babylonjs/loaders/dynamic.js";
 import { GLTFFileLoader, type IGLTFLoaderData } from "@babylonjs/loaders/glTF/glTFFileLoader.pure.js";
@@ -15,15 +10,34 @@ import { SceneAsset } from "./sceneAsset";
 let gltfLoaderRegistered = false;
 
 class OwnedAssetContainer extends AssetContainer {
-    private _disposed = false;
+    #disposed = false;
 
     public override dispose(): void {
         // Babylon's scene observer may dispose an unattached container during scene cleanup.
-        if (this._disposed) {
+        if (this.#disposed) {
             return;
         }
 
-        this._disposed = true;
+        this.#disposed = true;
+        this.removeAllFromScene();
+        const meshGeometries = new Set(
+            this.meshes.flatMap((mesh) => {
+                const geometry = mesh.geometry;
+                return geometry === null ? [] : [geometry];
+            })
+        );
+        for (const geometry of this.geometries) {
+            if (!meshGeometries.has(geometry)) {
+                geometry.dispose();
+            }
+        }
+        this.geometries.length = 0;
+        for (const mesh of this.meshes) {
+            mesh.setParent(null);
+        }
+        for (const transformNode of this.transformNodes) {
+            transformNode.setParent(null);
+        }
         super.dispose();
     }
 }
@@ -57,39 +71,11 @@ export class ParseGLBBlock extends NodeAssetBlock {
         try {
             const data = await loadGLTFDataAsync(fileLoader, scene, bytes, `${this.name}.glb`);
             gltfLoader = new GLTFLoader(fileLoader);
-            const materials: Material[] = [];
-            fileLoader.onMaterialLoadedObservable.add((material) => {
-                materials.push(material);
-            });
-            const textures: BaseTexture[] = [];
-            fileLoader.onTextureLoadedObservable.add((texture) => {
-                textures.push(texture);
-            });
-            const cameras: Camera[] = [];
-            fileLoader.onCameraLoadedObservable.add((camera) => {
-                cameras.push(camera);
-            });
-            const morphTargetManagers: MorphTargetManager[] = [];
-            fileLoader.onMeshLoadedObservable.add((mesh: AbstractMesh) => {
-                if (mesh.morphTargetManager) {
-                    morphTargetManagers.push(mesh.morphTargetManager);
-                }
-            });
 
-            // The low-level loader accepts our container before import can reject.
-            const result = await gltfLoader.importMeshAsync(null, scene, assetContainer, data, "", undefined, `${this.name}.glb`);
+            // Keep partial imports in the build-scoped scene until both loader phases succeed.
+            await gltfLoader.importMeshAsync(null, scene, null, data, "", undefined, `${this.name}.glb`);
             await fileLoader.whenCompleteAsync();
-            assetContainer.geometries.push(...result.geometries);
-            assetContainer.meshes.push(...result.meshes);
-            assetContainer.particleSystems.push(...result.particleSystems);
-            assetContainer.skeletons.push(...result.skeletons);
-            assetContainer.animationGroups.push(...result.animationGroups);
-            assetContainer.materials.push(...materials);
-            assetContainer.textures.push(...textures);
-            assetContainer.lights.push(...result.lights);
-            assetContainer.transformNodes.push(...result.transformNodes);
-            assetContainer.cameras.push(...cameras);
-            assetContainer.morphTargetManagers.push(...morphTargetManagers);
+            assetContainer.moveAllFromScene();
             assetContainer.addAllToScene();
             this.writeOutput(this.output, sceneAsset);
         } catch (error) {

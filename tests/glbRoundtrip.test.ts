@@ -1,12 +1,16 @@
 import { AssetContainer } from "@babylonjs/core/assetContainer.js";
 import { NullEngine } from "@babylonjs/core/Engines/nullEngine.js";
+import { Geometry } from "@babylonjs/core/Meshes/geometry.js";
+import { Mesh } from "@babylonjs/core/Meshes/mesh.js";
+import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder.js";
 import { Scene } from "@babylonjs/core/scene.js";
+import { GLTFFileLoader } from "@babylonjs/loaders/glTF/glTFFileLoader.pure.js";
 import { GLTFLoader } from "@babylonjs/loaders/glTF/2.0/glTFLoader.pure.js";
 import { GLTF2Export } from "@babylonjs/serializers/glTF/2.0/glTFSerializer.js";
 import { describe, expect, it, vi } from "vitest";
 
 import { InputBlock, NodeAsset, OutputBlock, ParseGLBBlock, SerializeGLBBlock } from "../src/index";
-import { createGlbFixtureAsync, readGlbStructureAsync } from "./glbFixture";
+import { createGlbFixtureAsync, readGlbStructureAsync, readGlbStructureWithSwappedFirstTriangleAsync } from "./glbFixture";
 
 describe("GLB roundtrip", () => {
     it("roundtrips an in-memory GLB through the public block chain", async () => {
@@ -66,6 +70,26 @@ describe("GLB roundtrip", () => {
         expectVectorToBeClose(mesh.position, [3, -2, 5]);
         expectVectorToBeClose(mesh.rotationQuaternion, [0.034270798550482096, -0.10602051106179565, 0.1534393020242226, 0.981856172866081]);
         expectVectorToBeClose(mesh.scaling, [1.5, 0.75, 2]);
+        expect(mesh.triangleSignatures).toEqual(fixture.structure.meshes[0]?.triangleSignatures);
+    });
+
+    it("detects swapped triangle indices even when counts and bounds match", async () => {
+        const fixture = await createGlbFixtureAsync();
+        const originalMesh = fixture.structure.meshes[0];
+        if (originalMesh === undefined) {
+            throw new Error("Expected the fixture mesh.");
+        }
+
+        const swapped = await readGlbStructureWithSwappedFirstTriangleAsync(fixture.bytes);
+        const swappedMesh = swapped.meshes[0];
+        if (swappedMesh === undefined) {
+            throw new Error("Expected the swapped fixture mesh.");
+        }
+
+        expect(swappedMesh.vertexCount).toBe(originalMesh.vertexCount);
+        expect(swappedMesh.indexCount).toBe(originalMesh.indexCount);
+        expectVectorToBeClose(swappedMesh.dimensions, originalMesh.dimensions);
+        expect(swappedMesh.triangleSignatures).not.toEqual(originalMesh.triangleSignatures);
     });
 
     it("supports repeated builds with fresh headless scenes and engines", async () => {
@@ -99,6 +123,8 @@ describe("GLB roundtrip", () => {
     it("disposes parsed resources exactly once after a successful serialization", async () => {
         const fixture = await createGlbFixtureAsync();
         const containerDispose = vi.spyOn(AssetContainer.prototype, "dispose");
+        const meshDispose = vi.spyOn(Mesh.prototype, "dispose");
+        const geometryDispose = vi.spyOn(Geometry.prototype, "dispose");
         const sceneDispose = vi.spyOn(Scene.prototype, "dispose");
         const engineDispose = vi.spyOn(NullEngine.prototype, "dispose");
 
@@ -106,9 +132,15 @@ describe("GLB roundtrip", () => {
             await buildRoundtripAsync(fixture.bytes);
 
             expect(containerDispose).toHaveBeenCalledTimes(1);
+            expect(meshDispose).toHaveBeenCalled();
+            expect(new Set(meshDispose.mock.instances).size).toBe(meshDispose.mock.calls.length);
+            expect(geometryDispose).toHaveBeenCalled();
+            expect(new Set(geometryDispose.mock.instances).size).toBe(geometryDispose.mock.calls.length);
             expect(sceneDispose).toHaveBeenCalledTimes(1);
             expect(engineDispose).toHaveBeenCalledTimes(1);
         } finally {
+            geometryDispose.mockRestore();
+            meshDispose.mockRestore();
             containerDispose.mockRestore();
             sceneDispose.mockRestore();
             engineDispose.mockRestore();
@@ -118,6 +150,8 @@ describe("GLB roundtrip", () => {
     it("disposes parsed resources exactly once when serialization fails", async () => {
         const fixture = await createGlbFixtureAsync();
         const containerDispose = vi.spyOn(AssetContainer.prototype, "dispose");
+        const meshDispose = vi.spyOn(Mesh.prototype, "dispose");
+        const geometryDispose = vi.spyOn(Geometry.prototype, "dispose");
         const sceneDispose = vi.spyOn(Scene.prototype, "dispose");
         const engineDispose = vi.spyOn(NullEngine.prototype, "dispose");
         const serialize = vi.spyOn(GLTF2Export, "GLBAsync").mockRejectedValue(new Error("forced serializer failure"));
@@ -125,44 +159,131 @@ describe("GLB roundtrip", () => {
         try {
             await expect(buildRoundtripAsync(fixture.bytes)).rejects.toThrow('Serialize GLB block "serialize" failed: forced serializer failure');
             expect(containerDispose).toHaveBeenCalledTimes(1);
+            expect(meshDispose).toHaveBeenCalled();
+            expect(new Set(meshDispose.mock.instances).size).toBe(meshDispose.mock.calls.length);
+            expect(geometryDispose).toHaveBeenCalled();
+            expect(new Set(geometryDispose.mock.instances).size).toBe(geometryDispose.mock.calls.length);
             expect(sceneDispose).toHaveBeenCalledTimes(1);
             expect(engineDispose).toHaveBeenCalledTimes(1);
         } finally {
             serialize.mockRestore();
+            geometryDispose.mockRestore();
+            meshDispose.mockRestore();
             containerDispose.mockRestore();
             sceneDispose.mockRestore();
             engineDispose.mockRestore();
         }
     });
 
-    it("disposes a partially loaded container before its scene and engine", async () => {
+    it("disposes resources allocated before import failure exactly once", async () => {
         const fixture = await createGlbFixtureAsync();
         const disposalOrder: string[] = [];
         const originalContainerDispose = captureDispose(AssetContainer.prototype);
+        const originalMeshDispose = captureDispose(Mesh.prototype);
+        const originalGeometryDispose = captureDispose(Geometry.prototype);
         const originalSceneDispose = captureDispose(Scene.prototype);
         const originalEngineDispose = captureDispose(NullEngine.prototype);
         const containerDispose = vi.spyOn(AssetContainer.prototype, "dispose").mockImplementation(function (this: AssetContainer): void {
             disposalOrder.push("container");
             originalContainerDispose(this);
         });
+        const meshDispose = vi.spyOn(Mesh.prototype, "dispose").mockImplementation(function (this: Mesh): void {
+            disposalOrder.push("mesh");
+            originalMeshDispose(this);
+        });
+        const geometryDispose = vi.spyOn(Geometry.prototype, "dispose").mockImplementation(function (this: Geometry): void {
+            disposalOrder.push("geometry");
+            originalGeometryDispose(this);
+        });
         const sceneDispose = vi.spyOn(Scene.prototype, "dispose").mockImplementation(function (this: Scene): void {
-            disposalOrder.push("scene");
             originalSceneDispose(this);
+            disposalOrder.push("scene");
         });
         const engineDispose = vi.spyOn(NullEngine.prototype, "dispose").mockImplementation(function (this: NullEngine): void {
             disposalOrder.push("engine");
             originalEngineDispose(this);
         });
-        const loaderImport = vi.spyOn(GLTFLoader.prototype, "importMeshAsync").mockRejectedValue(new Error("forced loader failure"));
+        const loaderImport = vi.spyOn(GLTFLoader.prototype, "importMeshAsync").mockImplementation((_meshesNames, scene, container) => {
+            expect(container).toBeNull();
+            MeshBuilder.CreateBox("partial-import", { size: 1 }, scene);
+            throw new Error("forced loader failure");
+        });
 
         try {
             await expect(buildRoundtripAsync(fixture.bytes)).rejects.toThrow('Parse GLB block "parse" failed: forced loader failure');
-            expect(disposalOrder).toEqual(["container", "scene", "engine"]);
+            expect(disposalOrder).toEqual(["container", "mesh", "geometry", "scene", "engine"]);
             expect(containerDispose).toHaveBeenCalledTimes(1);
+            expect(meshDispose).toHaveBeenCalledTimes(1);
+            expect(geometryDispose).toHaveBeenCalledTimes(1);
             expect(sceneDispose).toHaveBeenCalledTimes(1);
             expect(engineDispose).toHaveBeenCalledTimes(1);
         } finally {
             loaderImport.mockRestore();
+            geometryDispose.mockRestore();
+            meshDispose.mockRestore();
+            containerDispose.mockRestore();
+            sceneDispose.mockRestore();
+            engineDispose.mockRestore();
+        }
+    });
+
+    it("disposes resources allocated before completion failure exactly once", async () => {
+        const fixture = await createGlbFixtureAsync();
+        const disposalOrder: string[] = [];
+        const originalContainerDispose = captureDispose(AssetContainer.prototype);
+        const originalMeshDispose = captureDispose(Mesh.prototype);
+        const originalGeometryDispose = captureDispose(Geometry.prototype);
+        const originalSceneDispose = captureDispose(Scene.prototype);
+        const originalEngineDispose = captureDispose(NullEngine.prototype);
+        const containerDispose = vi.spyOn(AssetContainer.prototype, "dispose").mockImplementation(function (this: AssetContainer): void {
+            disposalOrder.push("container");
+            originalContainerDispose(this);
+        });
+        const meshDispose = vi.spyOn(Mesh.prototype, "dispose").mockImplementation(function (this: Mesh): void {
+            disposalOrder.push("mesh");
+            originalMeshDispose(this);
+        });
+        const geometryDispose = vi.spyOn(Geometry.prototype, "dispose").mockImplementation(function (this: Geometry): void {
+            disposalOrder.push("geometry");
+            originalGeometryDispose(this);
+        });
+        const sceneDispose = vi.spyOn(Scene.prototype, "dispose").mockImplementation(function (this: Scene): void {
+            originalSceneDispose(this);
+            disposalOrder.push("scene");
+        });
+        const engineDispose = vi.spyOn(NullEngine.prototype, "dispose").mockImplementation(function (this: NullEngine): void {
+            disposalOrder.push("engine");
+            originalEngineDispose(this);
+        });
+        const loaderImport = vi.spyOn(GLTFLoader.prototype, "importMeshAsync").mockImplementation((_meshesNames, scene, container) => {
+            expect(container).toBeNull();
+            const mesh = MeshBuilder.CreateBox("partial-completion", { size: 1 }, scene);
+            return Promise.resolve({
+                animationGroups: [],
+                geometries: [],
+                lights: [],
+                meshes: [mesh],
+                particleSystems: [],
+                skeletons: [],
+                spriteManagers: [],
+                transformNodes: [],
+            });
+        });
+        const completion = vi.spyOn(GLTFFileLoader.prototype, "whenCompleteAsync").mockRejectedValue(new Error("forced completion failure"));
+
+        try {
+            await expect(buildRoundtripAsync(fixture.bytes)).rejects.toThrow('Parse GLB block "parse" failed: forced completion failure');
+            expect(disposalOrder).toEqual(["container", "mesh", "geometry", "scene", "engine"]);
+            expect(containerDispose).toHaveBeenCalledTimes(1);
+            expect(meshDispose).toHaveBeenCalledTimes(1);
+            expect(geometryDispose).toHaveBeenCalledTimes(1);
+            expect(sceneDispose).toHaveBeenCalledTimes(1);
+            expect(engineDispose).toHaveBeenCalledTimes(1);
+        } finally {
+            completion.mockRestore();
+            loaderImport.mockRestore();
+            geometryDispose.mockRestore();
+            meshDispose.mockRestore();
             containerDispose.mockRestore();
             sceneDispose.mockRestore();
             engineDispose.mockRestore();
