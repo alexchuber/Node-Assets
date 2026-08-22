@@ -36,12 +36,12 @@ export class NodeAsset {
         let engine: NullEngine | undefined;
         let state: AssetGraphBuildState | undefined;
         try {
+            engine = new NullEngine();
+            state = new AssetGraphBuildState(engine);
             if (outputBlock === undefined) {
                 return;
             }
 
-            engine = new NullEngine();
-            state = new AssetGraphBuildState(engine);
             outputBlock._assertBuildAvailable(state);
             ownsOutputBuild = true;
             outputBlock._clearData();

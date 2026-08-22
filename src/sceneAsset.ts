@@ -27,6 +27,9 @@ export class SceneAsset {
             throw new Error("Cannot attach an asset container to a disposed SceneAsset.");
         }
         if (this.#assetContainer !== undefined) {
+            if (this.#assetContainer === assetContainer) {
+                return;
+            }
             throw new Error("A SceneAsset can only own one asset container.");
         }
 

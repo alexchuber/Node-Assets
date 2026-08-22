@@ -1,6 +1,7 @@
 import { AssetContainer } from "@babylonjs/core/assetContainer.js";
 import { NullEngine } from "@babylonjs/core/Engines/nullEngine.js";
 import { Scene } from "@babylonjs/core/scene.js";
+import { GLTFLoader } from "@babylonjs/loaders/glTF/2.0/glTFLoader.pure.js";
 import { GLTF2Export } from "@babylonjs/serializers/glTF/2.0/glTFSerializer.js";
 import { describe, expect, it, vi } from "vitest";
 
@@ -134,6 +135,40 @@ describe("GLB roundtrip", () => {
         }
     });
 
+    it("disposes a partially loaded container before its scene and engine", async () => {
+        const fixture = await createGlbFixtureAsync();
+        const disposalOrder: string[] = [];
+        const originalContainerDispose = captureDispose(AssetContainer.prototype);
+        const originalSceneDispose = captureDispose(Scene.prototype);
+        const originalEngineDispose = captureDispose(NullEngine.prototype);
+        const containerDispose = vi.spyOn(AssetContainer.prototype, "dispose").mockImplementation(function (this: AssetContainer): void {
+            disposalOrder.push("container");
+            originalContainerDispose(this);
+        });
+        const sceneDispose = vi.spyOn(Scene.prototype, "dispose").mockImplementation(function (this: Scene): void {
+            disposalOrder.push("scene");
+            originalSceneDispose(this);
+        });
+        const engineDispose = vi.spyOn(NullEngine.prototype, "dispose").mockImplementation(function (this: NullEngine): void {
+            disposalOrder.push("engine");
+            originalEngineDispose(this);
+        });
+        const loaderImport = vi.spyOn(GLTFLoader.prototype, "importMeshAsync").mockRejectedValue(new Error("forced loader failure"));
+
+        try {
+            await expect(buildRoundtripAsync(fixture.bytes)).rejects.toThrow('Parse GLB block "parse" failed: forced loader failure');
+            expect(disposalOrder).toEqual(["container", "scene", "engine"]);
+            expect(containerDispose).toHaveBeenCalledTimes(1);
+            expect(sceneDispose).toHaveBeenCalledTimes(1);
+            expect(engineDispose).toHaveBeenCalledTimes(1);
+        } finally {
+            loaderImport.mockRestore();
+            containerDispose.mockRestore();
+            sceneDispose.mockRestore();
+            engineDispose.mockRestore();
+        }
+    });
+
     it("includes the parse block name when loading fails", async () => {
         const input = new InputBlock("source");
         const parse = new ParseGLBBlock("parse");
@@ -208,4 +243,25 @@ function expectVectorToBeClose(actual: readonly number[], expected: readonly num
     for (const [index, expectedValue] of expected.entries()) {
         expect(actual[index]).toBeCloseTo(expectedValue, 5);
     }
+}
+
+function captureDispose<T extends { dispose(): void }>(prototype: T): (instance: T) => void {
+    let current: object | null = prototype;
+    while (current !== null) {
+        const descriptor = Object.getOwnPropertyDescriptor(current, "dispose");
+        if (descriptor !== undefined) {
+            if (typeof descriptor.value !== "function") {
+                throw new Error("Expected a disposable prototype method.");
+            }
+
+            const dispose = descriptor.value as (this: T) => void;
+            return (instance) => {
+                Reflect.apply(dispose, instance, []);
+            };
+        }
+
+        current = Reflect.getPrototypeOf(current);
+    }
+
+    throw new Error("Expected a disposable prototype method.");
 }

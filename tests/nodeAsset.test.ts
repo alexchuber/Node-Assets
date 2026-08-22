@@ -1,4 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { EngineStore } from "@babylonjs/core/Engines/engineStore.js";
+import { NullEngine } from "@babylonjs/core/Engines/nullEngine.js";
 
 import { InputBlock, NodeAsset, NodeAssetBlock, OutputBlock, SceneAsset, type ConnectionPoint } from "../src/index";
 
@@ -85,6 +87,25 @@ class PublishingOutputBlock extends OutputBlock {
 }
 
 describe("NodeAsset", () => {
+    it("creates and disposes one engine for an empty build", async () => {
+        const asset = new NodeAsset("empty graph");
+        const initialEngineCount = EngineStore.Instances.length;
+        const engineCreate = vi.spyOn(EngineStore.Instances, "push");
+        const engineDispose = vi.spyOn(NullEngine.prototype, "dispose");
+
+        try {
+            await asset.buildAsync();
+
+            expect(engineCreate).toHaveBeenCalledTimes(1);
+            expect(engineDispose).toHaveBeenCalledTimes(1);
+            expect(EngineStore.Instances).toHaveLength(initialEngineCount);
+        } finally {
+            engineCreate.mockRestore();
+            engineDispose.mockRestore();
+            asset.dispose();
+        }
+    });
+
     it("keeps SceneAsset opaque and non-user-constructible", () => {
         expect(SceneAsset).toBeDefined();
         expect(() => {
