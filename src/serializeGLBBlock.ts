@@ -1,4 +1,3 @@
-import { GLTF2Export } from "@babylonjs/serializers/glTF/2.0/glTFSerializer.js";
 import { type ConnectionPoint } from "./connectionPoint";
 import { NodeAssetBlock } from "./nodeAssetBlock";
 
@@ -17,6 +16,7 @@ export class SerializeGLBBlock extends NodeAssetBlock {
         const fileName = `${this.name}.glb`;
 
         try {
+            const { GLTF2Export } = await import("@babylonjs/serializers/glTF/2.0/glTFSerializer.js");
             const data = await GLTF2Export.GLBAsync(sceneAsset._getScene(), fileName);
             const file = data.files[fileName];
             if (file === undefined || typeof file === "string") {
