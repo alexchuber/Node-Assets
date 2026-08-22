@@ -25,6 +25,11 @@ export abstract class NodeAssetBlock {
     }
 
     /** @internal */
+    public _getInputs(): readonly ConnectionPoint<ConnectionPointType, "input">[] {
+        return this._inputs;
+    }
+
+    /** @internal */
     public _assertBuildAvailable(state: AssetGraphBuildState): void {
         if (this._buildState !== undefined && this._buildState !== state) {
             throw new Error(`Block "${this.name}" cannot be built concurrently because it is already executing.`);

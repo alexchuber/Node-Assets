@@ -4,6 +4,35 @@ import type { NodeAssetBlock } from "./nodeAssetBlock";
 export class AssetGraphBuildState {
     private readonly _outputValues = new Map<ConnectionPoint<ConnectionPointType, "output">, ConnectionPointValue<ConnectionPointType>>();
 
+    /** @internal */
+    public _assertGraphValid(root: NodeAssetBlock, graphName: string): void {
+        const missingInputs: Array<{ block: NodeAssetBlock; input: ConnectionPoint<ConnectionPointType, "input"> }> = [];
+        const visitedBlocks = new Set<NodeAssetBlock>();
+
+        const visit = (block: NodeAssetBlock): void => {
+            if (visitedBlocks.has(block)) {
+                return;
+            }
+
+            visitedBlocks.add(block);
+            for (const input of block._getInputs()) {
+                const output = input._getConnectedOutput();
+                if (output === undefined) {
+                    missingInputs.push({ block, input });
+                    continue;
+                }
+
+                visit(output._block);
+            }
+        };
+
+        visit(root);
+        if (missingInputs.length > 0) {
+            const details = missingInputs.map(({ block, input }) => `Block "${block.name}" has an unconnected required input "${input.name}".`);
+            throw new Error(`NodeAsset "${graphName}" cannot build because the graph has structural errors:\n${details.join("\n")}`);
+        }
+    }
+
     public async buildBlockAsync(block: NodeAssetBlock): Promise<void> {
         await block._buildWithStateAsync(this);
     }

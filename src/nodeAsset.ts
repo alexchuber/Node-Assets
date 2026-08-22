@@ -34,12 +34,13 @@ export class NodeAsset {
         let ownsOutputBuild = false;
         try {
             if (outputBlock === undefined) {
-                return;
+                throw new Error(`NodeAsset "${this.name}" cannot build because no output block has been registered.`);
             }
 
             const state = new AssetGraphBuildState();
             outputBlock._assertBuildAvailable(state);
             ownsOutputBuild = true;
+            state._assertGraphValid(outputBlock, this.name);
             outputBlock._clearData();
             await state.buildBlockAsync(outputBlock);
             this._throwIfBuildWasDisposed(buildVersion);

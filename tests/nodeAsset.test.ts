@@ -13,12 +13,40 @@ class SceneInputBlock extends NodeAssetBlock {
 class PrefixBlock extends NodeAssetBlock {
     public readonly input: ConnectionPoint<"File", "input"> = this.registerInput("input", "File");
     public readonly output: ConnectionPoint<"File", "output"> = this.registerOutput("output", "File");
+    public buildCount = 0;
 
     protected override async _buildAsync(): Promise<void> {
+        this.buildCount += 1;
         const input = await this.readInputAsync(this.input);
         const output = new Uint8Array(input.length + 1);
         output[0] = 9;
         output.set(input, 1);
+        this.writeOutput(this.output, output);
+    }
+}
+
+class TrackingOutputBlock extends OutputBlock {
+    public buildCount = 0;
+
+    protected override async _buildAsync(): Promise<void> {
+        this.buildCount += 1;
+        await super._buildAsync();
+    }
+}
+
+class MergeBlock extends NodeAssetBlock {
+    public readonly left = this.registerInput("left", "File");
+    public readonly right = this.registerInput("right", "File");
+    public readonly output = this.registerOutput("output", "File");
+    public buildCount = 0;
+
+    protected override async _buildAsync(): Promise<void> {
+        this.buildCount += 1;
+        const left = await this.readInputAsync(this.left);
+        const right = await this.readInputAsync(this.right);
+        const output = new Uint8Array(left.length + right.length);
+        output.set(left);
+        output.set(right, left.length);
         this.writeOutput(this.output, output);
     }
 }
@@ -85,6 +113,62 @@ class PublishingOutputBlock extends OutputBlock {
 }
 
 describe("NodeAsset", () => {
+    it("rejects a build with no registered output block", async () => {
+        const asset = new NodeAsset("graph");
+
+        await expect(asset.buildAsync()).rejects.toThrow('NodeAsset "graph" cannot build because no output block has been registered.');
+    });
+
+    it("rejects an unconnected required input before executing the graph", async () => {
+        const source = new InputBlock("source");
+        source.source = new Uint8Array([1, 2]);
+        const prefix = new PrefixBlock("prefix");
+        const output = new TrackingOutputBlock("destination");
+        prefix.output.connectTo(output.input);
+
+        const asset = new NodeAsset("graph");
+        asset.addOutputBlock(output);
+
+        await expect(asset.buildAsync()).rejects.toThrow('Block "prefix" has an unconnected required input "input".');
+        expect(prefix.buildCount).toBe(0);
+        expect(output.buildCount).toBe(0);
+        expect(() => output.data).toThrow('Output block "destination"');
+
+        source.output.connectTo(prefix.input);
+        await asset.buildAsync();
+
+        expect(prefix.buildCount).toBe(1);
+        expect(output.buildCount).toBe(1);
+        expect(output.data).toEqual(new Uint8Array([9, 1, 2]));
+    });
+
+    it("aggregates missing required inputs across reachable blocks and ports", async () => {
+        const left = new PrefixBlock("left");
+        const merge = new MergeBlock("merge");
+        const output = new TrackingOutputBlock("destination");
+        left.output.connectTo(merge.left);
+        merge.output.connectTo(output.input);
+
+        const asset = new NodeAsset("graph");
+        asset.addOutputBlock(output);
+
+        const error = await asset.buildAsync().catch((reason: unknown) => reason);
+
+        expect(error).toBeInstanceOf(Error);
+        if (!(error instanceof Error)) {
+            return;
+        }
+
+        expect(error.message).toBe(
+            'NodeAsset "graph" cannot build because the graph has structural errors:\n' +
+                'Block "left" has an unconnected required input "input".\n' +
+                'Block "merge" has an unconnected required input "right".'
+        );
+        expect(left.buildCount).toBe(0);
+        expect(merge.buildCount).toBe(0);
+        expect(output.buildCount).toBe(0);
+    });
+
     it("flows input bytes to an output block", async () => {
         const bytes = new Uint8Array([0, 1, 2, 255]);
         const input = new InputBlock("source");
