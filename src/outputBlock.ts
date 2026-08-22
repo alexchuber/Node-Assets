@@ -27,8 +27,14 @@ export class OutputBlock extends NodeAssetBlock {
     }
 
     /** @internal */
-    public _clearData(state?: AssetGraphBuildState): void {
-        if (state !== undefined && this._dataBuildState !== undefined && this._dataBuildState !== state) {
+    public _invalidateData(): void {
+        this._data = undefined;
+        this._dataBuildState = undefined;
+    }
+
+    /** @internal */
+    public _clearData(state: AssetGraphBuildState): void {
+        if (this._dataBuildState !== state) {
             return;
         }
 

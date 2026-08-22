@@ -138,6 +138,30 @@ class DelayedOutputBlock extends OutputBlock {
     }
 }
 
+class GatedOutputBlock extends OutputBlock {
+    public started: Promise<void> = Promise.resolve();
+
+    private _releaseBuild!: () => void;
+    private _startBuild!: () => void;
+
+    public release(): void {
+        this._releaseBuild();
+    }
+
+    protected override async _buildAsync(): Promise<void> {
+        const releasePromise = new Promise<void>((resolve) => {
+            this._releaseBuild = resolve;
+        });
+        this.started = new Promise<void>((resolve) => {
+            this._startBuild = resolve;
+        });
+
+        await super._buildAsync();
+        this._startBuild();
+        await releasePromise;
+    }
+}
+
 describe("NodeAsset", () => {
     it("flows input bytes to an output block", async () => {
         const bytes = new Uint8Array([0, 1, 2, 255]);
@@ -390,6 +414,40 @@ describe("NodeAsset", () => {
         if (competingBuild !== undefined) {
             await expect(competingBuild).resolves.toBeUndefined();
         }
+    });
+
+    it("preserves a newer shared output when an older graph is disposed", async () => {
+        const input = new InputBlock("source");
+        const sharedOutput = new GatedOutputBlock("shared destination");
+        const firstOnlyOutput = new OutputBlock("first-only destination");
+        input.output.connectTo(sharedOutput.input);
+        input.output.connectTo(firstOnlyOutput.input);
+
+        const firstAsset = new NodeAsset("first graph");
+        const secondAsset = new NodeAsset("second graph");
+        firstAsset.addOutputBlock(sharedOutput);
+        firstAsset.addOutputBlock(firstOnlyOutput);
+        secondAsset.addOutputBlock(sharedOutput);
+
+        input.source = new Uint8Array([25]);
+        const firstBuild = firstAsset.buildAsync();
+        await sharedOutput.started;
+        sharedOutput.release();
+        await expect(firstBuild).resolves.toBeUndefined();
+
+        input.source = new Uint8Array([26]);
+        const secondBuild = secondAsset.buildAsync();
+        await sharedOutput.started;
+        expect(sharedOutput.data).toEqual(new Uint8Array([26]));
+
+        firstAsset.dispose();
+        expect(() => firstOnlyOutput.data).toThrow('Output block "first-only destination"');
+        await expect(firstAsset.buildAsync()).rejects.toThrow('NodeAsset "first graph" has been disposed');
+        expect(sharedOutput.data).toEqual(new Uint8Array([26]));
+
+        sharedOutput.release();
+        await expect(secondBuild).resolves.toBeUndefined();
+        expect(sharedOutput.data).toEqual(new Uint8Array([26]));
     });
 
     it("makes disposal terminal for an active build", async () => {

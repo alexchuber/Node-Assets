@@ -9,6 +9,7 @@ export class NodeAsset {
     private _buildInProgress = false;
     private _buildVersion = 0;
     private _buildState: AssetGraphBuildState | undefined;
+    private _successfulBuildState: AssetGraphBuildState | undefined;
 
     public constructor(name: string) {
         this.name = name;
@@ -43,14 +44,16 @@ export class NodeAsset {
             }
 
             ownsOutputBuild = true;
+            this._successfulBuildState = undefined;
             for (const outputBlock of outputBlocks) {
-                outputBlock._clearData();
+                outputBlock._invalidateData();
             }
             this._validateOutputBlockNames(outputBlocks);
             for (const outputBlock of outputBlocks) {
                 await state.buildBlockAsync(outputBlock);
             }
             this._throwIfBuildWasDisposed(buildVersion);
+            this._successfulBuildState = state;
         } catch (error) {
             if (ownsOutputBuild && buildState !== undefined) {
                 for (const outputBlock of outputBlocks) {
@@ -73,8 +76,12 @@ export class NodeAsset {
 
         this._disposed = true;
         this._buildVersion += 1;
-        for (const outputBlock of this._outputBlocks) {
-            outputBlock._clearData(this._buildState);
+        const ownershipState = this._buildState ?? this._successfulBuildState;
+        this._successfulBuildState = undefined;
+        if (ownershipState !== undefined) {
+            for (const outputBlock of this._outputBlocks) {
+                outputBlock._clearData(ownershipState);
+            }
         }
     }
 
