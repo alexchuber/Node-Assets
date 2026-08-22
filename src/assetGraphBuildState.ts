@@ -3,9 +3,19 @@ import type { NodeAssetBlock } from "./nodeAssetBlock";
 
 export class AssetGraphBuildState {
     private readonly _outputValues = new Map<ConnectionPoint<ConnectionPointType, "output">, ConnectionPointValue<ConnectionPointType>>();
+    private readonly _blockBuilds = new Map<NodeAssetBlock, Promise<void>>();
 
     public async buildBlockAsync(block: NodeAssetBlock): Promise<void> {
-        await block._buildWithStateAsync(this);
+        block._assertBuildAvailable(this);
+        const existingBuild = this._blockBuilds.get(block);
+        if (existingBuild !== undefined) {
+            await existingBuild;
+            return;
+        }
+
+        const build = block._buildWithStateAsync(this);
+        this._blockBuilds.set(block, build);
+        await build;
     }
 
     public async resolveInputAsync<TType extends ConnectionPointType>(input: ConnectionPoint<TType, "input">): Promise<ConnectionPointValue<TType>> {

@@ -4,10 +4,11 @@ import type { OutputBlock } from "./outputBlock";
 export class NodeAsset {
     public readonly name: string;
 
-    private _outputBlock: OutputBlock | undefined;
+    private readonly _outputBlocks: OutputBlock[] = [];
     private _disposed = false;
     private _buildInProgress = false;
     private _buildVersion = 0;
+    private _buildState: AssetGraphBuildState | undefined;
 
     public constructor(name: string) {
         this.name = name;
@@ -15,11 +16,7 @@ export class NodeAsset {
 
     public addOutputBlock(outputBlock: OutputBlock): void {
         this._throwIfDisposed();
-        if (this._outputBlock !== undefined && this._outputBlock !== outputBlock) {
-            throw new Error(`NodeAsset "${this.name}" supports only one output block in this version.`);
-        }
-
-        this._outputBlock = outputBlock;
+        this._outputBlocks.push(outputBlock);
     }
 
     public async buildAsync(): Promise<void> {
@@ -30,25 +27,41 @@ export class NodeAsset {
 
         this._buildInProgress = true;
         const buildVersion = ++this._buildVersion;
-        const outputBlock = this._outputBlock;
+        const outputBlocks = this._outputBlocks;
         let ownsOutputBuild = false;
+        let buildState: AssetGraphBuildState | undefined;
         try {
-            if (outputBlock === undefined) {
+            if (outputBlocks.length === 0) {
                 return;
             }
 
             const state = new AssetGraphBuildState();
-            outputBlock._assertBuildAvailable(state);
+            buildState = state;
+            this._buildState = state;
+            for (const outputBlock of outputBlocks) {
+                outputBlock._assertBuildAvailable(state);
+            }
+
             ownsOutputBuild = true;
-            outputBlock._clearData();
-            await state.buildBlockAsync(outputBlock);
+            this._validateOutputBlockNames(outputBlocks);
+            for (const outputBlock of outputBlocks) {
+                outputBlock._clearData();
+            }
+            for (const outputBlock of outputBlocks) {
+                await state.buildBlockAsync(outputBlock);
+            }
             this._throwIfBuildWasDisposed(buildVersion);
         } catch (error) {
-            if (outputBlock !== undefined && ownsOutputBuild) {
-                outputBlock._clearData();
+            if (ownsOutputBuild && buildState !== undefined) {
+                for (const outputBlock of outputBlocks) {
+                    outputBlock._clearData(buildState);
+                }
             }
             throw error;
         } finally {
+            if (buildState !== undefined && this._buildState === buildState) {
+                this._buildState = undefined;
+            }
             this._buildInProgress = false;
         }
     }
@@ -60,8 +73,8 @@ export class NodeAsset {
 
         this._disposed = true;
         this._buildVersion += 1;
-        if (this._outputBlock !== undefined) {
-            this._outputBlock._clearData();
+        for (const outputBlock of this._outputBlocks) {
+            outputBlock._clearData(this._buildState);
         }
     }
 
@@ -74,6 +87,22 @@ export class NodeAsset {
     private _throwIfBuildWasDisposed(buildVersion: number): void {
         if (this._disposed || buildVersion !== this._buildVersion) {
             throw new Error(`NodeAsset "${this.name}" was disposed while a build was in progress.`);
+        }
+    }
+
+    private _validateOutputBlockNames(outputBlocks: readonly OutputBlock[]): void {
+        const nameCounts = new Map<string, number>();
+        for (const outputBlock of outputBlocks) {
+            nameCounts.set(outputBlock.name, (nameCounts.get(outputBlock.name) ?? 0) + 1);
+        }
+
+        const duplicateNames = [...nameCounts.entries()]
+            .filter(([, count]) => count > 1)
+            .map(([name]) => name)
+            .sort();
+        if (duplicateNames.length > 0) {
+            const names = duplicateNames.map((name) => `"${name}"`).join(", ");
+            throw new Error(`NodeAsset "${this.name}" has duplicate output block names: ${names}.`);
         }
     }
 }

@@ -57,7 +57,7 @@ export abstract class NodeAssetBlock {
         this._getBuildState().setOutputValue(output, value);
     }
 
-    private _getBuildState(): AssetGraphBuildState {
+    protected _getBuildState(): AssetGraphBuildState {
         if (this._buildState === undefined) {
             throw new Error(`Block "${this.name}" can only read or write values during a graph build.`);
         }
