@@ -7,7 +7,6 @@ import type { AbstractMesh } from "@babylonjs/core/Meshes/abstractMesh.js";
 import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder.js";
 import { VertexBuffer } from "@babylonjs/core/Buffers/buffer.js";
 import { Scene } from "@babylonjs/core/scene.js";
-import { registerBuiltInLoaders } from "@babylonjs/loaders/dynamic.js";
 import { GLTF2Export } from "@babylonjs/serializers/glTF/2.0/glTFSerializer.js";
 
 export interface SceneStructure {
@@ -106,7 +105,7 @@ export async function createGlbFixtureAsync(): Promise<GlbFixture> {
 }
 
 export async function readGlbStructureAsync(bytes: Uint8Array): Promise<SceneStructure> {
-    registerBuiltInLoaders();
+    await registerGlbLoaderAsync();
 
     const engine = new NullEngine();
     const scene = new Scene(engine);
@@ -126,7 +125,7 @@ export async function readGlbStructureAsync(bytes: Uint8Array): Promise<SceneStr
 }
 
 export async function readGlbStructureWithSwappedFirstTriangleAsync(bytes: Uint8Array): Promise<SceneStructure> {
-    registerBuiltInLoaders();
+    await registerGlbLoaderAsync();
 
     const engine = new NullEngine();
     const scene = new Scene(engine);
@@ -163,6 +162,10 @@ export async function readGlbStructureWithSwappedFirstTriangleAsync(bytes: Uint8
         scene.dispose();
         engine.dispose();
     }
+}
+
+async function registerGlbLoaderAsync(): Promise<void> {
+    await import("@babylonjs/loaders/glTF/2.0/glTFLoader.js");
 }
 
 function readSceneStructure(scene: Scene): SceneStructure {
