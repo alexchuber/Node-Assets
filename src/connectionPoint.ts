@@ -1,11 +1,9 @@
 import type { NodeAssetBlock } from "./nodeAssetBlock";
+import type { SceneAsset } from "./sceneAsset";
 
 export type ConnectionPointType = "File" | "SceneAsset";
 export type ConnectionPointDirection = "input" | "output";
 export type File = Uint8Array;
-export type SceneAsset = {
-    readonly _sceneAssetBrand: "SceneAsset";
-};
 
 export type ConnectionPointValue<TType extends ConnectionPointType> = TType extends "File" ? File : SceneAsset;
 

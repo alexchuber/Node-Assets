@@ -1,3 +1,4 @@
+import { NullEngine } from "@babylonjs/core/Engines/nullEngine.js";
 import { AssetGraphBuildState } from "./assetGraphBuildState";
 import type { OutputBlock } from "./outputBlock";
 
@@ -32,12 +33,15 @@ export class NodeAsset {
         const buildVersion = ++this._buildVersion;
         const outputBlock = this._outputBlock;
         let ownsOutputBuild = false;
+        let engine: NullEngine | undefined;
+        let state: AssetGraphBuildState | undefined;
         try {
             if (outputBlock === undefined) {
                 return;
             }
 
-            const state = new AssetGraphBuildState();
+            engine = new NullEngine();
+            state = new AssetGraphBuildState(engine);
             outputBlock._assertBuildAvailable(state);
             ownsOutputBuild = true;
             outputBlock._clearData();
@@ -49,7 +53,15 @@ export class NodeAsset {
             }
             throw error;
         } finally {
-            this._buildInProgress = false;
+            try {
+                state?._dispose();
+            } finally {
+                try {
+                    engine?.dispose();
+                } finally {
+                    this._buildInProgress = false;
+                }
+            }
         }
     }
 
