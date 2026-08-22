@@ -37,6 +37,11 @@ export abstract class NodeAssetBlock {
     }
 
     /** @internal */
+    public _getDownstreamBlocks(): readonly NodeAssetBlock[] {
+        return this._outputs.flatMap((output) => output._getEndpoints().map((input) => input._block));
+    }
+
+    /** @internal */
     public async _buildWithStateAsync(state: AssetGraphBuildState): Promise<void> {
         this._assertBuildAvailable(state);
 
