@@ -26,15 +26,17 @@ export class ParseGLBBlock extends NodeAssetBlock {
         }
 
         const scene = new Scene(state._engine);
-        state._trackScene(scene);
+        const sceneAsset = SceneAsset._create(scene);
+        state._trackSceneAsset(sceneAsset);
 
         try {
             const assetContainer = await LoadAssetContainerAsync(bytes, scene, {
                 name: `${this.name}.glb`,
                 pluginExtension: ".glb",
             });
+            sceneAsset._attachAssetContainer(assetContainer);
             assetContainer.addAllToScene();
-            this.writeOutput(this.output, new SceneAsset(scene, assetContainer));
+            this.writeOutput(this.output, sceneAsset);
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
             throw new Error(`Parse GLB block "${this.name}" failed: ${message}`, { cause: error });

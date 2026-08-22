@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { InputBlock, NodeAsset, NodeAssetBlock, OutputBlock, type ConnectionPoint } from "../src/index";
+import { InputBlock, NodeAsset, NodeAssetBlock, OutputBlock, SceneAsset, type ConnectionPoint } from "../src/index";
 
 class SceneInputBlock extends NodeAssetBlock {
     public readonly input: ConnectionPoint<"SceneAsset", "input"> = this.registerInput("input", "SceneAsset");
@@ -85,6 +85,14 @@ class PublishingOutputBlock extends OutputBlock {
 }
 
 describe("NodeAsset", () => {
+    it("keeps SceneAsset opaque and non-user-constructible", () => {
+        expect(SceneAsset).toBeDefined();
+        expect(() => {
+            // @ts-expect-error SceneAsset instances are created by graph blocks only.
+            new SceneAsset(Symbol());
+        }).toThrow("SceneAsset instances can only be created internally.");
+    });
+
     it("flows input bytes to an output block", async () => {
         const bytes = new Uint8Array([0, 1, 2, 255]);
         const input = new InputBlock("source");

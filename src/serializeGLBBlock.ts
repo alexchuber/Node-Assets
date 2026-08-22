@@ -17,7 +17,7 @@ export class SerializeGLBBlock extends NodeAssetBlock {
         const fileName = `${this.name}.glb`;
 
         try {
-            const data = await GLTF2Export.GLBAsync(sceneAsset._scene, fileName);
+            const data = await GLTF2Export.GLBAsync(sceneAsset._getScene(), fileName);
             const file = data.files[fileName];
             if (file === undefined || typeof file === "string") {
                 throw new Error("The GLB serializer did not produce a binary file.");

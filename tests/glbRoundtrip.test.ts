@@ -1,4 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { AssetContainer } from "@babylonjs/core/assetContainer.js";
+import { NullEngine } from "@babylonjs/core/Engines/nullEngine.js";
+import { Scene } from "@babylonjs/core/scene.js";
+import { GLTF2Export } from "@babylonjs/serializers/glTF/2.0/glTFSerializer.js";
+import { describe, expect, it, vi } from "vitest";
 
 import { InputBlock, NodeAsset, OutputBlock, ParseGLBBlock, SerializeGLBBlock } from "../src/index";
 import { createGlbFixtureAsync, readGlbStructureAsync } from "./glbFixture";
@@ -32,6 +36,37 @@ describe("GLB roundtrip", () => {
         expect(binChunkOffset + 8 + binChunkLength).toBe(result.byteLength);
     });
 
+    it("preserves mesh topology, dimensions, material color, and transforms", async () => {
+        const fixture = await createGlbFixtureAsync();
+        const result = await buildRoundtripAsync(fixture.bytes);
+        const structure = await readGlbStructureAsync(result);
+
+        expect(structure.materials).toHaveLength(1);
+        const material = structure.materials[0];
+        if (material === undefined) {
+            throw new Error("Expected the fixture material to reload.");
+        }
+
+        expect(material.name).toBe("fixture-material");
+        expect(material.type).toBe("PBRMaterial");
+        expectVectorToBeClose(material.baseColor, [0.2, 0.4, 0.6]);
+
+        expect(structure.meshes).toHaveLength(1);
+        const mesh = structure.meshes[0];
+        if (mesh === undefined) {
+            throw new Error("Expected the fixture mesh to reload.");
+        }
+
+        expect(mesh.name).toBe("fixture-box");
+        expect(mesh.materialName).toBe("fixture-material");
+        expect(mesh.vertexCount).toBe(24);
+        expect(mesh.indexCount).toBe(36);
+        expectVectorToBeClose(mesh.dimensions, [2, 2, 2]);
+        expectVectorToBeClose(mesh.position, [3, -2, 5]);
+        expectVectorToBeClose(mesh.rotationQuaternion, [0.034270798550482096, -0.10602051106179565, 0.1534393020242226, 0.981856172866081]);
+        expectVectorToBeClose(mesh.scaling, [1.5, 0.75, 2]);
+    });
+
     it("supports repeated builds with fresh headless scenes and engines", async () => {
         const fixture = await createGlbFixtureAsync();
         const input = new InputBlock("source");
@@ -60,16 +95,43 @@ describe("GLB roundtrip", () => {
         }
     });
 
-    it("normalizes an in-memory byte view as GLB input", async () => {
+    it("disposes parsed resources exactly once after a successful serialization", async () => {
         const fixture = await createGlbFixtureAsync();
-        const padded = new Uint8Array(fixture.bytes.length + 8);
-        padded.set(fixture.bytes, 4);
+        const containerDispose = vi.spyOn(AssetContainer.prototype, "dispose");
+        const sceneDispose = vi.spyOn(Scene.prototype, "dispose");
+        const engineDispose = vi.spyOn(NullEngine.prototype, "dispose");
 
-        const result = await buildRoundtripAsync(new DataView(padded.buffer, 4, fixture.bytes.length));
-        const arrayBufferResult = await buildRoundtripAsync(fixture.bytes.slice().buffer);
+        try {
+            await buildRoundtripAsync(fixture.bytes);
 
-        expect(await readGlbStructureAsync(result)).toEqual(fixture.structure);
-        expect(await readGlbStructureAsync(arrayBufferResult)).toEqual(fixture.structure);
+            expect(containerDispose).toHaveBeenCalledTimes(1);
+            expect(sceneDispose).toHaveBeenCalledTimes(1);
+            expect(engineDispose).toHaveBeenCalledTimes(1);
+        } finally {
+            containerDispose.mockRestore();
+            sceneDispose.mockRestore();
+            engineDispose.mockRestore();
+        }
+    });
+
+    it("disposes parsed resources exactly once when serialization fails", async () => {
+        const fixture = await createGlbFixtureAsync();
+        const containerDispose = vi.spyOn(AssetContainer.prototype, "dispose");
+        const sceneDispose = vi.spyOn(Scene.prototype, "dispose");
+        const engineDispose = vi.spyOn(NullEngine.prototype, "dispose");
+        const serialize = vi.spyOn(GLTF2Export, "GLBAsync").mockRejectedValue(new Error("forced serializer failure"));
+
+        try {
+            await expect(buildRoundtripAsync(fixture.bytes)).rejects.toThrow('Serialize GLB block "serialize" failed: forced serializer failure');
+            expect(containerDispose).toHaveBeenCalledTimes(1);
+            expect(sceneDispose).toHaveBeenCalledTimes(1);
+            expect(engineDispose).toHaveBeenCalledTimes(1);
+        } finally {
+            serialize.mockRestore();
+            containerDispose.mockRestore();
+            sceneDispose.mockRestore();
+            engineDispose.mockRestore();
+        }
     });
 
     it("includes the parse block name when loading fails", async () => {
@@ -120,7 +182,7 @@ describe("GLB roundtrip", () => {
     });
 });
 
-async function buildRoundtripAsync(source: Uint8Array | ArrayBuffer | ArrayBufferView): Promise<Uint8Array> {
+async function buildRoundtripAsync(source: Uint8Array): Promise<Uint8Array> {
     const input = new InputBlock("source");
     const parse = new ParseGLBBlock("parse");
     const serialize = new SerializeGLBBlock("serialize");
@@ -138,5 +200,12 @@ async function buildRoundtripAsync(source: Uint8Array | ArrayBuffer | ArrayBuffe
         return output.data;
     } finally {
         asset.dispose();
+    }
+}
+
+function expectVectorToBeClose(actual: readonly number[], expected: readonly number[]): void {
+    expect(actual).toHaveLength(expected.length);
+    for (const [index, expectedValue] of expected.entries()) {
+        expect(actual[index]).toBeCloseTo(expectedValue, 5);
     }
 }

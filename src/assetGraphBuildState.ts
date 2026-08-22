@@ -1,11 +1,12 @@
 import type { ConnectionPoint, ConnectionPointType, ConnectionPointValue } from "./connectionPoint";
 import type { NodeAssetBlock } from "./nodeAssetBlock";
 import type { NullEngine } from "@babylonjs/core/Engines/nullEngine.js";
-import type { Scene } from "@babylonjs/core/scene.js";
+import type { SceneAsset } from "./sceneAsset";
 
+/** @internal */
 export class AssetGraphBuildState {
     private readonly _outputValues = new Map<ConnectionPoint<ConnectionPointType, "output">, ConnectionPointValue<ConnectionPointType>>();
-    private readonly _scenes = new Set<Scene>();
+    private readonly _sceneAssets = new Set<SceneAsset>();
 
     /** @internal */
     public readonly _engine: NullEngine;
@@ -37,17 +38,19 @@ export class AssetGraphBuildState {
     }
 
     /** @internal */
-    public _trackScene(scene: Scene): void {
-        this._scenes.add(scene);
+    public _trackSceneAsset(sceneAsset: SceneAsset): void {
+        this._sceneAssets.add(sceneAsset);
     }
 
     /** @internal */
     public _dispose(): void {
-        for (const scene of this._scenes) {
-            scene.dispose();
+        try {
+            for (const sceneAsset of this._sceneAssets) {
+                sceneAsset._dispose();
+            }
+        } finally {
+            this._sceneAssets.clear();
+            this._outputValues.clear();
         }
-
-        this._scenes.clear();
-        this._outputValues.clear();
     }
 }
