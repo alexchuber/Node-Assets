@@ -18,13 +18,13 @@ pnpm build
 
 ## Scripts
 
-| Command       | Description                                         |
-| ------------- | --------------------------------------------------- |
-| `pnpm build`  | Build the package                                   |
-| `pnpm lint`   | Run ESLint and TypeScript type checking             |
-| `pnpm format` | Format source, test, and config files with Prettier |
-| `pnpm test`   | Run Vitest suite                                    |
-| `pnpm docs`   | Generate TypeDoc API documentation                  |
+| Command         | Description                                         |
+| --------------- | --------------------------------------------------- |
+| `pnpm build`    | Build the package                                   |
+| `pnpm lint`     | Run ESLint and TypeScript type checking             |
+| `pnpm format`   | Format source, test, and config files with Prettier |
+| `pnpm test`     | Run Vitest suite                                    |
+| `pnpm run docs` | Generate TypeDoc API documentation                  |
 
 ## Contributing
 
