@@ -1,4 +1,5 @@
 import { AssetContainer } from "@babylonjs/core/assetContainer.js";
+import { EngineStore } from "@babylonjs/core/Engines/engineStore.js";
 import { NullEngine } from "@babylonjs/core/Engines/nullEngine.js";
 import { Geometry } from "@babylonjs/core/Meshes/geometry.js";
 import { Mesh } from "@babylonjs/core/Meshes/mesh.js";
@@ -23,6 +24,7 @@ type PublicLoaderPlugin = SceneLoaderTypes.ISceneLoaderPluginAsync & {
 };
 
 interface PublicObservable<T> {
+    readonly observers: readonly IObserver[];
     addOnce(callback: (eventData: T) => void): IObserver;
 }
 
@@ -539,6 +541,387 @@ describe("GLB roundtrip", () => {
             sceneDispose.mockRestore();
             engineDispose.mockRestore();
             graph.asset.dispose();
+        }
+    });
+
+    it("disposes parsed resources immediately when an active graph is disposed", async () => {
+        const fixture = await createGlbFixtureAsync();
+        const graph = createRoundtripGraph(fixture.bytes);
+        const loaderControls: LoaderControl[] = [];
+        let importStarted!: () => void;
+        const importStartedPromise = new Promise<void>((resolve) => {
+            importStarted = resolve;
+        });
+        const initialEngineCount = EngineStore.Instances.length;
+        const containerDispose = vi.spyOn(AssetContainer.prototype, "dispose");
+        const meshDispose = vi.spyOn(Mesh.prototype, "dispose");
+        const geometryDispose = vi.spyOn(Geometry.prototype, "dispose");
+        const sceneDispose = vi.spyOn(Scene.prototype, "dispose");
+        const engineDispose = vi.spyOn(NullEngine.prototype, "dispose");
+        publicImportOverride.current = (_source, scene) => {
+            const mesh = MeshBuilder.CreateBox("disposed-active-build", { size: 1 }, scene);
+            const control = createLoaderControl(mesh);
+            loaderControls.push(control);
+            SceneLoader.OnPluginActivatedObservable.notifyObservers(control.plugin);
+            importStarted();
+            return control.readyPromise;
+        };
+
+        try {
+            const build = graph.asset.buildAsync();
+            await importStartedPromise;
+
+            graph.asset.dispose();
+            graph.asset.dispose();
+
+            expect(containerDispose).toHaveBeenCalledTimes(1);
+            expect(meshDispose).toHaveBeenCalled();
+            expect(geometryDispose).toHaveBeenCalled();
+            expect(sceneDispose).toHaveBeenCalledTimes(1);
+            expect(engineDispose).toHaveBeenCalledTimes(1);
+            expect(EngineStore.Instances).toHaveLength(initialEngineCount);
+
+            const control = loaderControls[0];
+            if (control === undefined) {
+                throw new Error("Expected the pending loader control.");
+            }
+            control.resolveReady();
+            control.complete();
+
+            await expect(build).rejects.toThrow('NodeAsset "graph" was disposed while a build was in progress.');
+            expect(() => graph.output.data).toThrow('Output block "destination"');
+            expect(containerDispose).toHaveBeenCalledTimes(1);
+            expect(sceneDispose).toHaveBeenCalledTimes(1);
+            expect(engineDispose).toHaveBeenCalledTimes(1);
+        } finally {
+            publicImportOverride.current = undefined;
+            geometryDispose.mockRestore();
+            meshDispose.mockRestore();
+            containerDispose.mockRestore();
+            sceneDispose.mockRestore();
+            engineDispose.mockRestore();
+            graph.asset.dispose();
+        }
+    });
+
+    it("cancels a never-activated loader and permits a later build", async () => {
+        const fixture = await createGlbFixtureAsync();
+        const cancelledGraph = createRoundtripGraph(fixture.bytes);
+        const succeedingGraph = createRoundtripGraph(fixture.bytes);
+        let rejectFirstReady!: (reason: unknown) => void;
+        let firstImportStarted!: () => void;
+        let succeedingImportStarted!: () => void;
+        const firstImportStartedPromise = new Promise<void>((resolve) => {
+            firstImportStarted = resolve;
+        });
+        const succeedingImportStartedPromise = new Promise<void>((resolve) => {
+            succeedingImportStarted = resolve;
+        });
+        const firstReadyPromise = new Promise<SceneLoaderTypes.ISceneLoaderAsyncResult>((_, reject) => {
+            rejectFirstReady = reject;
+        });
+        const loaderControls: LoaderControl[] = [];
+        let importCount = 0;
+        const activationObserverCount = SceneLoader.OnPluginActivatedObservable.observers.length;
+        const initialEngineCount = EngineStore.Instances.length;
+        publicImportOverride.current = (_source, scene) => {
+            importCount += 1;
+            if (importCount === 1) {
+                firstImportStarted();
+                return firstReadyPromise;
+            }
+
+            const mesh = MeshBuilder.CreateBox("after-cancellation", { size: 1 }, scene);
+            const control = createLoaderControl(mesh);
+            loaderControls.push(control);
+            succeedingImportStarted();
+            SceneLoader.OnPluginActivatedObservable.notifyObservers(control.plugin);
+            return control.readyPromise;
+        };
+
+        try {
+            const cancelledBuild = cancelledGraph.asset.buildAsync();
+            await firstImportStartedPromise;
+            expect(SceneLoader.OnPluginActivatedObservable.observers).toHaveLength(activationObserverCount + 1);
+
+            cancelledGraph.asset.dispose();
+
+            expect(SceneLoader.OnPluginActivatedObservable.observers).toHaveLength(activationObserverCount);
+            expect(EngineStore.Instances).toHaveLength(initialEngineCount);
+            await expect(cancelledBuild).rejects.toThrow('NodeAsset "graph" was disposed while a build was in progress.');
+
+            const succeedingBuild = succeedingGraph.asset.buildAsync();
+            await succeedingImportStartedPromise;
+            const control = loaderControls[0];
+            if (control === undefined) {
+                throw new Error("Expected the succeeding loader control.");
+            }
+            control.resolveReady();
+            control.complete();
+
+            await expect(succeedingBuild).resolves.toBeUndefined();
+            expect(importCount).toBe(2);
+        } finally {
+            publicImportOverride.current = undefined;
+            rejectFirstReady(new Error("cancelled GLB test cleanup"));
+            cancelledGraph.asset.dispose();
+            succeedingGraph.asset.dispose();
+        }
+    });
+
+    it("cancels a loader that never settles READY and ignores late lifecycle callbacks", async () => {
+        const fixture = await createGlbFixtureAsync();
+        const graph = createRoundtripGraph(fixture.bytes);
+        let importStarted!: () => void;
+        const importStartedPromise = new Promise<void>((resolve) => {
+            importStarted = resolve;
+        });
+        let loaderControl: LoaderControl | undefined;
+        const activationObserverCount = SceneLoader.OnPluginActivatedObservable.observers.length;
+        const initialEngineCount = EngineStore.Instances.length;
+        publicImportOverride.current = (_source, scene) => {
+            const mesh = MeshBuilder.CreateBox("pending-ready", { size: 1 }, scene);
+            loaderControl = createLoaderControl(mesh);
+            SceneLoader.OnPluginActivatedObservable.notifyObservers(loaderControl.plugin);
+            importStarted();
+            return loaderControl.readyPromise;
+        };
+
+        try {
+            const build = graph.asset.buildAsync();
+            await importStartedPromise;
+            const control = loaderControl;
+            if (control === undefined) {
+                throw new Error("Expected the pending-ready loader control.");
+            }
+            expect(control.plugin.onCompleteObservable.observers).toHaveLength(1);
+            expect(control.plugin.onErrorObservable.observers).toHaveLength(1);
+
+            graph.asset.dispose();
+
+            expect(control.plugin.onCompleteObservable.observers).toHaveLength(0);
+            expect(control.plugin.onErrorObservable.observers).toHaveLength(0);
+            expect(SceneLoader.OnPluginActivatedObservable.observers).toHaveLength(activationObserverCount);
+            expect(EngineStore.Instances).toHaveLength(initialEngineCount);
+
+            SceneLoader.OnPluginActivatedObservable.notifyObservers(control.plugin);
+            control.resolveReady();
+            control.complete();
+            control.fail(new Error("late READY failure"));
+            await expect(build).rejects.toThrow('NodeAsset "graph" was disposed while a build was in progress.');
+        } finally {
+            publicImportOverride.current = undefined;
+            graph.asset.dispose();
+        }
+    });
+
+    it("cancels a loader that never settles COMPLETE and ignores late lifecycle callbacks", async () => {
+        const fixture = await createGlbFixtureAsync();
+        const graph = createRoundtripGraph(fixture.bytes);
+        let importStarted!: () => void;
+        const importStartedPromise = new Promise<void>((resolve) => {
+            importStarted = resolve;
+        });
+        let loaderControl: LoaderControl | undefined;
+        const activationObserverCount = SceneLoader.OnPluginActivatedObservable.observers.length;
+        const initialEngineCount = EngineStore.Instances.length;
+        publicImportOverride.current = (_source, scene) => {
+            const mesh = MeshBuilder.CreateBox("pending-complete", { size: 1 }, scene);
+            loaderControl = createLoaderControl(mesh);
+            SceneLoader.OnPluginActivatedObservable.notifyObservers(loaderControl.plugin);
+            importStarted();
+            return loaderControl.readyPromise;
+        };
+
+        try {
+            const build = graph.asset.buildAsync();
+            await importStartedPromise;
+            const control = loaderControl;
+            if (control === undefined) {
+                throw new Error("Expected the pending-complete loader control.");
+            }
+            control.resolveReady();
+            await Promise.resolve();
+            expect(control.plugin.onCompleteObservable.observers).toHaveLength(1);
+            expect(control.plugin.onErrorObservable.observers).toHaveLength(1);
+
+            graph.asset.dispose();
+
+            expect(control.plugin.onCompleteObservable.observers).toHaveLength(0);
+            expect(control.plugin.onErrorObservable.observers).toHaveLength(0);
+            expect(SceneLoader.OnPluginActivatedObservable.observers).toHaveLength(activationObserverCount);
+            expect(EngineStore.Instances).toHaveLength(initialEngineCount);
+
+            SceneLoader.OnPluginActivatedObservable.notifyObservers(control.plugin);
+            control.complete();
+            control.fail(new Error("late COMPLETE failure"));
+            await expect(build).rejects.toThrow('NodeAsset "graph" was disposed while a build was in progress.');
+        } finally {
+            publicImportOverride.current = undefined;
+            graph.asset.dispose();
+        }
+    });
+
+    it("keeps cancellation armed when COMPLETE precedes pending READY", async () => {
+        const fixture = await createGlbFixtureAsync();
+        const graph = createRoundtripGraph(fixture.bytes);
+        const succeedingGraph = createRoundtripGraph(fixture.bytes);
+        let importStarted!: () => void;
+        let succeedingImportStarted!: () => void;
+        const importStartedPromise = new Promise<void>((resolve) => {
+            importStarted = resolve;
+        });
+        const succeedingImportStartedPromise = new Promise<void>((resolve) => {
+            succeedingImportStarted = resolve;
+        });
+        let loaderControl: LoaderControl | undefined;
+        const succeedingControls: LoaderControl[] = [];
+        let importCount = 0;
+        const activationObserverCount = SceneLoader.OnPluginActivatedObservable.observers.length;
+        const initialEngineCount = EngineStore.Instances.length;
+        publicImportOverride.current = (_source, scene) => {
+            importCount += 1;
+            if (importCount === 1) {
+                const mesh = MeshBuilder.CreateBox("complete-before-ready", { size: 1 }, scene);
+                const control = createLoaderControl(mesh);
+                loaderControl = control;
+                SceneLoader.OnPluginActivatedObservable.notifyObservers(control.plugin);
+                control.complete();
+                importStarted();
+                return control.readyPromise;
+            }
+
+            const mesh = MeshBuilder.CreateBox("after-complete-cancellation", { size: 1 }, scene);
+            const control = createLoaderControl(mesh);
+            succeedingControls.push(control);
+            succeedingImportStarted();
+            SceneLoader.OnPluginActivatedObservable.notifyObservers(control.plugin);
+            return control.readyPromise;
+        };
+
+        try {
+            const build = graph.asset.buildAsync();
+            await importStartedPromise;
+            const control = loaderControl;
+            if (control === undefined) {
+                throw new Error("Expected the complete-before-ready loader control.");
+            }
+            expect(control.plugin.onCompleteObservable.observers).toHaveLength(1);
+            expect(control.plugin.onErrorObservable.observers).toHaveLength(1);
+            expect(SceneLoader.OnPluginActivatedObservable.observers).toHaveLength(activationObserverCount);
+
+            graph.asset.dispose();
+
+            expect(control.plugin.onCompleteObservable.observers).toHaveLength(0);
+            expect(control.plugin.onErrorObservable.observers).toHaveLength(0);
+            expect(SceneLoader.OnPluginActivatedObservable.observers).toHaveLength(activationObserverCount);
+            expect(EngineStore.Instances).toHaveLength(initialEngineCount);
+
+            SceneLoader.OnPluginActivatedObservable.notifyObservers(control.plugin);
+            control.fail(new Error("late COMPLETE-before-READY failure"));
+            control.resolveReady();
+            await expect(build).rejects.toThrow('NodeAsset "graph" was disposed while a build was in progress.');
+
+            const succeedingBuild = succeedingGraph.asset.buildAsync();
+            await succeedingImportStartedPromise;
+            const succeedingControl = succeedingControls[0];
+            if (succeedingControl === undefined) {
+                throw new Error("Expected the succeeding loader control.");
+            }
+            succeedingControl.resolveReady();
+            succeedingControl.complete();
+            await expect(succeedingBuild).resolves.toBeUndefined();
+            expect(importCount).toBe(2);
+        } finally {
+            publicImportOverride.current = undefined;
+            graph.asset.dispose();
+            succeedingGraph.asset.dispose();
+        }
+    });
+
+    it("cancels a graph waiting for the activation lock without affecting the owner", async () => {
+        const fixture = await createGlbFixtureAsync();
+        const firstGraph = createRoundtripGraph(fixture.bytes);
+        const secondGraph = createRoundtripGraph(fixture.bytes);
+        const succeedingGraph = createRoundtripGraph(fixture.bytes);
+        let firstImportStarted!: () => void;
+        let succeedingImportStarted!: () => void;
+        const firstImportStartedPromise = new Promise<void>((resolve) => {
+            firstImportStarted = resolve;
+        });
+        const succeedingImportStartedPromise = new Promise<void>((resolve) => {
+            succeedingImportStarted = resolve;
+        });
+        const loaderControls: LoaderControl[] = [];
+        let firstLoaderControl: LoaderControl | undefined;
+        let importCount = 0;
+        const activationObserverCount = SceneLoader.OnPluginActivatedObservable.observers.length;
+        const initialEngineCount = EngineStore.Instances.length;
+        publicImportCalls.length = 0;
+        publicImportOverride.current = (_source, scene) => {
+            importCount += 1;
+            if (importCount === 1) {
+                const mesh = MeshBuilder.CreateBox("lock-owner", { size: 1 }, scene);
+                const control = createLoaderControl(mesh);
+                firstLoaderControl = control;
+                firstImportStarted();
+                return control.readyPromise;
+            }
+
+            const mesh = MeshBuilder.CreateBox("after-lock-cancellation", { size: 1 }, scene);
+            const control = createLoaderControl(mesh);
+            loaderControls.push(control);
+            succeedingImportStarted();
+            SceneLoader.OnPluginActivatedObservable.notifyObservers(control.plugin);
+            return control.readyPromise;
+        };
+
+        try {
+            const firstBuild = firstGraph.asset.buildAsync();
+            await firstImportStartedPromise;
+            const secondBuild = secondGraph.asset.buildAsync();
+            for (let attempt = 0; attempt < 10 && EngineStore.Instances.length < initialEngineCount + 2; attempt += 1) {
+                await Promise.resolve();
+            }
+
+            expect(publicImportCalls).toHaveLength(1);
+            expect(SceneLoader.OnPluginActivatedObservable.observers).toHaveLength(activationObserverCount + 1);
+            expect(EngineStore.Instances).toHaveLength(initialEngineCount + 2);
+
+            secondGraph.asset.dispose();
+
+            expect(SceneLoader.OnPluginActivatedObservable.observers).toHaveLength(activationObserverCount + 1);
+            expect(EngineStore.Instances).toHaveLength(initialEngineCount + 1);
+            await expect(secondBuild).rejects.toThrow('NodeAsset "graph" was disposed while a build was in progress.');
+
+            const firstControl = firstLoaderControl;
+            if (firstControl === undefined) {
+                throw new Error("Expected the lock owner loader control.");
+            }
+            SceneLoader.OnPluginActivatedObservable.notifyObservers(firstControl.plugin);
+            firstControl.resolveReady();
+            firstControl.complete();
+            await expect(firstBuild).resolves.toBeUndefined();
+
+            expect(SceneLoader.OnPluginActivatedObservable.observers).toHaveLength(activationObserverCount);
+            expect(EngineStore.Instances).toHaveLength(initialEngineCount);
+
+            const succeedingBuild = succeedingGraph.asset.buildAsync();
+            await succeedingImportStartedPromise;
+            const control = loaderControls[0];
+            if (control === undefined) {
+                throw new Error("Expected the succeeding loader control.");
+            }
+            control.resolveReady();
+            control.complete();
+            await expect(succeedingBuild).resolves.toBeUndefined();
+            expect(importCount).toBe(2);
+        } finally {
+            publicImportOverride.current = undefined;
+            firstGraph.asset.dispose();
+            secondGraph.asset.dispose();
+            succeedingGraph.asset.dispose();
+            publicImportCalls.length = 0;
         }
     });
 

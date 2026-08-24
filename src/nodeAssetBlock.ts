@@ -35,6 +35,7 @@ export abstract class NodeAssetBlock {
 
     /** @internal */
     public _assertBuildAvailable(state: AssetGraphBuildState): void {
+        state._throwIfDisposed();
         const currentState = blockBuildStates.get(this);
         if (currentState !== undefined && currentState !== state) {
             throw new Error(`Block "${this.name}" cannot be built concurrently because it is already executing.`);
@@ -48,6 +49,7 @@ export abstract class NodeAssetBlock {
 
     /** @internal */
     public async _buildWithStateAsync(state: AssetGraphBuildState): Promise<void> {
+        state._throwIfDisposed();
         this._assertBuildAvailable(state);
 
         const ownsBuildState = blockBuildStates.get(this) === undefined;
@@ -57,6 +59,7 @@ export abstract class NodeAssetBlock {
 
         try {
             await this._buildAsync();
+            state._throwIfDisposed();
         } catch (error) {
             if (!isNodeAssetBlockError(error)) {
                 throw createNodeAssetBlockError(this, `Block "${this.name}" failed: ${getNodeAssetBlockErrorReason(error)}`, error);
