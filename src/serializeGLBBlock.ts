@@ -1,5 +1,5 @@
 import { type ConnectionPoint } from "./connectionPoint";
-import { NodeAssetBlock } from "./nodeAssetBlock";
+import { createNodeAssetBlockError, getNodeAssetBlockErrorReason, NodeAssetBlock } from "./nodeAssetBlock";
 
 export class SerializeGLBBlock extends NodeAssetBlock {
     public readonly input: ConnectionPoint<"SceneAsset", "input">;
@@ -25,8 +25,7 @@ export class SerializeGLBBlock extends NodeAssetBlock {
 
             this.writeOutput(this.output, new Uint8Array(await file.arrayBuffer()));
         } catch (error) {
-            const message = error instanceof Error ? error.message : String(error);
-            throw new Error(`Serialize GLB block "${this.name}" failed: ${message}`, { cause: error });
+            throw createNodeAssetBlockError(this, `Serialize GLB block "${this.name}" failed: ${getNodeAssetBlockErrorReason(error)}`, error);
         }
     }
 }

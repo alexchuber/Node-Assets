@@ -27,6 +27,21 @@ class PrefixBlock extends NodeAssetBlock {
     }
 }
 
+class FailingBlock extends NodeAssetBlock {
+    public readonly output: ConnectionPoint<"File", "output"> = this.registerOutput("output", "File");
+
+    public constructor(
+        name: string,
+        private readonly _reason: unknown
+    ) {
+        super(name);
+    }
+
+    protected override _buildAsync(): Promise<void> {
+        throw this._reason;
+    }
+}
+
 class TrackingOutputBlock extends OutputBlock {
     public buildCount = 0;
 
@@ -407,6 +422,54 @@ describe("NodeAsset", () => {
         expect(output.data).toEqual(new Uint8Array([9, 1, 2]));
     });
 
+    it("wraps custom block Error failures with the block name and original cause", async () => {
+        const cause = new Error("custom failure");
+        const failing = new FailingBlock("custom", cause);
+        const output = new OutputBlock("destination");
+        failing.output.connectTo(output.input);
+
+        const asset = new NodeAsset("graph");
+        asset.addOutputBlock(output);
+
+        try {
+            const error = await asset.buildAsync().catch((reason: unknown) => reason);
+
+            expect(error).toBeInstanceOf(Error);
+            if (!(error instanceof Error)) {
+                return;
+            }
+
+            expect(error.message).toBe('Block "custom" failed: custom failure');
+            expect(error.cause).toBe(cause);
+        } finally {
+            asset.dispose();
+        }
+    });
+
+    it("wraps custom block primitive failures with readable text and the original cause", async () => {
+        const cause = "primitive failure";
+        const failing = new FailingBlock("primitive", cause);
+        const output = new OutputBlock("destination");
+        failing.output.connectTo(output.input);
+
+        const asset = new NodeAsset("graph");
+        asset.addOutputBlock(output);
+
+        try {
+            const error = await asset.buildAsync().catch((reason: unknown) => reason);
+
+            expect(error).toBeInstanceOf(Error);
+            if (!(error instanceof Error)) {
+                return;
+            }
+
+            expect(error.message).toBe('Block "primitive" failed: primitive failure');
+            expect(error.cause).toBe(cause);
+        } finally {
+            asset.dispose();
+        }
+    });
+
     it("evaluates a shared File-producing block once when its output fans out", async () => {
         const input = new InputBlock("source");
         input.source = new Uint8Array([1, 2]);
@@ -769,7 +832,7 @@ describe("NodeAsset", () => {
         expect(() => secondOutput.data).toThrow('Output block "a.glb"');
     });
 
-    it("invalidates prior artifacts before duplicate-name validation", async () => {
+    it("invalidates prior artifacts before aggregated structural validation", async () => {
         const input = new InputBlock("source");
         input.source = new Uint8Array([24]);
         const counting = new CountingPassThroughBlock("counting");
@@ -787,7 +850,11 @@ describe("NodeAsset", () => {
         expect(secondOutput.data).toEqual(new Uint8Array([24]));
 
         asset.addOutputBlock(new OutputBlock("first.glb"));
-        await expect(asset.buildAsync()).rejects.toThrow('NodeAsset "graph" has duplicate output block names: "first.glb".');
+        await expect(asset.buildAsync()).rejects.toThrow(
+            'NodeAsset "graph" cannot build because the graph has structural errors:\n' +
+                'Duplicate output block names: "first.glb".\n' +
+                'Block "first.glb" has an unconnected required input "input".'
+        );
 
         expect(counting.buildCount).toBe(1);
         expect(() => firstOutput.data).toThrow('Output block "first.glb"');

@@ -1,5 +1,5 @@
 import { type ConnectionPoint } from "./connectionPoint";
-import { NodeAssetBlock } from "./nodeAssetBlock";
+import { createNodeAssetBlockError, getNodeAssetBlockErrorReason, NodeAssetBlock } from "./nodeAssetBlock";
 
 export type InputSource = string | ArrayBuffer | ArrayBufferView;
 
@@ -30,7 +30,7 @@ export class InputBlock extends NodeAssetBlock {
         }
 
         if (typeof source !== "string") {
-            throw new Error(`Input block "${this.name}" requires a URL string or in-memory bytes source.`);
+            throw createNodeAssetBlockError(this, `Input block "${this.name}" requires a URL string or in-memory bytes source.`, undefined);
         }
 
         try {
@@ -43,8 +43,7 @@ export class InputBlock extends NodeAssetBlock {
 
             this.writeOutput(this.output, new Uint8Array(await response.arrayBuffer()));
         } catch (error) {
-            const message = error instanceof Error ? error.message : String(error);
-            throw new Error(`Input block "${this.name}" failed to load URL "${source}": ${message}`, { cause: error });
+            throw createNodeAssetBlockError(this, `Input block "${this.name}" failed to load URL "${source}": ${getNodeAssetBlockErrorReason(error)}`, error);
         }
     }
 }

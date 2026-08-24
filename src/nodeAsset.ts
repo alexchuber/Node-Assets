@@ -56,7 +56,6 @@ export class NodeAsset {
             for (const outputBlock of outputBlocks) {
                 outputBlock._invalidateData(previousSuccessfulBuildState);
             }
-            this._validateOutputBlockNames(outputBlocks);
             state._assertGraphValidationValid(graphValidation, this.name);
             for (const outputBlock of outputBlocks) {
                 await state.buildBlockAsync(outputBlock);
@@ -117,22 +116,6 @@ export class NodeAsset {
     private _throwIfBuildWasDisposed(buildVersion: number): void {
         if (this._disposed || buildVersion !== this._buildVersion) {
             throw new Error(`NodeAsset "${this.name}" was disposed while a build was in progress.`);
-        }
-    }
-
-    private _validateOutputBlockNames(outputBlocks: readonly OutputBlock[]): void {
-        const nameCounts = new Map<string, number>();
-        for (const outputBlock of outputBlocks) {
-            nameCounts.set(outputBlock.name, (nameCounts.get(outputBlock.name) ?? 0) + 1);
-        }
-
-        const duplicateNames = [...nameCounts.entries()]
-            .filter(([, count]) => count > 1)
-            .map(([name]) => name)
-            .sort();
-        if (duplicateNames.length > 0) {
-            const names = duplicateNames.map((name) => `"${name}"`).join(", ");
-            throw new Error(`NodeAsset "${this.name}" has duplicate output block names: ${names}.`);
         }
     }
 }

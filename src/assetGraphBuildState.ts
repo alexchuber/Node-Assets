@@ -5,6 +5,8 @@ import type { SceneAsset } from "./sceneAsset";
 
 /** @internal */
 export interface AssetGraphValidation {
+    readonly duplicateOutputNames: readonly string[];
+    readonly details: readonly string[];
     readonly missingInputs: readonly {
         readonly block: NodeAssetBlock;
         readonly input: ConnectionPoint<ConnectionPointType, "input">;
@@ -30,6 +32,14 @@ export class AssetGraphBuildState {
 
     /** @internal */
     public _validateGraph(roots: readonly NodeAssetBlock[]): AssetGraphValidation {
+        const nameCounts = new Map<string, number>();
+        for (const root of roots) {
+            nameCounts.set(root.name, (nameCounts.get(root.name) ?? 0) + 1);
+        }
+        const duplicateOutputNames = [...nameCounts.entries()]
+            .filter(([, count]) => count > 1)
+            .map(([name]) => name)
+            .sort();
         const missingInputs: Array<{ block: NodeAssetBlock; input: ConnectionPoint<ConnectionPointType, "input"> }> = [];
         const sceneAssetFanOuts: Array<{ block: NodeAssetBlock; output: ConnectionPoint<ConnectionPointType, "output"> }> = [];
         const visitedBlocks = new Set<NodeAssetBlock>();
@@ -61,7 +71,16 @@ export class AssetGraphBuildState {
             visit(root);
         }
 
-        return { missingInputs, sceneAssetFanOuts };
+        const details = [
+            ...(duplicateOutputNames.length > 0 ? [`Duplicate output block names: ${duplicateOutputNames.map((name) => `"${name}"`).join(", ")}.`] : []),
+            ...missingInputs.map(({ block, input }) => `Block "${block.name}" has an unconnected required input "${input.name}".`),
+            ...sceneAssetFanOuts.map(
+                ({ block, output }) =>
+                    `Block "${block.name}" output "${output.name}" produces a SceneAsset value that is moved to its consumer and cannot feed multiple consumers in v0.`
+            ),
+        ];
+
+        return { details, duplicateOutputNames, missingInputs, sceneAssetFanOuts };
     }
 
     /** @internal */
@@ -71,17 +90,16 @@ export class AssetGraphBuildState {
 
     /** @internal */
     public _assertGraphValidationValid(validation: AssetGraphValidation, graphName: string): void {
-        const details = [
-            ...validation.missingInputs.map(({ block, input }) => `Block "${block.name}" has an unconnected required input "${input.name}".`),
-            ...validation.sceneAssetFanOuts.map(
-                ({ block, output }) =>
-                    `Block "${block.name}" output "${output.name}" produces a SceneAsset value that is moved to its consumer and cannot feed multiple consumers in v0.`
-            ),
-        ];
-
-        if (details.length > 0) {
-            throw new Error(`NodeAsset "${graphName}" cannot build because the graph has structural errors:\n${details.join("\n")}`);
+        if (validation.details.length === 0) {
+            return;
         }
+
+        if (validation.duplicateOutputNames.length > 0 && validation.missingInputs.length === 0 && validation.sceneAssetFanOuts.length === 0) {
+            const names = validation.duplicateOutputNames.map((name) => `"${name}"`).join(", ");
+            throw new Error(`NodeAsset "${graphName}" has duplicate output block names: ${names}.`);
+        }
+
+        throw new Error(`NodeAsset "${graphName}" cannot build because the graph has structural errors:\n${validation.details.join("\n")}`);
     }
 
     public async buildBlockAsync(block: NodeAssetBlock): Promise<void> {
