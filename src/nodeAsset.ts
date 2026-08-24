@@ -48,14 +48,16 @@ export class NodeAsset {
                 outputBlock._assertBuildAvailable(state);
             }
 
+            const graphValidation = state._validateGraph(outputBlocks);
             ownsOutputBuild = true;
+            const previousSuccessfulBuildState = this._successfulBuildState;
             this._successfulBuildState = undefined;
             this._successfulOutputBlocks = undefined;
             for (const outputBlock of outputBlocks) {
-                outputBlock._invalidateData();
+                outputBlock._invalidateData(previousSuccessfulBuildState);
             }
             this._validateOutputBlockNames(outputBlocks);
-            state._assertGraphValid(outputBlocks, this.name);
+            state._assertGraphValidationValid(graphValidation, this.name);
             for (const outputBlock of outputBlocks) {
                 await state.buildBlockAsync(outputBlock);
             }

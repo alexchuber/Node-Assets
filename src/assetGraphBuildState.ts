@@ -4,6 +4,18 @@ import type { NullEngine } from "@babylonjs/core/Engines/nullEngine.js";
 import type { SceneAsset } from "./sceneAsset";
 
 /** @internal */
+export interface AssetGraphValidation {
+    readonly missingInputs: readonly {
+        readonly block: NodeAssetBlock;
+        readonly input: ConnectionPoint<ConnectionPointType, "input">;
+    }[];
+    readonly sceneAssetFanOuts: readonly {
+        readonly block: NodeAssetBlock;
+        readonly output: ConnectionPoint<ConnectionPointType, "output">;
+    }[];
+}
+
+/** @internal */
 export class AssetGraphBuildState {
     private readonly _outputValues = new Map<ConnectionPoint<ConnectionPointType, "output">, ConnectionPointValue<ConnectionPointType>>();
     private readonly _blockBuilds = new Map<NodeAssetBlock, Promise<void>>();
@@ -17,8 +29,9 @@ export class AssetGraphBuildState {
     }
 
     /** @internal */
-    public _assertGraphValid(roots: readonly NodeAssetBlock[], graphName: string): void {
+    public _validateGraph(roots: readonly NodeAssetBlock[]): AssetGraphValidation {
         const missingInputs: Array<{ block: NodeAssetBlock; input: ConnectionPoint<ConnectionPointType, "input"> }> = [];
+        const sceneAssetFanOuts: Array<{ block: NodeAssetBlock; output: ConnectionPoint<ConnectionPointType, "output"> }> = [];
         const visitedBlocks = new Set<NodeAssetBlock>();
 
         const visit = (block: NodeAssetBlock): void => {
@@ -36,14 +49,37 @@ export class AssetGraphBuildState {
 
                 visit(output._block);
             }
+
+            for (const output of block._getOutputs()) {
+                if (output.type === "SceneAsset" && output._getEndpoints().length > 1) {
+                    sceneAssetFanOuts.push({ block, output });
+                }
+            }
         };
 
         for (const root of roots) {
             visit(root);
         }
 
-        if (missingInputs.length > 0) {
-            const details = missingInputs.map(({ block, input }) => `Block "${block.name}" has an unconnected required input "${input.name}".`);
+        return { missingInputs, sceneAssetFanOuts };
+    }
+
+    /** @internal */
+    public _assertGraphValid(roots: readonly NodeAssetBlock[], graphName: string): void {
+        this._assertGraphValidationValid(this._validateGraph(roots), graphName);
+    }
+
+    /** @internal */
+    public _assertGraphValidationValid(validation: AssetGraphValidation, graphName: string): void {
+        const details = [
+            ...validation.missingInputs.map(({ block, input }) => `Block "${block.name}" has an unconnected required input "${input.name}".`),
+            ...validation.sceneAssetFanOuts.map(
+                ({ block, output }) =>
+                    `Block "${block.name}" output "${output.name}" produces a SceneAsset value that is moved to its consumer and cannot feed multiple consumers in v0.`
+            ),
+        ];
+
+        if (details.length > 0) {
             throw new Error(`NodeAsset "${graphName}" cannot build because the graph has structural errors:\n${details.join("\n")}`);
         }
     }
