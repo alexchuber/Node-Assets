@@ -687,6 +687,83 @@ describe("GLB roundtrip", () => {
         }
     });
 
+    it("keeps cancellation armed when COMPLETE precedes pending READY", async () => {
+        const fixture = await createGlbFixtureAsync();
+        const graph = createRoundtripGraph(fixture.bytes);
+        const succeedingGraph = createRoundtripGraph(fixture.bytes);
+        let importStarted!: () => void;
+        let succeedingImportStarted!: () => void;
+        const importStartedPromise = new Promise<void>((resolve) => {
+            importStarted = resolve;
+        });
+        const succeedingImportStartedPromise = new Promise<void>((resolve) => {
+            succeedingImportStarted = resolve;
+        });
+        let loaderControl: LoaderControl | undefined;
+        const succeedingControls: LoaderControl[] = [];
+        let importCount = 0;
+        const activationObserverCount = SceneLoader.OnPluginActivatedObservable.observers.length;
+        const initialEngineCount = EngineStore.Instances.length;
+        publicImportOverride.current = (_source, scene) => {
+            importCount += 1;
+            if (importCount === 1) {
+                const mesh = MeshBuilder.CreateBox("complete-before-ready", { size: 1 }, scene);
+                const control = createLoaderControl(mesh);
+                loaderControl = control;
+                SceneLoader.OnPluginActivatedObservable.notifyObservers(control.plugin);
+                control.complete();
+                importStarted();
+                return control.readyPromise;
+            }
+
+            const mesh = MeshBuilder.CreateBox("after-complete-cancellation", { size: 1 }, scene);
+            const control = createLoaderControl(mesh);
+            succeedingControls.push(control);
+            succeedingImportStarted();
+            SceneLoader.OnPluginActivatedObservable.notifyObservers(control.plugin);
+            return control.readyPromise;
+        };
+
+        try {
+            const build = graph.asset.buildAsync();
+            await importStartedPromise;
+            const control = loaderControl;
+            if (control === undefined) {
+                throw new Error("Expected the complete-before-ready loader control.");
+            }
+            expect(control.plugin.onCompleteObservable.observers).toHaveLength(1);
+            expect(control.plugin.onErrorObservable.observers).toHaveLength(1);
+            expect(SceneLoader.OnPluginActivatedObservable.observers).toHaveLength(activationObserverCount);
+
+            graph.asset.dispose();
+
+            expect(control.plugin.onCompleteObservable.observers).toHaveLength(0);
+            expect(control.plugin.onErrorObservable.observers).toHaveLength(0);
+            expect(SceneLoader.OnPluginActivatedObservable.observers).toHaveLength(activationObserverCount);
+            expect(EngineStore.Instances).toHaveLength(initialEngineCount);
+
+            SceneLoader.OnPluginActivatedObservable.notifyObservers(control.plugin);
+            control.fail(new Error("late COMPLETE-before-READY failure"));
+            control.resolveReady();
+            await expect(build).rejects.toThrow('NodeAsset "graph" was disposed while a build was in progress.');
+
+            const succeedingBuild = succeedingGraph.asset.buildAsync();
+            await succeedingImportStartedPromise;
+            const succeedingControl = succeedingControls[0];
+            if (succeedingControl === undefined) {
+                throw new Error("Expected the succeeding loader control.");
+            }
+            succeedingControl.resolveReady();
+            succeedingControl.complete();
+            await expect(succeedingBuild).resolves.toBeUndefined();
+            expect(importCount).toBe(2);
+        } finally {
+            publicImportOverride.current = undefined;
+            graph.asset.dispose();
+            succeedingGraph.asset.dispose();
+        }
+    });
+
     it("cancels a graph waiting for the activation lock without affecting the owner", async () => {
         const fixture = await createGlbFixtureAsync();
         const firstGraph = createRoundtripGraph(fixture.bytes);

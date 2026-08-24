@@ -336,10 +336,11 @@ function waitForLoaderCompletion(plugin: LoaderWithLifecycle, cancellation: Buil
         }
     };
     const rejectForAbort = (reason: unknown): void => {
-        if (settled || disposed) {
+        if (disposed) {
             return;
         }
 
+        disposed = true;
         settled = true;
         removeObservers();
         removeCancellationListener();
@@ -354,7 +355,6 @@ function waitForLoaderCompletion(plugin: LoaderWithLifecycle, cancellation: Buil
             }
 
             settled = true;
-            removeCancellationListener();
             resolveCompletion();
         });
         if (settled || disposed) {
@@ -369,7 +369,6 @@ function waitForLoaderCompletion(plugin: LoaderWithLifecycle, cancellation: Buil
             }
 
             settled = true;
-            removeCancellationListener();
             rejectCompletion(reason);
         });
         if (settled || disposed) {
