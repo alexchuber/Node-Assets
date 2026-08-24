@@ -1,5 +1,5 @@
 import { type ConnectionPoint } from "./connectionPoint";
-import { NodeAssetBlock } from "./nodeAssetBlock";
+import { getNodeAssetBlockBuildState, NodeAssetBlock } from "./nodeAssetBlock";
 
 export type InputSource = string | ArrayBuffer | ArrayBufferView;
 
@@ -14,6 +14,7 @@ export class InputBlock extends NodeAssetBlock {
 
     protected override async _buildAsync(): Promise<void> {
         const source = this.source;
+        const state = getNodeAssetBlockBuildState(this);
         if (source instanceof Uint8Array) {
             this.writeOutput(this.output, source);
             return;
@@ -41,10 +42,23 @@ export class InputBlock extends NodeAssetBlock {
                 throw new Error(`Received HTTP ${status}.`);
             }
 
-            this.writeOutput(this.output, new Uint8Array(await response.arrayBuffer()));
+            const bytes = new Uint8Array(await response.arrayBuffer());
+            this.writeOutput(this.output, bytes);
+            const rootUrl = getUrlDirectory(response.url || source);
+            if (rootUrl !== undefined) {
+                state._setFileRootUrl(bytes, rootUrl);
+            }
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
             throw new Error(`Input block "${this.name}" failed to load URL "${source}": ${message}`, { cause: error });
         }
+    }
+}
+
+function getUrlDirectory(url: string): string | undefined {
+    try {
+        return new URL(".", url).href;
+    } catch {
+        return undefined;
     }
 }

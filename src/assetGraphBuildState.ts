@@ -20,12 +20,18 @@ export class AssetGraphBuildState {
     private readonly _outputValues = new Map<ConnectionPoint<ConnectionPointType, "output">, ConnectionPointValue<ConnectionPointType>>();
     private readonly _blockBuilds = new Map<NodeAssetBlock, Promise<void>>();
     private readonly _sceneAssets = new Set<SceneAsset>();
+    private readonly _fileRootUrls = new Map<Uint8Array, string>();
+    private readonly _abortController = new AbortController();
 
     /** @internal */
     public readonly _engine: NullEngine;
 
+    /** @internal */
+    public readonly _abortSignal: AbortSignal;
+
     public constructor(engine: NullEngine) {
         this._engine = engine;
+        this._abortSignal = this._abortController.signal;
     }
 
     /** @internal */
@@ -116,6 +122,16 @@ export class AssetGraphBuildState {
     }
 
     /** @internal */
+    public _setFileRootUrl(file: Uint8Array, rootUrl: string): void {
+        this._fileRootUrls.set(file, rootUrl);
+    }
+
+    /** @internal */
+    public _getFileRootUrl(file: Uint8Array): string | undefined {
+        return this._fileRootUrls.get(file);
+    }
+
+    /** @internal */
     public _trackSceneAsset(sceneAsset: SceneAsset): void {
         this._sceneAssets.add(sceneAsset);
     }
@@ -123,12 +139,14 @@ export class AssetGraphBuildState {
     /** @internal */
     public _dispose(): void {
         try {
+            this._abortController.abort();
             for (const sceneAsset of this._sceneAssets) {
                 sceneAsset._dispose();
             }
         } finally {
             this._sceneAssets.clear();
             this._outputValues.clear();
+            this._fileRootUrls.clear();
         }
     }
 }
