@@ -161,7 +161,7 @@ export class AssetGraphBuildState {
 
         this._disposed = true;
         try {
-            this._abortController.abort();
+            this._abortController.abort(this._getDisposalError());
         } finally {
             try {
                 for (const sceneAsset of this._sceneAssets) {

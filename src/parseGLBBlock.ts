@@ -75,7 +75,7 @@ export class ParseGLBBlock extends NodeAssetBlock {
             sceneAsset._attachAssetContainer(assetContainer);
             const fileName = `${this.name}.glb`;
 
-            await importGlbIntoSceneAsync(ImportMeshAsync, SceneLoader, bytes, scene, fileName);
+            await importGlbIntoSceneAsync(ImportMeshAsync, SceneLoader, bytes, scene, fileName, state._abortSignal);
             state._throwIfDisposed();
             assetContainer.moveAllFromScene();
             assetContainer.addAllToScene();
@@ -104,31 +104,46 @@ interface CompletionWait {
     dispose(): void;
 }
 
+interface BuildCancellation {
+    readonly promise: Promise<never>;
+    readonly aborted: boolean;
+    readonly reason: unknown;
+    onAbort(callback: (reason: unknown) => void): () => void;
+    dispose(): void;
+}
+
 async function importGlbIntoSceneAsync(
     importMeshAsync: typeof SceneLoaderTypes.ImportMeshAsync,
     sceneLoader: typeof SceneLoaderTypes.SceneLoader,
     bytes: Uint8Array,
     scene: Scene,
-    fileName: string
+    fileName: string,
+    signal: AbortSignal
 ): Promise<void> {
-    const capture = await withLoaderActivationLockAsync(() => captureLoaderLifecycleAsync(importMeshAsync, sceneLoader, bytes, scene, fileName));
+    const cancellation = createBuildCancellation(signal);
     try {
-        await Promise.all([capture.readyPromise, capture.completion.promise]);
+        const capture = await withLoaderActivationLockAsync(() => captureLoaderLifecycleAsync(importMeshAsync, sceneLoader, bytes, scene, fileName, cancellation), cancellation);
+        try {
+            await Promise.race([Promise.all([capture.readyPromise, capture.completion.promise]), cancellation.promise]);
+        } finally {
+            capture.dispose();
+        }
     } finally {
-        capture.dispose();
+        cancellation.dispose();
     }
 }
 
-async function withLoaderActivationLockAsync<T>(operation: () => Promise<T>): Promise<T> {
+async function withLoaderActivationLockAsync<T>(operation: () => Promise<T>, cancellation: BuildCancellation): Promise<T> {
     const previous = loaderActivationTail;
     let release!: () => void;
     const current = new Promise<void>((resolve) => {
         release = resolve;
     });
     loaderActivationTail = previous.then(() => current);
-    await previous;
 
     try {
+        await Promise.race([previous, cancellation.promise]);
+        throwIfBuildAborted(cancellation);
         return await operation();
     } finally {
         release();
@@ -146,24 +161,40 @@ async function captureLoaderLifecycleAsync(
     sceneLoader: typeof SceneLoaderTypes.SceneLoader,
     bytes: Uint8Array,
     scene: Scene,
-    fileName: string
+    fileName: string,
+    cancellation: BuildCancellation
 ): Promise<LoaderCapture> {
+    throwIfBuildAborted(cancellation);
+
     let activationObserver: IObserver | undefined;
     let completion: CompletionWait | undefined;
     let activationCaptured = false;
+    let cancelled = false;
+    let removeCancellationListener = (): void => {};
     let resolveActivation!: (value: CompletionWait) => void;
     let rejectActivation!: (reason: unknown) => void;
     const activationPromise = new Promise<CompletionWait>((resolve, reject) => {
         resolveActivation = resolve;
         rejectActivation = reject;
     });
+    void activationPromise.then(undefined, () => undefined);
     const removeActivationObserver = (): void => {
         const observer = activationObserver;
         activationObserver = undefined;
         observer?.remove();
     };
+    const cancel = (reason: unknown): void => {
+        if (cancelled) {
+            return;
+        }
+
+        cancelled = true;
+        removeActivationObserver();
+        completion?.dispose();
+        rejectActivation(reason);
+    };
     const onPluginActivated = (plugin: SceneLoaderPlugin): void => {
-        if (activationCaptured || !isGlbPlugin(plugin)) {
+        if (cancelled || cancellation.aborted || activationCaptured || !isGlbPlugin(plugin)) {
             return;
         }
 
@@ -173,23 +204,33 @@ async function captureLoaderLifecycleAsync(
                 throw new Error("The public GLB loader does not expose completion and error observables.");
             }
 
-            completion = waitForLoaderCompletion(plugin);
+            completion = waitForLoaderCompletion(plugin, cancellation);
+            if (cancelled || cancellation.aborted) {
+                completion.dispose();
+                return;
+            }
             removeActivationObserver();
+            removeCancellationListener();
             resolveActivation(completion);
         } catch (error) {
             removeActivationObserver();
             completion?.dispose();
-            rejectActivation(error);
+            removeCancellationListener();
+            rejectActivation(cancellation.aborted ? cancellation.reason : error);
         }
     };
 
+    removeCancellationListener = cancellation.onAbort(cancel);
+    throwIfBuildAborted(cancellation);
     activationObserver = sceneLoader.OnPluginActivatedObservable.add(onPluginActivated);
-    if (activationCaptured) {
+    if (cancellation.aborted) {
         removeActivationObserver();
+        throw cancellation.reason;
     }
 
     let readyPromise: Promise<SceneLoaderTypes.ISceneLoaderAsyncResult>;
     try {
+        throwIfBuildAborted(cancellation);
         readyPromise = importMeshAsync(bytes, scene, {
             name: fileName,
             pluginExtension: ".glb",
@@ -206,36 +247,52 @@ async function captureLoaderLifecycleAsync(
         });
     } catch (error) {
         removeActivationObserver();
-        rejectActivation(error);
-        throw error;
-    }
-    if (activationCaptured) {
-        removeActivationObserver();
+        completion?.dispose();
+        removeCancellationListener();
+        throw cancellation.aborted ? cancellation.reason : error;
     }
 
     const readyRejection = readyPromise.then(
         () => new Promise<never>(() => {}),
         (error) => {
+            if (cancelled || cancellation.aborted) {
+                throw error;
+            }
+
             removeActivationObserver();
+            removeCancellationListener();
             rejectActivation(error);
             throw error;
         }
     );
 
     try {
-        const capturedCompletion = await Promise.race([activationPromise, readyRejection]);
+        const capturedCompletion = await Promise.race([activationPromise, readyRejection, cancellation.promise]);
+        if (cancellation.aborted || cancelled) {
+            capturedCompletion.dispose();
+            throw cancellation.reason;
+        }
+
+        let disposed = false;
         return {
             readyPromise,
             completion: capturedCompletion,
             dispose: () => {
+                if (disposed) {
+                    return;
+                }
+
+                disposed = true;
                 removeActivationObserver();
+                removeCancellationListener();
                 capturedCompletion.dispose();
             },
         };
     } catch (error) {
         removeActivationObserver();
         completion?.dispose();
-        throw error;
+        removeCancellationListener();
+        throw cancellation.aborted ? cancellation.reason : error;
     }
 }
 
@@ -251,32 +308,82 @@ function isPublicObservable(value: unknown): value is PublicObservable {
     return typeof value === "object" && value !== null && "addOnce" in value && typeof value.addOnce === "function";
 }
 
-function waitForLoaderCompletion(plugin: LoaderWithLifecycle): CompletionWait {
+function waitForLoaderCompletion(plugin: LoaderWithLifecycle, cancellation: BuildCancellation): CompletionWait {
+    throwIfBuildAborted(cancellation);
+
     let resolveCompletion!: () => void;
     let rejectCompletion!: (reason: unknown) => void;
     let completeObserver: IObserver | undefined;
     let errorObserver: IObserver | undefined;
+    let disposed = false;
+    let settled = false;
     const promise = new Promise<void>((resolve, reject) => {
         resolveCompletion = resolve;
         rejectCompletion = reject;
     });
+    // Cancellation can reject this wait before capture hands it to its caller.
+    void promise.then(undefined, () => undefined);
+    let removeCancellationListener = (): void => {};
+    const removeObservers = (): void => {
+        const complete = completeObserver;
+        completeObserver = undefined;
+        const error = errorObserver;
+        errorObserver = undefined;
+        try {
+            error?.remove();
+        } finally {
+            complete?.remove();
+        }
+    };
+    const rejectForAbort = (reason: unknown): void => {
+        if (settled || disposed) {
+            return;
+        }
+
+        settled = true;
+        removeObservers();
+        removeCancellationListener();
+        rejectCompletion(reason);
+    };
+    removeCancellationListener = cancellation.onAbort(rejectForAbort);
+
     try {
-        completeObserver = plugin.onCompleteObservable.addOnce(() => {
+        const complete = plugin.onCompleteObservable.addOnce(() => {
+            if (settled || disposed) {
+                return;
+            }
+
+            settled = true;
+            removeCancellationListener();
             resolveCompletion();
         });
-        errorObserver = plugin.onErrorObservable.addOnce((reason) => {
+        if (settled || disposed) {
+            complete.remove();
+        } else {
+            completeObserver = complete;
+        }
+
+        const error = plugin.onErrorObservable.addOnce((reason) => {
+            if (settled || disposed) {
+                return;
+            }
+
+            settled = true;
+            removeCancellationListener();
             rejectCompletion(reason);
         });
-    } catch (error) {
-        try {
-            errorObserver?.remove();
-        } finally {
-            completeObserver?.remove();
+        if (settled || disposed) {
+            error.remove();
+        } else {
+            errorObserver = error;
         }
+    } catch (error) {
+        settled = true;
+        removeCancellationListener();
+        removeObservers();
         throw error;
     }
 
-    let disposed = false;
     return {
         promise,
         dispose: () => {
@@ -285,13 +392,79 @@ function waitForLoaderCompletion(plugin: LoaderWithLifecycle): CompletionWait {
             }
 
             disposed = true;
-            try {
-                errorObserver?.remove();
-            } finally {
-                completeObserver?.remove();
-            }
+            settled = true;
+            removeCancellationListener();
+            removeObservers();
         },
     };
+}
+
+function createBuildCancellation(signal: AbortSignal): BuildCancellation {
+    let aborted = false;
+    let reason: unknown;
+    let rejectAbort!: (reason: unknown) => void;
+    const listeners = new Set<(reason: unknown) => void>();
+    const promise = new Promise<never>((_, reject) => {
+        rejectAbort = reject;
+    });
+    const abort = (): void => {
+        if (aborted) {
+            return;
+        }
+
+        aborted = true;
+        reason = signal.reason ?? new Error("GLB import was aborted.");
+        rejectAbort(reason);
+        try {
+            for (const listener of listeners) {
+                listener(reason);
+            }
+        } finally {
+            listeners.clear();
+        }
+    };
+
+    if (signal.aborted) {
+        abort();
+    } else {
+        signal.addEventListener("abort", abort, { once: true });
+    }
+
+    return {
+        promise,
+        get aborted() {
+            return aborted;
+        },
+        get reason() {
+            return reason;
+        },
+        onAbort: (callback) => {
+            if (aborted) {
+                callback(reason);
+                return () => {};
+            }
+
+            listeners.add(callback);
+            if (signal.aborted) {
+                listeners.delete(callback);
+                abort();
+            }
+
+            return () => {
+                listeners.delete(callback);
+            };
+        },
+        dispose: () => {
+            signal.removeEventListener("abort", abort);
+            listeners.clear();
+        },
+    };
+}
+
+function throwIfBuildAborted(cancellation: BuildCancellation): void {
+    if (cancellation.aborted) {
+        throw cancellation.reason;
+    }
 }
 
 function registerBuiltInLoadersAsync(): Promise<void> {
