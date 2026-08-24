@@ -190,6 +190,16 @@ async function captureLoaderLifecycleAsync(
         readyPromise = importMeshAsync(bytes, scene, {
             name: fileName,
             pluginExtension: ".glb",
+            pluginOptions: {
+                gltf: {
+                    // NullEngine cannot provide texture pixels for Babylon's spec-gloss-to-metallic conversion; disabling this optional extension uses the asset's standard metallic-roughness fallback.
+                    extensionOptions: {
+                        KHR_materials_pbrSpecularGlossiness: {
+                            enabled: false,
+                        },
+                    },
+                },
+            },
         });
     } catch (error) {
         removeActivationObserver();

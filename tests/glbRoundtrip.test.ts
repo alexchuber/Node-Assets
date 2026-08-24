@@ -71,6 +71,15 @@ describe("GLB roundtrip", () => {
             expect(options).toMatchObject({
                 name: "parse.glb",
                 pluginExtension: ".glb",
+                pluginOptions: {
+                    gltf: {
+                        extensionOptions: {
+                            KHR_materials_pbrSpecularGlossiness: {
+                                enabled: false,
+                            },
+                        },
+                    },
+                },
             });
         } finally {
             publicImportCalls.length = 0;
@@ -748,6 +757,17 @@ describe("GLB roundtrip", () => {
         asset.dispose();
     });
 
+    it("rejects GLBs that require the disabled spec-gloss extension", async () => {
+        const fixture = await createGlbFixtureAsync();
+        const graph = createRoundtripGraph(withRequiredExtension(fixture.bytes, "KHR_materials_pbrSpecularGlossiness"));
+
+        try {
+            await expect(graph.asset.buildAsync()).rejects.toThrow('Parse GLB block "parse" failed: Required extension KHR_materials_pbrSpecularGlossiness is disabled');
+        } finally {
+            graph.asset.dispose();
+        }
+    });
+
     it("clears failed GLB output and permits a later rebuild", async () => {
         const fixture = await createGlbFixtureAsync();
         const input = new InputBlock("source");
@@ -802,6 +822,28 @@ function createRoundtripGraph(source: Uint8Array): RoundtripGraph {
     asset.addOutputBlock(output);
 
     return { asset, output };
+}
+
+function withRequiredExtension(bytes: Uint8Array, extension: string): Uint8Array {
+    const inputView = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    const jsonLength = inputView.getUint32(12, true);
+    const jsonStart = 20;
+    const jsonEnd = jsonStart + jsonLength;
+    const json = JSON.parse(new TextDecoder().decode(bytes.subarray(jsonStart, jsonEnd))) as { extensionsRequired?: string[] };
+    json.extensionsRequired = [...(json.extensionsRequired ?? []), extension];
+
+    const jsonBytes = new TextEncoder().encode(JSON.stringify(json));
+    const paddedJsonLength = (jsonBytes.byteLength + 3) & ~3;
+    const result = new Uint8Array(bytes.byteLength + paddedJsonLength - jsonLength);
+    result.set(bytes.subarray(0, jsonStart));
+    result.set(jsonBytes, jsonStart);
+    result.fill(0x20, jsonStart + jsonBytes.byteLength, jsonStart + paddedJsonLength);
+    result.set(bytes.subarray(jsonEnd), jsonStart + paddedJsonLength);
+
+    const resultView = new DataView(result.buffer);
+    resultView.setUint32(8, result.byteLength, true);
+    resultView.setUint32(12, paddedJsonLength, true);
+    return result;
 }
 
 interface RoundtripGraph {

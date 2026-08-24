@@ -49,6 +49,8 @@
         "format": "prettier --write \"src/**/*.ts\" \"tests/**/*.ts\" \"*.config.ts\" \"*.config.mjs\"",
         "format:check": "prettier --check \"src/**/*.ts\" \"tests/**/*.ts\" \"*.config.ts\" \"*.config.mjs\"",
         "test": "vitest run",
+        "test:unit": "vitest run --exclude \"tests/**/*.integration.test.ts\"",
+        "test:integration": "vitest run tests/cdnRoundtrip.integration.test.ts",
         "test:watch": "vitest",
         "docs": "typedoc"
     },
