@@ -130,8 +130,14 @@ async function importGlbIntoSceneAsync(
     const correlationMarker: LoaderCorrelationMarker = () => undefined;
     const capture = await captureLoaderLifecycleAsync(importMeshAsync, sceneLoader, bytes, rootUrl, abortSignal, scene, fileName, correlationMarker);
     const readyWait = waitForAbort(abortSignal);
+    const readyFailure = capture.readyPromise.then(
+        () => new Promise<never>(() => undefined),
+        (error: unknown) => {
+            throw error;
+        }
+    );
     try {
-        await Promise.all([Promise.race([capture.readyPromise, readyWait.promise]), capture.completion.promise]);
+        await Promise.race([capture.completion.promise, readyFailure, readyWait.promise]);
     } finally {
         readyWait.dispose();
         capture.dispose();
@@ -157,6 +163,8 @@ async function captureLoaderLifecycleAsync(
     let activationObserver: IObserver | undefined;
     let completion: CompletionWait | undefined;
     let activationCaptured = false;
+    let cancelled = false;
+    let abortObserverInstalled = false;
     let resolveActivation!: (value: CompletionWait) => void;
     let rejectActivation!: (reason: unknown) => void;
     const activationPromise = new Promise<CompletionWait>((resolve, reject) => {
@@ -168,8 +176,27 @@ async function captureLoaderLifecycleAsync(
         activationObserver = undefined;
         observer?.remove();
     };
+    const removeAbortObserver = (): void => {
+        if (!abortObserverInstalled) {
+            return;
+        }
+
+        abortObserverInstalled = false;
+        abortSignal.removeEventListener("abort", onAbort);
+    };
+    const onAbort = (): void => {
+        if (cancelled) {
+            return;
+        }
+
+        cancelled = true;
+        removeActivationObserver();
+        completion?.dispose();
+        rejectActivation(getAbortReason(abortSignal));
+        removeAbortObserver();
+    };
     const onPluginActivated = (plugin: SceneLoaderPlugin): void => {
-        if (activationCaptured || abortSignal.aborted || !isGlbPlugin(plugin) || !hasLoaderCorrelationMarker(plugin, correlationMarker)) {
+        if (activationCaptured || cancelled || abortSignal.aborted || !isGlbPlugin(plugin) || !hasLoaderCorrelationMarker(plugin, correlationMarker)) {
             return;
         }
 
@@ -181,16 +208,37 @@ async function captureLoaderLifecycleAsync(
 
             completion = waitForLoaderCompletion(plugin, abortSignal);
             removeActivationObserver();
+            removeAbortObserver();
             resolveActivation(completion);
         } catch (error) {
             removeActivationObserver();
             completion?.dispose();
+            removeAbortObserver();
             rejectActivation(error);
         }
     };
 
     throwIfAborted(abortSignal);
-    activationObserver = sceneLoader.OnPluginActivatedObservable.add(onPluginActivated);
+    try {
+        activationObserver = sceneLoader.OnPluginActivatedObservable.add(onPluginActivated);
+        if (abortSignal.aborted) {
+            onAbort();
+        }
+        if (!cancelled) {
+            abortSignal.addEventListener("abort", onAbort, { once: true });
+            abortObserverInstalled = true;
+            if (abortSignal.aborted) {
+                onAbort();
+            }
+        }
+        throwIfAborted(abortSignal);
+    } catch (error) {
+        removeActivationObserver();
+        completion?.dispose();
+        removeAbortObserver();
+        rejectActivation(error);
+        throw error;
+    }
 
     let readyPromise: Promise<SceneLoaderTypes.ISceneLoaderAsyncResult>;
     try {
@@ -214,6 +262,7 @@ async function captureLoaderLifecycleAsync(
     } catch (error) {
         removeActivationObserver();
         completion?.dispose();
+        removeAbortObserver();
         if (abortSignal.aborted) {
             throw getAbortReason(abortSignal);
         }
@@ -222,6 +271,7 @@ async function captureLoaderLifecycleAsync(
     }
     if (activationCaptured) {
         removeActivationObserver();
+        removeAbortObserver();
     }
 
     const abortWait = waitForAbort(abortSignal);
@@ -230,6 +280,7 @@ async function captureLoaderLifecycleAsync(
         () => "ready" as const,
         (error) => {
             removeActivationObserver();
+            removeAbortObserver();
             rejectActivation(error);
             throw error;
         }
@@ -251,12 +302,14 @@ async function captureLoaderLifecycleAsync(
             dispose: () => {
                 abortWait.dispose();
                 removeActivationObserver();
+                removeAbortObserver();
                 capturedCompletion.dispose();
             },
         };
     } catch (error) {
         abortWait.dispose();
         removeActivationObserver();
+        removeAbortObserver();
         completion?.dispose();
         rejectActivation(error);
         throw error;

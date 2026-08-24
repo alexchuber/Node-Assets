@@ -65,6 +65,7 @@ interface LoaderControl {
     readonly readyPromise: Promise<SceneLoaderTypes.ISceneLoaderAsyncResult>;
     complete(): void;
     fail(reason: unknown): void;
+    rejectReady(reason: unknown): void;
     resolveReady(): void;
 }
 
@@ -327,6 +328,70 @@ describe("GLB roundtrip", () => {
         }
     });
 
+    it("removes activation observation synchronously when aborted before plugin activation", async () => {
+        const fixture = await createGlbFixtureAsync();
+        const input = new StateCapturingFileBlock("source", fixture.bytes);
+        const parse = new ParseGLBBlock("parse");
+        const serialize = new SerializeGLBBlock("serialize");
+        const output = new OutputBlock("destination");
+        const asset = new NodeAsset("graph");
+        input.output.connectTo(parse.input);
+        parse.output.connectTo(serialize.input);
+        serialize.output.connectTo(output.input);
+        asset.addOutputBlock(output);
+
+        const activationObserverCount = SceneLoader.OnPluginActivatedObservable.observers.length;
+        let firstImportStarted!: () => void;
+        const firstImportStartedPromise = new Promise<void>((resolve) => {
+            firstImportStarted = resolve;
+        });
+        let firstMarker: CorrelationMarker | undefined;
+        let lateControl: LoaderControl | undefined;
+        let importCount = 0;
+        publicImportOverride.current = (_source, scene, options) => {
+            importCount += 1;
+            if (importCount === 1) {
+                firstMarker = getCorrelationMarker(options);
+                lateControl = createLoaderControl(MeshBuilder.CreateBox("late-abort-activation", { size: 1 }, scene), firstMarker);
+                firstImportStarted();
+                return new Promise<SceneLoaderTypes.ISceneLoaderAsyncResult>(() => undefined);
+            }
+
+            const control = createLoaderControl(MeshBuilder.CreateBox("after-abort", { size: 1 }, scene), getCorrelationMarker(options));
+            SceneLoader.OnPluginActivatedObservable.notifyObservers(control.plugin);
+            control.resolveReady();
+            control.complete();
+            return control.readyPromise;
+        };
+
+        const build = asset.buildAsync();
+        let rebuild: Promise<void> | undefined;
+        try {
+            await firstImportStartedPromise;
+            expect(SceneLoader.OnPluginActivatedObservable.observers).toHaveLength(activationObserverCount + 1);
+            const state = input.state;
+            if (state === undefined || firstMarker === undefined || lateControl === undefined) {
+                throw new Error("Expected the active build state and correlation marker.");
+            }
+
+            state._dispose();
+            expect(SceneLoader.OnPluginActivatedObservable.observers).toHaveLength(activationObserverCount);
+
+            SceneLoader.OnPluginActivatedObservable.notifyObservers(lateControl.plugin);
+            expect(SceneLoader.OnPluginActivatedObservable.observers).toHaveLength(activationObserverCount);
+            await expect(build).rejects.toThrow('Parse GLB block "parse" failed');
+
+            rebuild = asset.buildAsync();
+            await expect(rebuild).resolves.toBeUndefined();
+            expect(importCount).toBe(2);
+        } finally {
+            publicImportOverride.current = undefined;
+            await build.catch(() => undefined);
+            await rebuild?.catch(() => undefined);
+            asset.dispose();
+        }
+    });
+
     it("supports a glTF loader wrapper imported before the package build", async () => {
         const fixture = await createGlbFixtureAsync();
         await import("@babylonjs/loaders/glTF/2.0/glTFLoader.js");
@@ -356,6 +421,57 @@ describe("GLB roundtrip", () => {
             expect(readyResolved).toBe(true);
         } finally {
             publicImportOverride.current = undefined;
+            graph.asset.dispose();
+        }
+    });
+
+    it("serializes after COMPLETE even when READY never settles", async () => {
+        const fixture = await createGlbFixtureAsync();
+        const graph = createRoundtripGraph(fixture.bytes);
+        let control: LoaderControl | undefined;
+        let readySettled = false;
+        publicImportOverride.current = (_source, scene, options) => {
+            const loaderControl = createLoaderControl(MeshBuilder.CreateBox("complete-before-ready", { size: 1 }, scene), getCorrelationMarker(options));
+            control = loaderControl;
+            void loaderControl.readyPromise.then(
+                () => {
+                    readySettled = true;
+                },
+                () => {
+                    readySettled = true;
+                }
+            );
+            SceneLoader.OnPluginActivatedObservable.notifyObservers(loaderControl.plugin);
+            loaderControl.complete();
+            return loaderControl.readyPromise;
+        };
+
+        const build = graph.asset.buildAsync();
+        try {
+            await expect(
+                Promise.race([
+                    build.then(() => "built" as const),
+                    new Promise<"timed out">((resolve) => {
+                        setTimeout(() => resolve("timed out"), 1_000);
+                    }),
+                ])
+            ).resolves.toBe("built");
+            if (control === undefined) {
+                throw new Error("Expected the matching GLB loader control.");
+            }
+
+            expect(readySettled).toBe(false);
+            expect(control.plugin.onCompleteObservable.observers).toHaveLength(0);
+            expect(control.plugin.onErrorObservable.observers).toHaveLength(0);
+            expect(new TextDecoder().decode(graph.output.data.subarray(0, 4))).toBe("glTF");
+
+            control.rejectReady(new Error("late READY rejection"));
+            await Promise.resolve();
+            expect(readySettled).toBe(true);
+        } finally {
+            publicImportOverride.current = undefined;
+            control?.resolveReady();
+            await build.catch(() => undefined);
             graph.asset.dispose();
         }
     });
@@ -1446,9 +1562,12 @@ function createLoaderControl(mesh: Mesh, correlationMarker?: CorrelationMarker):
     if (correlationMarker !== undefined) {
         parsedObservable.add(correlationMarker);
     }
+
     let resolveReady!: (result: SceneLoaderTypes.ISceneLoaderAsyncResult) => void;
-    const readyPromise = new Promise<SceneLoaderTypes.ISceneLoaderAsyncResult>((resolve) => {
+    let rejectReady!: (reason: unknown) => void;
+    const readyPromise = new Promise<SceneLoaderTypes.ISceneLoaderAsyncResult>((resolve, reject) => {
         resolveReady = resolve;
+        rejectReady = reject;
     });
     const plugin: PublicLoaderPlugin = {
         name: "gltf",
@@ -1470,6 +1589,7 @@ function createLoaderControl(mesh: Mesh, correlationMarker?: CorrelationMarker):
         readyPromise,
         complete: () => completeObservable.notifyObservers(undefined),
         fail: (reason) => errorObservable.notifyObservers(reason),
+        rejectReady,
         resolveReady: () => resolveReady(createImportResult(mesh)),
     };
 }
