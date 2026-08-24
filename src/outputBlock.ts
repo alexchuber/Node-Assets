@@ -27,7 +27,11 @@ export class OutputBlock extends NodeAssetBlock {
     }
 
     /** @internal */
-    public _invalidateData(): void {
+    public _invalidateData(buildState: AssetGraphBuildState | undefined): void {
+        if (this._dataBuildState !== buildState) {
+            return;
+        }
+
         this._data = undefined;
         this._dataBuildState = undefined;
     }

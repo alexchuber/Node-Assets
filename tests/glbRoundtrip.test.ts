@@ -58,6 +58,135 @@ describe("GLB roundtrip", () => {
         expect(await readGlbStructureAsync(result)).toEqual(fixture.structure);
     });
 
+    it("rejects SceneAsset fan-out before parsing or serializing", async () => {
+        const fixture = await createGlbFixtureAsync();
+        const input = new InputBlock("source");
+        const parse = new ParseGLBBlock("parse");
+        const firstSerialize = new SerializeGLBBlock("first serialize");
+        const secondSerialize = new SerializeGLBBlock("second serialize");
+        const firstOutput = new OutputBlock("first.glb");
+        const secondOutput = new OutputBlock("second.glb");
+        const asset = new NodeAsset("graph");
+
+        input.source = fixture.bytes;
+        input.output.connectTo(parse.input);
+        parse.output.connectTo(firstSerialize.input);
+        parse.output.connectTo(secondSerialize.input);
+        firstSerialize.output.connectTo(firstOutput.input);
+        secondSerialize.output.connectTo(secondOutput.input);
+        asset.addOutputBlock(firstOutput);
+        asset.addOutputBlock(secondOutput);
+
+        publicImportCalls.length = 0;
+        const serializeGlb = vi.spyOn(GLTF2Export, "GLBAsync");
+        try {
+            const error = await asset.buildAsync().catch((reason: unknown) => reason);
+            expect(error).toBeInstanceOf(Error);
+            if (!(error instanceof Error)) {
+                return;
+            }
+
+            expect(error.message).toBe(
+                'NodeAsset "graph" cannot build because the graph has structural errors:\n' +
+                    'Block "parse" output "output" produces a SceneAsset value that is moved to its consumer and cannot feed multiple consumers in v0.'
+            );
+            expect(publicImportCalls).toHaveLength(0);
+            expect(serializeGlb).not.toHaveBeenCalled();
+            expect(() => firstOutput.data).toThrow('Output block "first.glb"');
+            expect(() => secondOutput.data).toThrow('Output block "second.glb"');
+        } finally {
+            serializeGlb.mockRestore();
+            publicImportCalls.length = 0;
+            asset.dispose();
+        }
+    });
+
+    it("aggregates missing inputs with SceneAsset fan-out without executing the graph", async () => {
+        const parse = new ParseGLBBlock("parse");
+        const firstSerialize = new SerializeGLBBlock("first serialize");
+        const secondSerialize = new SerializeGLBBlock("second serialize");
+        const firstOutput = new OutputBlock("first.glb");
+        const secondOutput = new OutputBlock("second.glb");
+        const asset = new NodeAsset("graph");
+
+        parse.output.connectTo(firstSerialize.input);
+        parse.output.connectTo(secondSerialize.input);
+        firstSerialize.output.connectTo(firstOutput.input);
+        secondSerialize.output.connectTo(secondOutput.input);
+        asset.addOutputBlock(firstOutput);
+        asset.addOutputBlock(secondOutput);
+
+        publicImportCalls.length = 0;
+        const serializeGlb = vi.spyOn(GLTF2Export, "GLBAsync");
+        try {
+            const error = await asset.buildAsync().catch((reason: unknown) => reason);
+            expect(error).toBeInstanceOf(Error);
+            if (!(error instanceof Error)) {
+                return;
+            }
+
+            expect(error.message).toBe(
+                'NodeAsset "graph" cannot build because the graph has structural errors:\n' +
+                    'Block "parse" has an unconnected required input "input".\n' +
+                    'Block "parse" output "output" produces a SceneAsset value that is moved to its consumer and cannot feed multiple consumers in v0.'
+            );
+            expect(publicImportCalls).toHaveLength(0);
+            expect(serializeGlb).not.toHaveBeenCalled();
+            expect(() => firstOutput.data).toThrow('Output block "first.glb"');
+            expect(() => secondOutput.data).toThrow('Output block "second.glb"');
+        } finally {
+            serializeGlb.mockRestore();
+            publicImportCalls.length = 0;
+            asset.dispose();
+        }
+    });
+
+    it("preserves a published output owned by another graph on fan-out validation failure", async () => {
+        const fixture = await createGlbFixtureAsync();
+        const input = new InputBlock("source");
+        const parse = new ParseGLBBlock("parse");
+        const firstSerialize = new SerializeGLBBlock("first serialize");
+        const secondSerialize = new SerializeGLBBlock("second serialize");
+        const sharedOutput = new OutputBlock("shared.glb");
+        const secondOutput = new OutputBlock("second.glb");
+        const firstAsset = new NodeAsset("first graph");
+        const secondAsset = new NodeAsset("second graph");
+
+        input.source = fixture.bytes;
+        input.output.connectTo(parse.input);
+        parse.output.connectTo(firstSerialize.input);
+        firstSerialize.output.connectTo(sharedOutput.input);
+        firstAsset.addOutputBlock(sharedOutput);
+
+        try {
+            await firstAsset.buildAsync();
+            const publishedData = sharedOutput.data;
+
+            parse.output.connectTo(secondSerialize.input);
+            secondSerialize.output.connectTo(secondOutput.input);
+            secondAsset.addOutputBlock(sharedOutput);
+            secondAsset.addOutputBlock(secondOutput);
+
+            publicImportCalls.length = 0;
+            const serializeGlb = vi.spyOn(GLTF2Export, "GLBAsync");
+            try {
+                await expect(secondAsset.buildAsync()).rejects.toThrow(
+                    'Block "parse" output "output" produces a SceneAsset value that is moved to its consumer and cannot feed multiple consumers in v0.'
+                );
+                expect(publicImportCalls).toHaveLength(0);
+                expect(serializeGlb).not.toHaveBeenCalled();
+                expect(sharedOutput.data).toBe(publishedData);
+                expect(() => secondOutput.data).toThrow('Output block "second.glb"');
+            } finally {
+                serializeGlb.mockRestore();
+                publicImportCalls.length = 0;
+            }
+        } finally {
+            secondAsset.dispose();
+            firstAsset.dispose();
+        }
+    });
+
     it("imports GLBs through Babylon's public scene-loader helper", async () => {
         const fixture = await createGlbFixtureAsync();
         publicImportCalls.length = 0;
