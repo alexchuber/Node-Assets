@@ -200,6 +200,7 @@ async function captureLoaderLifecycleAsync(
             pluginOptions: {
                 gltf: {
                     onParsed: correlationMarker,
+                    preprocessUrlAsync: (url: string) => preprocessGlbUrlAsync(rootUrl, url),
                     // NullEngine cannot provide texture pixels for Babylon's spec-gloss-to-metallic conversion; disabling this optional extension uses the asset's standard metallic-roughness fallback.
                     extensionOptions: {
                         KHR_materials_pbrSpecularGlossiness: {
@@ -414,6 +415,19 @@ function throwIfAborted(abortSignal: AbortSignal): void {
 
 function getAbortReason(abortSignal: AbortSignal): unknown {
     return abortSignal.reason ?? new Error("The GLB load was aborted.");
+}
+
+function preprocessGlbUrlAsync(rootUrl: string, url: string): Promise<string> {
+    if (rootUrl === "") {
+        return Promise.resolve(url);
+    }
+
+    const reference = url.startsWith(rootUrl) ? url.slice(rootUrl.length) : url;
+    if (reference.toLowerCase().startsWith("data:")) {
+        return Promise.resolve(reference);
+    }
+
+    return Promise.resolve(new URL(reference, rootUrl).href);
 }
 
 function registerBuiltInLoadersAsync(): Promise<void> {

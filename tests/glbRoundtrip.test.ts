@@ -12,7 +12,7 @@ import type * as SceneLoaderTypes from "@babylonjs/core/Loading/sceneLoader.js";
 import type { IGLTFLoaderData } from "@babylonjs/loaders/glTF/glTFFileLoader.pure.js";
 import { describe, expect, it, vi } from "vitest";
 
-import { InputBlock, NodeAsset, NodeAssetBlock, OutputBlock, ParseGLBBlock, SerializeGLBBlock } from "../src/index";
+import { InputBlock, NodeAsset, NodeAssetBlock, OutputBlock, ParseGLBBlock, SerializeGLBBlock, type InputSource } from "../src/index";
 import { type ConnectionPoint } from "../src/connectionPoint";
 import { getNodeAssetBlockBuildState } from "../src/nodeAssetBlock";
 import { createGlbFixtureAsync, readGlbStructureAsync, readGlbStructureWithSwappedFirstTriangleAsync } from "./glbFixture";
@@ -21,6 +21,7 @@ type ImportMeshAsync = typeof SceneLoaderTypes.ImportMeshAsync;
 type ImportMeshAsyncArguments = Parameters<ImportMeshAsync>;
 type ImportMeshAsyncOverride = (...args: ImportMeshAsyncArguments) => ReturnType<ImportMeshAsync>;
 type CorrelationMarker = (loaderData: IGLTFLoaderData) => void;
+type UrlPreprocessor = (url: string) => Promise<string>;
 type PublicLoaderPlugin = SceneLoaderTypes.ISceneLoaderPluginAsync & {
     readonly onCompleteObservable: PublicObservable<void>;
     readonly onErrorObservable: PublicObservable<unknown>;
@@ -804,6 +805,108 @@ describe("GLB roundtrip", () => {
         }
     });
 
+    it("passes build-scoped URL preprocessing through public glTF plugin options", async () => {
+        const fixture = await createGlbFixtureAsync();
+        const sourceUrl = "https://example.test/assets/models/model.glb?version=1#fragment";
+        const graph = createRoundtripGraph(sourceUrl);
+        const inMemoryGraph = createRoundtripGraph(fixture.bytes);
+        const preprocessors: Array<{ rootUrl: string | undefined; preprocessUrlAsync: UrlPreprocessor }> = [];
+        const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(toArrayBuffer(fixture.bytes)));
+        publicImportOverride.current = (_source, scene, options) => {
+            preprocessors.push({
+                rootUrl: options?.rootUrl,
+                preprocessUrlAsync: getPreprocessUrlAsync(options),
+            });
+            const control = createLoaderControl(MeshBuilder.CreateBox("url-options-load", { size: 1 }, scene), getCorrelationMarker(options));
+            SceneLoader.OnPluginActivatedObservable.notifyObservers(control.plugin);
+            control.resolveReady();
+            control.complete();
+            return control.readyPromise;
+        };
+
+        try {
+            await expect(graph.asset.buildAsync()).resolves.toBeUndefined();
+
+            const urlCapture = preprocessors.find(({ rootUrl }) => rootUrl === "https://example.test/assets/models/");
+            if (urlCapture === undefined) {
+                throw new Error("Expected the URL-backed GLB loader options.");
+            }
+
+            const rootUrl = urlCapture.rootUrl;
+            if (rootUrl === undefined) {
+                throw new Error("Expected the URL-backed GLB root URL.");
+            }
+
+            await expect(urlCapture.preprocessUrlAsync(`${rootUrl}textures/a.png?version=2#fragment`)).resolves.toBe(
+                "https://example.test/assets/models/textures/a.png?version=2#fragment"
+            );
+            await expect(urlCapture.preprocessUrlAsync(`${rootUrl}../shared/a.bin`)).resolves.toBe("https://example.test/assets/shared/a.bin");
+            await expect(urlCapture.preprocessUrlAsync(`${rootUrl}/root.bin`)).resolves.toBe("https://example.test/root.bin");
+            await expect(urlCapture.preprocessUrlAsync(`${rootUrl}https://cdn.other/a.bin?version=3#fragment`)).resolves.toBe("https://cdn.other/a.bin?version=3#fragment");
+            await expect(urlCapture.preprocessUrlAsync("textures/direct.bin")).resolves.toBe("https://example.test/assets/models/textures/direct.bin");
+            const dataUrl = "data:application/octet-stream;base64,AA==";
+            await expect(urlCapture.preprocessUrlAsync(dataUrl)).resolves.toBe(dataUrl);
+
+            await expect(inMemoryGraph.asset.buildAsync()).resolves.toBeUndefined();
+            const emptyRootCapture = preprocessors.find(({ rootUrl }) => rootUrl === "");
+            if (emptyRootCapture === undefined) {
+                throw new Error("Expected the in-memory GLB loader options.");
+            }
+            await expect(emptyRootCapture.preprocessUrlAsync("textures/a.png")).resolves.toBe("textures/a.png");
+        } finally {
+            publicImportOverride.current = undefined;
+            fetchSpy.mockRestore();
+            graph.asset.dispose();
+            inMemoryGraph.asset.dispose();
+        }
+    });
+
+    it("keeps URL preprocessing scoped to concurrent builds", async () => {
+        const fixture = await createGlbFixtureAsync();
+        const firstUrl = "https://example.test/first/model.glb";
+        const secondUrl = "https://example.test/second/model.glb";
+        const firstGraph = createRoundtripGraph(firstUrl);
+        const secondGraph = createRoundtripGraph(secondUrl);
+        const preprocessors: Array<{ rootUrl: string | undefined; preprocessUrlAsync: UrlPreprocessor }> = [];
+        const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation((request) => {
+            const url = getRequestUrl(request);
+            if (url !== firstUrl && url !== secondUrl) {
+                return Promise.reject(new Error(`Unexpected fetch URL "${url}".`));
+            }
+
+            return Promise.resolve(new Response(toArrayBuffer(fixture.bytes)));
+        });
+        publicImportOverride.current = (_source, scene, options) => {
+            preprocessors.push({
+                rootUrl: options?.rootUrl,
+                preprocessUrlAsync: getPreprocessUrlAsync(options),
+            });
+            const control = createLoaderControl(MeshBuilder.CreateBox("concurrent-url-load", { size: 1 }, scene), getCorrelationMarker(options));
+            SceneLoader.OnPluginActivatedObservable.notifyObservers(control.plugin);
+            control.resolveReady();
+            control.complete();
+            return control.readyPromise;
+        };
+
+        try {
+            await expect(Promise.all([firstGraph.asset.buildAsync(), secondGraph.asset.buildAsync()])).resolves.toEqual([undefined, undefined]);
+
+            const firstCapture = preprocessors.find(({ rootUrl }) => rootUrl === "https://example.test/first/");
+            const secondCapture = preprocessors.find(({ rootUrl }) => rootUrl === "https://example.test/second/");
+            if (firstCapture === undefined || secondCapture === undefined) {
+                throw new Error("Expected distinct URL roots for concurrent GLB builds.");
+            }
+
+            await expect(firstCapture.preprocessUrlAsync(`${firstCapture.rootUrl}textures/a.png`)).resolves.toBe("https://example.test/first/textures/a.png");
+            await expect(secondCapture.preprocessUrlAsync(`${secondCapture.rootUrl}textures/a.png`)).resolves.toBe("https://example.test/second/textures/a.png");
+        } finally {
+            publicImportOverride.current = undefined;
+            fetchSpy.mockRestore();
+            firstGraph.asset.dispose();
+            secondGraph.asset.dispose();
+        }
+    });
+
     it("emits a GLB with a valid header and JSON/BIN chunk layout", async () => {
         const fixture = await createGlbFixtureAsync();
         const result = await buildRoundtripAsync(fixture.bytes);
@@ -1151,7 +1254,7 @@ async function buildRoundtripAsync(source: Uint8Array): Promise<Uint8Array> {
     }
 }
 
-function createRoundtripGraph(source: Uint8Array): RoundtripGraph {
+function createRoundtripGraph(source: InputSource): RoundtripGraph {
     const input = new InputBlock("source");
     const parse = new ParseGLBBlock("parse");
     const serialize = new SerializeGLBBlock("serialize");
@@ -1378,6 +1481,15 @@ function getCorrelationMarker(options: ImportMeshAsyncArguments[2]): Correlation
     }
 
     return gltfOptions.onParsed;
+}
+
+function getPreprocessUrlAsync(options: ImportMeshAsyncArguments[2]): UrlPreprocessor {
+    const gltfOptions = options?.pluginOptions?.gltf;
+    if (typeof gltfOptions !== "object" || gltfOptions === null || typeof gltfOptions.preprocessUrlAsync !== "function") {
+        throw new Error("Expected the ParseGLBBlock glTF URL preprocessor.");
+    }
+
+    return gltfOptions.preprocessUrlAsync;
 }
 
 function createImportResult(mesh: Mesh): SceneLoaderTypes.ISceneLoaderAsyncResult {
