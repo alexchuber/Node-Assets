@@ -7,6 +7,8 @@ import type * as SceneLoaderTypes from "@babylonjs/core/Loading/sceneLoader.js";
 
 let builtInLoadersRegistration: Promise<void> | undefined;
 let sceneLoaderModule: Promise<typeof SceneLoaderTypes> | undefined;
+// SceneLoader activation is global, so serialize only each plugin capture window.
+let loaderActivationTail = Promise.resolve();
 
 export class ParseGLBBlock extends NodeAssetBlock {
     public readonly input: ConnectionPoint<"File", "input">;
@@ -106,10 +108,82 @@ async function importGlbIntoSceneAsync(
     scene: Scene,
     fileName: string
 ): Promise<void> {
-    let activatedPlugin: SceneLoaderPlugin | undefined;
-    const activationObserver = sceneLoader.OnPluginActivatedObservable.addOnce((plugin) => {
-        activatedPlugin = plugin;
+    const capture = await withLoaderActivationLockAsync(() => captureLoaderLifecycleAsync(importMeshAsync, sceneLoader, bytes, scene, fileName));
+    try {
+        await Promise.all([capture.readyPromise, capture.completion.promise]);
+    } finally {
+        capture.dispose();
+    }
+}
+
+async function withLoaderActivationLockAsync<T>(operation: () => Promise<T>): Promise<T> {
+    const previous = loaderActivationTail;
+    let release!: () => void;
+    const current = new Promise<void>((resolve) => {
+        release = resolve;
     });
+    loaderActivationTail = previous.then(() => current);
+    await previous;
+
+    try {
+        return await operation();
+    } finally {
+        release();
+    }
+}
+
+interface LoaderCapture {
+    readonly readyPromise: Promise<SceneLoaderTypes.ISceneLoaderAsyncResult>;
+    readonly completion: CompletionWait;
+    dispose(): void;
+}
+
+async function captureLoaderLifecycleAsync(
+    importMeshAsync: typeof SceneLoaderTypes.ImportMeshAsync,
+    sceneLoader: typeof SceneLoaderTypes.SceneLoader,
+    bytes: Uint8Array,
+    scene: Scene,
+    fileName: string
+): Promise<LoaderCapture> {
+    let activationObserver: IObserver | undefined;
+    let completion: CompletionWait | undefined;
+    let activationCaptured = false;
+    let resolveActivation!: (value: CompletionWait) => void;
+    let rejectActivation!: (reason: unknown) => void;
+    const activationPromise = new Promise<CompletionWait>((resolve, reject) => {
+        resolveActivation = resolve;
+        rejectActivation = reject;
+    });
+    const removeActivationObserver = (): void => {
+        const observer = activationObserver;
+        activationObserver = undefined;
+        observer?.remove();
+    };
+    const onPluginActivated = (plugin: SceneLoaderPlugin): void => {
+        if (activationCaptured || plugin.name.toLowerCase() !== "gltf") {
+            return;
+        }
+
+        activationCaptured = true;
+        try {
+            if (!hasLoaderLifecycle(plugin)) {
+                throw new Error("The public GLB loader does not expose completion and error observables.");
+            }
+
+            completion = waitForLoaderCompletion(plugin);
+            removeActivationObserver();
+            resolveActivation(completion);
+        } catch (error) {
+            removeActivationObserver();
+            completion?.dispose();
+            rejectActivation(error);
+        }
+    };
+
+    activationObserver = sceneLoader.OnPluginActivatedObservable.add(onPluginActivated);
+    if (activationCaptured) {
+        removeActivationObserver();
+    }
 
     let readyPromise: Promise<SceneLoaderTypes.ISceneLoaderAsyncResult>;
     try {
@@ -117,36 +191,39 @@ async function importGlbIntoSceneAsync(
             name: fileName,
             pluginExtension: ".glb",
         });
-    } finally {
-        activationObserver.remove();
-    }
-
-    if (activatedPlugin === undefined) {
-        await rejectUnsupportedLifecycleAsync(readyPromise, "The public GLB loader did not activate synchronously.");
-        return;
-    }
-    const plugin = activatedPlugin;
-    if (!hasLoaderLifecycle(plugin)) {
-        await rejectUnsupportedLifecycleAsync(readyPromise, "The public GLB loader does not expose completion and error observables.");
-        return;
-    }
-
-    const completion = waitForLoaderCompletion(plugin);
-    try {
-        await Promise.all([readyPromise, completion.promise]);
-    } finally {
-        completion.dispose();
-    }
-}
-
-async function rejectUnsupportedLifecycleAsync(readyPromise: Promise<SceneLoaderTypes.ISceneLoaderAsyncResult>, reason: string): Promise<never> {
-    try {
-        await readyPromise;
     } catch (error) {
-        throw new Error(reason, { cause: error });
+        removeActivationObserver();
+        rejectActivation(error);
+        throw error;
+    }
+    if (activationCaptured) {
+        removeActivationObserver();
     }
 
-    throw new Error(reason);
+    const readyRejection = readyPromise.then(
+        () => new Promise<never>(() => {}),
+        (error) => {
+            removeActivationObserver();
+            rejectActivation(error);
+            throw error;
+        }
+    );
+
+    try {
+        const capturedCompletion = await Promise.race([activationPromise, readyRejection]);
+        return {
+            readyPromise,
+            completion: capturedCompletion,
+            dispose: () => {
+                removeActivationObserver();
+                capturedCompletion.dispose();
+            },
+        };
+    } catch (error) {
+        removeActivationObserver();
+        completion?.dispose();
+        throw error;
+    }
 }
 
 function hasLoaderLifecycle(plugin: SceneLoaderPlugin): plugin is LoaderWithLifecycle {
@@ -160,22 +237,42 @@ function isPublicObservable(value: unknown): value is PublicObservable {
 function waitForLoaderCompletion(plugin: LoaderWithLifecycle): CompletionWait {
     let resolveCompletion!: () => void;
     let rejectCompletion!: (reason: unknown) => void;
+    let completeObserver: IObserver | undefined;
+    let errorObserver: IObserver | undefined;
     const promise = new Promise<void>((resolve, reject) => {
         resolveCompletion = resolve;
         rejectCompletion = reject;
     });
-    const completeObserver = plugin.onCompleteObservable.addOnce(() => {
-        resolveCompletion();
-    });
-    const errorObserver = plugin.onErrorObservable.addOnce((reason) => {
-        rejectCompletion(reason);
-    });
+    try {
+        completeObserver = plugin.onCompleteObservable.addOnce(() => {
+            resolveCompletion();
+        });
+        errorObserver = plugin.onErrorObservable.addOnce((reason) => {
+            rejectCompletion(reason);
+        });
+    } catch (error) {
+        try {
+            errorObserver?.remove();
+        } finally {
+            completeObserver?.remove();
+        }
+        throw error;
+    }
 
+    let disposed = false;
     return {
         promise,
         dispose: () => {
-            completeObserver.remove();
-            errorObserver.remove();
+            if (disposed) {
+                return;
+            }
+
+            disposed = true;
+            try {
+                errorObserver?.remove();
+            } finally {
+                completeObserver?.remove();
+            }
         },
     };
 }
@@ -189,7 +286,6 @@ function registerBuiltInLoadersAsync(): Promise<void> {
     const nextRegistration = import("@babylonjs/loaders/dynamic.js")
         .then(({ registerBuiltInLoaders }) => {
             registerBuiltInLoaders();
-            return import("@babylonjs/loaders/glTF/2.0/glTFLoader.js");
         })
         .then(() => undefined);
     builtInLoadersRegistration = nextRegistration;

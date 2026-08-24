@@ -7,6 +7,7 @@ import { Observable } from "@babylonjs/core/Misc/observable.js";
 import { SceneLoader } from "@babylonjs/core/Loading/sceneLoader.js";
 import { Scene } from "@babylonjs/core/scene.js";
 import { GLTF2Export } from "@babylonjs/serializers/glTF/2.0/glTFSerializer.js";
+import type { IObserver } from "@babylonjs/core/Misc/observable.js";
 import type * as SceneLoaderTypes from "@babylonjs/core/Loading/sceneLoader.js";
 import { describe, expect, it, vi } from "vitest";
 
@@ -17,9 +18,13 @@ type ImportMeshAsync = typeof SceneLoaderTypes.ImportMeshAsync;
 type ImportMeshAsyncArguments = Parameters<ImportMeshAsync>;
 type ImportMeshAsyncOverride = (...args: ImportMeshAsyncArguments) => ReturnType<ImportMeshAsync>;
 type PublicLoaderPlugin = SceneLoaderTypes.ISceneLoaderPluginAsync & {
-    readonly onCompleteObservable: Observable<void>;
-    readonly onErrorObservable: Observable<unknown>;
+    readonly onCompleteObservable: PublicObservable<void>;
+    readonly onErrorObservable: PublicObservable<unknown>;
 };
+
+interface PublicObservable<T> {
+    addOnce(callback: (eventData: T) => void): IObserver;
+}
 
 interface LoaderControl {
     readonly plugin: PublicLoaderPlugin;
@@ -69,6 +74,204 @@ describe("GLB roundtrip", () => {
             });
         } finally {
             publicImportCalls.length = 0;
+        }
+    });
+
+    it("captures a glTF plugin activated asynchronously", async () => {
+        const fixture = await createGlbFixtureAsync();
+        const graph = createRoundtripGraph(fixture.bytes);
+        let importReturned = false;
+        let activationWasAsynchronous = false;
+        publicImportOverride.current = (_source, scene) => {
+            const mesh = MeshBuilder.CreateBox("async-factory", { size: 1 }, scene);
+            const control = createLoaderControl(mesh);
+            queueMicrotask(() => {
+                activationWasAsynchronous = importReturned;
+                SceneLoader.OnPluginActivatedObservable.notifyObservers({ ...control.plugin, name: "obj" });
+                SceneLoader.OnPluginActivatedObservable.notifyObservers(control.plugin);
+                control.resolveReady();
+                queueMicrotask(() => control.complete());
+            });
+            importReturned = true;
+            return control.readyPromise;
+        };
+
+        try {
+            await expect(graph.asset.buildAsync()).resolves.toBeUndefined();
+            expect(activationWasAsynchronous).toBe(true);
+        } finally {
+            publicImportOverride.current = undefined;
+            graph.asset.dispose();
+        }
+    });
+
+    it("releases the activation lock when READY rejects before plugin activation", async () => {
+        const fixture = await createGlbFixtureAsync();
+        const failedGraph = createRoundtripGraph(fixture.bytes);
+        const succeedingGraph = createRoundtripGraph(fixture.bytes);
+        let rejectReady!: (reason: unknown) => void;
+        let firstImportStarted!: () => void;
+        const firstImportStartedPromise = new Promise<void>((resolve) => {
+            firstImportStarted = resolve;
+        });
+        const firstReadyPromise = new Promise<SceneLoaderTypes.ISceneLoaderAsyncResult>((_, reject) => {
+            rejectReady = reject;
+        });
+        let importCount = 0;
+        const activationObserverCount = SceneLoader.OnPluginActivatedObservable.observers.length;
+        publicImportOverride.current = (_source, scene) => {
+            importCount += 1;
+            if (importCount === 1) {
+                firstImportStarted();
+                return firstReadyPromise;
+            }
+
+            const mesh = MeshBuilder.CreateBox("after-ready-rejection", { size: 1 }, scene);
+            const control = createLoaderControl(mesh);
+            queueMicrotask(() => {
+                SceneLoader.OnPluginActivatedObservable.notifyObservers(control.plugin);
+                control.resolveReady();
+                control.complete();
+            });
+            return control.readyPromise;
+        };
+
+        try {
+            const failedBuild = failedGraph.asset.buildAsync();
+            await firstImportStartedPromise;
+            const succeedingBuild = succeedingGraph.asset.buildAsync();
+            await Promise.resolve();
+            expect(importCount).toBe(1);
+
+            rejectReady(new Error("forced ready rejection before activation"));
+            await expect(failedBuild).rejects.toThrow('Parse GLB block "parse" failed: forced ready rejection before activation');
+            expect(SceneLoader.OnPluginActivatedObservable.observers).toHaveLength(activationObserverCount);
+            await expect(succeedingBuild).resolves.toBeUndefined();
+            expect(importCount).toBe(2);
+        } finally {
+            publicImportOverride.current = undefined;
+            failedGraph.asset.dispose();
+            succeedingGraph.asset.dispose();
+        }
+    });
+
+    it("supports a glTF loader wrapper imported before the package build", async () => {
+        const fixture = await createGlbFixtureAsync();
+        await import("@babylonjs/loaders/glTF/2.0/glTFLoader.js");
+
+        const result = await buildRoundtripAsync(fixture.bytes);
+        expect(await readGlbStructureAsync(result)).toEqual(fixture.structure);
+    });
+
+    it("observes completion emitted before READY", async () => {
+        const fixture = await createGlbFixtureAsync();
+        const graph = createRoundtripGraph(fixture.bytes);
+        let readyResolved = false;
+        publicImportOverride.current = (_source, scene) => {
+            const mesh = MeshBuilder.CreateBox("immediate-completion", { size: 1 }, scene);
+            const control = createLoaderControl(mesh);
+            queueMicrotask(() => {
+                SceneLoader.OnPluginActivatedObservable.notifyObservers(control.plugin);
+                control.complete();
+                control.resolveReady();
+                readyResolved = true;
+            });
+            return control.readyPromise;
+        };
+
+        try {
+            await expect(graph.asset.buildAsync()).resolves.toBeUndefined();
+            expect(readyResolved).toBe(true);
+        } finally {
+            publicImportOverride.current = undefined;
+            graph.asset.dispose();
+        }
+    });
+
+    it("observes completion emitted during import activation", async () => {
+        const fixture = await createGlbFixtureAsync();
+        const graph = createRoundtripGraph(fixture.bytes);
+        publicImportOverride.current = (_source, scene) => {
+            const mesh = MeshBuilder.CreateBox("synchronous-completion", { size: 1 }, scene);
+            const control = createLoaderControl(mesh);
+            SceneLoader.OnPluginActivatedObservable.notifyObservers(control.plugin);
+            control.complete();
+            control.resolveReady();
+            return control.readyPromise;
+        };
+
+        try {
+            await expect(graph.asset.buildAsync()).resolves.toBeUndefined();
+        } finally {
+            publicImportOverride.current = undefined;
+            graph.asset.dispose();
+        }
+    });
+
+    it("observes an error emitted before READY", async () => {
+        const fixture = await createGlbFixtureAsync();
+        const graph = createRoundtripGraph(fixture.bytes);
+        const failure = new Error("forced pre-ready loader failure");
+        publicImportOverride.current = (_source, scene) => {
+            const mesh = MeshBuilder.CreateBox("immediate-error", { size: 1 }, scene);
+            const control = createLoaderControl(mesh);
+            queueMicrotask(() => {
+                SceneLoader.OnPluginActivatedObservable.notifyObservers(control.plugin);
+                control.fail(failure);
+                control.resolveReady();
+            });
+            return control.readyPromise;
+        };
+
+        try {
+            await expect(graph.asset.buildAsync()).rejects.toThrow('Parse GLB block "parse" failed: forced pre-ready loader failure');
+        } finally {
+            publicImportOverride.current = undefined;
+            graph.asset.dispose();
+        }
+    });
+
+    it("rolls back lifecycle observers when error observer setup fails", async () => {
+        const fixture = await createGlbFixtureAsync();
+        const graph = createRoundtripGraph(fixture.bytes);
+        const completeObservable = new Observable<void>();
+        const errorObservable = new Observable<unknown>();
+        const completeAdd = vi.spyOn(completeObservable, "addOnce");
+        const errorAdd = vi.spyOn(errorObservable, "addOnce").mockImplementation(() => {
+            throw new Error("forced lifecycle observer setup failure");
+        });
+        const activationObserverCount = SceneLoader.OnPluginActivatedObservable.observers.length;
+        publicImportOverride.current = (_source, scene) => {
+            const mesh = MeshBuilder.CreateBox("observer-setup-failure", { size: 1 }, scene);
+            const plugin: PublicLoaderPlugin = {
+                name: "gltf",
+                extensions: {
+                    ".glb": {
+                        isBinary: true,
+                    },
+                },
+                importMeshAsync: () => Promise.resolve(createEmptyImportResult()),
+                loadAsync: () => Promise.resolve(),
+                loadAssetContainerAsync: () => Promise.reject(new Error("unused test plugin operation")),
+                onCompleteObservable: completeObservable,
+                onErrorObservable: errorObservable,
+            };
+            SceneLoader.OnPluginActivatedObservable.notifyObservers(plugin);
+            return Promise.resolve(createImportResult(mesh));
+        };
+
+        try {
+            await expect(graph.asset.buildAsync()).rejects.toThrow('Parse GLB block "parse" failed: forced lifecycle observer setup failure');
+            expect(completeAdd).toHaveBeenCalledTimes(1);
+            expect(completeObservable.observers).toHaveLength(0);
+            expect(errorAdd).toHaveBeenCalledTimes(1);
+            expect(errorObservable.observers).toHaveLength(0);
+            expect(SceneLoader.OnPluginActivatedObservable.observers).toHaveLength(activationObserverCount);
+        } finally {
+            publicImportOverride.current = undefined;
+            completeAdd.mockRestore();
+            errorAdd.mockRestore();
+            graph.asset.dispose();
         }
     });
 
@@ -199,7 +402,7 @@ describe("GLB roundtrip", () => {
         }
     });
 
-    it("keeps concurrent loader completion lifecycles independent", async () => {
+    it("keeps concurrent asynchronously activated loader lifecycles independent", async () => {
         const fixture = await createGlbFixtureAsync();
         const firstGraph = createRoundtripGraph(fixture.bytes);
         const secondGraph = createRoundtripGraph(fixture.bytes);
@@ -212,11 +415,13 @@ describe("GLB roundtrip", () => {
             const mesh = MeshBuilder.CreateBox(`concurrent-${loaderControls.length}`, { size: 1 }, scene);
             const control = createLoaderControl(mesh);
             loaderControls.push(control);
-            SceneLoader.OnPluginActivatedObservable.notifyObservers(control.plugin);
-            if (loaderControls.length === 2) {
-                bothImportsStarted();
-            }
-            control.resolveReady();
+            queueMicrotask(() => {
+                SceneLoader.OnPluginActivatedObservable.notifyObservers(control.plugin);
+                if (loaderControls.length === 2) {
+                    bothImportsStarted();
+                }
+                control.resolveReady();
+            });
             return control.readyPromise;
         };
 
