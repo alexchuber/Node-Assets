@@ -72,6 +72,44 @@ describe("InputBlock", () => {
         }
     });
 
+    it("aborts a pending URL fetch and rejects with the graph disposal error", async () => {
+        const url = "https://example.test/pending.glb";
+        const graph = createInputGraph(url);
+        let signal: AbortSignal | null | undefined;
+        const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation((_input, init) => {
+            signal = init?.signal;
+            return new Promise<Response>((_, reject) => {
+                if (signal?.aborted) {
+                    reject(new DOMException("The operation was aborted.", "AbortError"));
+                    return;
+                }
+
+                signal?.addEventListener(
+                    "abort",
+                    () => {
+                        reject(new DOMException("The operation was aborted.", "AbortError"));
+                    },
+                    { once: true }
+                );
+            });
+        });
+
+        try {
+            const build = graph.asset.buildAsync();
+            const fetchCall = fetchSpy.mock.calls[0];
+            expect(fetchCall?.[0]).toBe(url);
+            expect(fetchCall?.[1]?.signal).toBeInstanceOf(AbortSignal);
+            graph.asset.dispose();
+
+            expect(signal?.aborted).toBe(true);
+            await expect(build).rejects.toThrow('NodeAsset "graph" was disposed while a build was in progress.');
+            expect(() => graph.output.data).toThrow('Output block "destination"');
+        } finally {
+            fetchSpy.mockRestore();
+            graph.asset.dispose();
+        }
+    });
+
     it("names the input block and preserves a malformed URL failure cause", async () => {
         const url = "not a URL";
         const cause = new TypeError("Failed to parse URL");
@@ -122,8 +160,13 @@ describe("InputBlock", () => {
             await graph.asset.buildAsync();
             expect(graph.output.data).toEqual(second);
             expect(fetchSpy).toHaveBeenCalledTimes(2);
-            expect(fetchSpy).toHaveBeenNthCalledWith(1, url);
-            expect(fetchSpy).toHaveBeenNthCalledWith(2, url);
+            const firstCall = fetchSpy.mock.calls[0];
+            const secondCall = fetchSpy.mock.calls[1];
+            expect(firstCall?.[0]).toBe(url);
+            expect(firstCall?.[1]?.signal).toBeInstanceOf(AbortSignal);
+            expect(secondCall?.[0]).toBe(url);
+            expect(secondCall?.[1]?.signal).toBeInstanceOf(AbortSignal);
+            expect(firstCall?.[1]?.signal).not.toBe(secondCall?.[1]?.signal);
         } finally {
             fetchSpy.mockRestore();
             graph.asset.dispose();

@@ -38,7 +38,7 @@ export class NodeAsset {
         let state: AssetGraphBuildState | undefined;
         try {
             engine = new NullEngine();
-            state = new AssetGraphBuildState(engine);
+            state = new AssetGraphBuildState(engine, this.name);
             this._buildState = state;
             if (outputBlocks.length === 0) {
                 throw new Error(`NodeAsset "${this.name}" cannot build because no output block has been registered.`);
@@ -70,22 +70,25 @@ export class NodeAsset {
                     outputBlock._clearData(state);
                 }
             }
+            if (state?._isDisposed()) {
+                throw state._getDisposalError();
+            }
             throw error;
         } finally {
             try {
-                state?._dispose();
-            } finally {
-                try {
+                if (state !== undefined) {
+                    state._dispose();
+                } else {
                     engine?.dispose();
-                } finally {
-                    if (state !== undefined && this._buildState === state) {
-                        this._buildState = undefined;
-                    }
-                    if (this._activeOutputBlocks === outputBlocks) {
-                        this._activeOutputBlocks = undefined;
-                    }
-                    this._buildInProgress = false;
                 }
+            } finally {
+                if (state !== undefined && this._buildState === state) {
+                    this._buildState = undefined;
+                }
+                if (this._activeOutputBlocks === outputBlocks) {
+                    this._activeOutputBlocks = undefined;
+                }
+                this._buildInProgress = false;
             }
         }
     }
@@ -101,10 +104,14 @@ export class NodeAsset {
         const ownedOutputBlocks = this._buildState !== undefined ? this._activeOutputBlocks : this._successfulOutputBlocks;
         this._successfulBuildState = undefined;
         this._successfulOutputBlocks = undefined;
-        if (ownershipState !== undefined && ownedOutputBlocks !== undefined) {
-            for (const outputBlock of ownedOutputBlocks) {
-                outputBlock._clearData(ownershipState);
+        try {
+            if (ownershipState !== undefined && ownedOutputBlocks !== undefined) {
+                for (const outputBlock of ownedOutputBlocks) {
+                    outputBlock._clearData(ownershipState);
+                }
             }
+        } finally {
+            ownershipState?._dispose();
         }
     }
 

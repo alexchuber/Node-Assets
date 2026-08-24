@@ -1,4 +1,5 @@
 import { AssetContainer } from "@babylonjs/core/assetContainer.js";
+import { EngineStore } from "@babylonjs/core/Engines/engineStore.js";
 import { NullEngine } from "@babylonjs/core/Engines/nullEngine.js";
 import { Geometry } from "@babylonjs/core/Meshes/geometry.js";
 import { Mesh } from "@babylonjs/core/Meshes/mesh.js";
@@ -461,6 +462,66 @@ describe("GLB roundtrip", () => {
         } finally {
             publicImportOverride.current = undefined;
             serialize.mockRestore();
+            sceneDispose.mockRestore();
+            engineDispose.mockRestore();
+            graph.asset.dispose();
+        }
+    });
+
+    it("disposes parsed resources immediately when an active graph is disposed", async () => {
+        const fixture = await createGlbFixtureAsync();
+        const graph = createRoundtripGraph(fixture.bytes);
+        const loaderControls: LoaderControl[] = [];
+        let importStarted!: () => void;
+        const importStartedPromise = new Promise<void>((resolve) => {
+            importStarted = resolve;
+        });
+        const initialEngineCount = EngineStore.Instances.length;
+        const containerDispose = vi.spyOn(AssetContainer.prototype, "dispose");
+        const meshDispose = vi.spyOn(Mesh.prototype, "dispose");
+        const geometryDispose = vi.spyOn(Geometry.prototype, "dispose");
+        const sceneDispose = vi.spyOn(Scene.prototype, "dispose");
+        const engineDispose = vi.spyOn(NullEngine.prototype, "dispose");
+        publicImportOverride.current = (_source, scene) => {
+            const mesh = MeshBuilder.CreateBox("disposed-active-build", { size: 1 }, scene);
+            const control = createLoaderControl(mesh);
+            loaderControls.push(control);
+            SceneLoader.OnPluginActivatedObservable.notifyObservers(control.plugin);
+            importStarted();
+            return control.readyPromise;
+        };
+
+        try {
+            const build = graph.asset.buildAsync();
+            await importStartedPromise;
+
+            graph.asset.dispose();
+            graph.asset.dispose();
+
+            expect(containerDispose).toHaveBeenCalledTimes(1);
+            expect(meshDispose).toHaveBeenCalled();
+            expect(geometryDispose).toHaveBeenCalled();
+            expect(sceneDispose).toHaveBeenCalledTimes(1);
+            expect(engineDispose).toHaveBeenCalledTimes(1);
+            expect(EngineStore.Instances).toHaveLength(initialEngineCount);
+
+            const control = loaderControls[0];
+            if (control === undefined) {
+                throw new Error("Expected the pending loader control.");
+            }
+            control.resolveReady();
+            control.complete();
+
+            await expect(build).rejects.toThrow('NodeAsset "graph" was disposed while a build was in progress.');
+            expect(() => graph.output.data).toThrow('Output block "destination"');
+            expect(containerDispose).toHaveBeenCalledTimes(1);
+            expect(sceneDispose).toHaveBeenCalledTimes(1);
+            expect(engineDispose).toHaveBeenCalledTimes(1);
+        } finally {
+            publicImportOverride.current = undefined;
+            geometryDispose.mockRestore();
+            meshDispose.mockRestore();
+            containerDispose.mockRestore();
             sceneDispose.mockRestore();
             engineDispose.mockRestore();
             graph.asset.dispose();

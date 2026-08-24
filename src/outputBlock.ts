@@ -22,8 +22,11 @@ export class OutputBlock extends NodeAssetBlock {
     }
 
     protected override async _buildAsync(): Promise<void> {
-        this._data = await this.readInputAsync(this.input);
-        this._dataBuildState = getNodeAssetBlockBuildState(this);
+        const state = getNodeAssetBlockBuildState(this);
+        const data = await this.readInputAsync(this.input);
+        state._throwIfDisposed();
+        this._data = data;
+        this._dataBuildState = state;
     }
 
     /** @internal */

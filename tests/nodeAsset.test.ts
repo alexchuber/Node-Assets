@@ -121,11 +121,12 @@ class DelayedBlock extends NodeAssetBlock {
     protected override async _buildAsync(): Promise<void> {
         this._buildCount += 1;
         this._startBuild();
+        const input = await this.readInputAsync(this.input);
         if (this._buildCount === 1) {
             await this._releasePromise;
         }
 
-        this.writeOutput(this.output, await this.readInputAsync(this.input));
+        this.writeOutput(this.output, input);
     }
 }
 
@@ -705,7 +706,7 @@ describe("NodeAsset", () => {
         expect(secondOutput.data).toEqual(new Uint8Array([29]));
     });
 
-    it("makes disposal terminal for an active build", async () => {
+    it("disposes active build resources immediately and keeps disposal terminal", async () => {
         const input = new InputBlock("source");
         input.source = new Uint8Array([8, 9]);
         const delayed = new DelayedBlock("delayed");
@@ -715,16 +716,27 @@ describe("NodeAsset", () => {
 
         const asset = new NodeAsset("graph");
         asset.addOutputBlock(output);
+        const initialEngineCount = EngineStore.Instances.length;
+        const engineDispose = vi.spyOn(NullEngine.prototype, "dispose");
         const build = asset.buildAsync();
         await delayed.started;
 
-        asset.dispose();
-        delayed.release();
+        try {
+            asset.dispose();
+            asset.dispose();
+            expect(engineDispose).toHaveBeenCalledTimes(1);
+            expect(EngineStore.Instances).toHaveLength(initialEngineCount);
 
-        await expect(build).rejects.toThrow('NodeAsset "graph" was disposed while a build was in progress.');
-        expect(() => output.data).toThrow('Output block "destination"');
-        await expect(asset.buildAsync()).rejects.toThrow('NodeAsset "graph" has been disposed');
-        expect(() => asset.addOutputBlock(new OutputBlock("later"))).toThrow('NodeAsset "graph" has been disposed');
+            delayed.release();
+
+            await expect(build).rejects.toThrow('NodeAsset "graph" was disposed while a build was in progress.');
+            expect(() => output.data).toThrow('Output block "destination"');
+            await expect(asset.buildAsync()).rejects.toThrow('NodeAsset "graph" has been disposed');
+            expect(() => asset.addOutputBlock(new OutputBlock("later"))).toThrow('NodeAsset "graph" has been disposed');
+        } finally {
+            engineDispose.mockRestore();
+            asset.dispose();
+        }
     });
 
     it("clears output data when disposing a completed graph", async () => {

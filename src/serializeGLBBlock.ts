@@ -1,5 +1,5 @@
 import { type ConnectionPoint } from "./connectionPoint";
-import { NodeAssetBlock } from "./nodeAssetBlock";
+import { getNodeAssetBlockBuildState, NodeAssetBlock } from "./nodeAssetBlock";
 
 export class SerializeGLBBlock extends NodeAssetBlock {
     public readonly input: ConnectionPoint<"SceneAsset", "input">;
@@ -12,10 +12,12 @@ export class SerializeGLBBlock extends NodeAssetBlock {
     }
 
     protected override async _buildAsync(): Promise<void> {
+        const state = getNodeAssetBlockBuildState(this);
         const sceneAsset = await this.readInputAsync(this.input);
         const fileName = `${this.name}.glb`;
 
         try {
+            state._throwIfDisposed();
             const { GLTF2Export } = await import("@babylonjs/serializers/glTF/2.0/glTFSerializer.js");
             const data = await GLTF2Export.GLBAsync(sceneAsset._getScene(), fileName);
             const file = data.files[fileName];
@@ -25,6 +27,7 @@ export class SerializeGLBBlock extends NodeAssetBlock {
 
             this.writeOutput(this.output, new Uint8Array(await file.arrayBuffer()));
         } catch (error) {
+            state._throwIfDisposed();
             const message = error instanceof Error ? error.message : String(error);
             throw new Error(`Serialize GLB block "${this.name}" failed: ${message}`, { cause: error });
         }

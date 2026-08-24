@@ -32,6 +32,7 @@ export class ParseGLBBlock extends NodeAssetBlock {
                 import("@babylonjs/core/scene.js"),
             ]);
 
+            state._throwIfDisposed();
             const scene = new Scene(state._engine);
             const sceneAsset = SceneAsset._create(scene);
             state._trackSceneAsset(sceneAsset);
@@ -75,10 +76,12 @@ export class ParseGLBBlock extends NodeAssetBlock {
             const fileName = `${this.name}.glb`;
 
             await importGlbIntoSceneAsync(ImportMeshAsync, SceneLoader, bytes, scene, fileName);
+            state._throwIfDisposed();
             assetContainer.moveAllFromScene();
             assetContainer.addAllToScene();
             this.writeOutput(this.output, sceneAsset);
         } catch (error) {
+            state._throwIfDisposed();
             const message = error instanceof Error ? error.message : String(error);
             throw new Error(`Parse GLB block "${this.name}" failed: ${message}`, { cause: error });
         }
