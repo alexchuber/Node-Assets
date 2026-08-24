@@ -6,7 +6,6 @@ export abstract class NodeAssetBlock {
 
     private readonly _inputs: ConnectionPoint<ConnectionPointType, "input">[] = [];
     private readonly _outputs: ConnectionPoint<ConnectionPointType, "output">[] = [];
-    private _buildState: AssetGraphBuildState | undefined;
 
     public constructor(name: string) {
         this.name = name;
@@ -31,7 +30,8 @@ export abstract class NodeAssetBlock {
 
     /** @internal */
     public _assertBuildAvailable(state: AssetGraphBuildState): void {
-        if (this._buildState !== undefined && this._buildState !== state) {
+        const currentState = blockBuildStates.get(this);
+        if (currentState !== undefined && currentState !== state) {
             throw new Error(`Block "${this.name}" cannot be built concurrently because it is already executing.`);
         }
     }
@@ -45,36 +45,39 @@ export abstract class NodeAssetBlock {
     public async _buildWithStateAsync(state: AssetGraphBuildState): Promise<void> {
         this._assertBuildAvailable(state);
 
-        const ownsBuildState = this._buildState === undefined;
+        const ownsBuildState = blockBuildStates.get(this) === undefined;
         if (ownsBuildState) {
-            this._buildState = state;
+            blockBuildStates.set(this, state);
         }
 
         try {
             await this._buildAsync();
         } finally {
-            if (ownsBuildState && this._buildState === state) {
-                this._buildState = undefined;
+            if (ownsBuildState && blockBuildStates.get(this) === state) {
+                blockBuildStates.delete(this);
             }
         }
     }
 
     protected readInputAsync<TType extends ConnectionPointType>(input: ConnectionPoint<TType, "input">): Promise<ConnectionPointValue<TType>> {
-        return this._getBuildState().resolveInputAsync(input);
+        return getNodeAssetBlockBuildState(this).resolveInputAsync(input);
     }
 
     protected writeOutput<TType extends ConnectionPointType>(output: ConnectionPoint<TType, "output">, value: ConnectionPointValue<TType>): void {
-        this._getBuildState().setOutputValue(output, value);
-    }
-
-    /** @internal */
-    protected _getBuildState(): AssetGraphBuildState {
-        if (this._buildState === undefined) {
-            throw new Error(`Block "${this.name}" can only read or write values during a graph build.`);
-        }
-
-        return this._buildState;
+        getNodeAssetBlockBuildState(this).setOutputValue(output, value);
     }
 
     protected abstract _buildAsync(): Promise<void>;
+}
+
+const blockBuildStates = new WeakMap<NodeAssetBlock, AssetGraphBuildState>();
+
+/** @internal */
+export function getNodeAssetBlockBuildState(block: NodeAssetBlock): AssetGraphBuildState {
+    const state = blockBuildStates.get(block);
+    if (state === undefined) {
+        throw new Error(`Block "${block.name}" can only read or write values during a graph build.`);
+    }
+
+    return state;
 }

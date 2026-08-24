@@ -1,9 +1,20 @@
 import type { ConnectionPoint, ConnectionPointType, ConnectionPointValue } from "./connectionPoint";
 import type { NodeAssetBlock } from "./nodeAssetBlock";
+import type { NullEngine } from "@babylonjs/core/Engines/nullEngine.js";
+import type { SceneAsset } from "./sceneAsset";
 
+/** @internal */
 export class AssetGraphBuildState {
     private readonly _outputValues = new Map<ConnectionPoint<ConnectionPointType, "output">, ConnectionPointValue<ConnectionPointType>>();
     private readonly _blockBuilds = new Map<NodeAssetBlock, Promise<void>>();
+    private readonly _sceneAssets = new Set<SceneAsset>();
+
+    /** @internal */
+    public readonly _engine: NullEngine;
+
+    public constructor(engine: NullEngine) {
+        this._engine = engine;
+    }
 
     /** @internal */
     public _assertGraphValid(roots: readonly NodeAssetBlock[], graphName: string): void {
@@ -66,5 +77,22 @@ export class AssetGraphBuildState {
 
     public setOutputValue<TType extends ConnectionPointType>(output: ConnectionPoint<TType, "output">, value: ConnectionPointValue<TType>): void {
         this._outputValues.set(output, value);
+    }
+
+    /** @internal */
+    public _trackSceneAsset(sceneAsset: SceneAsset): void {
+        this._sceneAssets.add(sceneAsset);
+    }
+
+    /** @internal */
+    public _dispose(): void {
+        try {
+            for (const sceneAsset of this._sceneAssets) {
+                sceneAsset._dispose();
+            }
+        } finally {
+            this._sceneAssets.clear();
+            this._outputValues.clear();
+        }
     }
 }

@@ -11,11 +11,12 @@ export class InputBlock extends NodeAssetBlock {
     }
 
     protected override _buildAsync(): Promise<void> {
-        if (!(this.source instanceof Uint8Array)) {
+        const source = this.source;
+        if (!(source instanceof Uint8Array)) {
             throw new Error(`Input block "${this.name}" requires an in-memory Uint8Array source.`);
         }
 
-        this.writeOutput(this.output, this.source);
+        this.writeOutput(this.output, source);
         return Promise.resolve();
     }
 }

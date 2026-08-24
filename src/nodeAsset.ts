@@ -1,3 +1,4 @@
+import { NullEngine } from "@babylonjs/core/Engines/nullEngine.js";
 import { AssetGraphBuildState } from "./assetGraphBuildState";
 import type { OutputBlock } from "./outputBlock";
 
@@ -33,15 +34,16 @@ export class NodeAsset {
         const buildVersion = ++this._buildVersion;
         this._activeOutputBlocks = outputBlocks;
         let ownsOutputBuild = false;
-        let buildState: AssetGraphBuildState | undefined;
+        let engine: NullEngine | undefined;
+        let state: AssetGraphBuildState | undefined;
         try {
+            engine = new NullEngine();
+            state = new AssetGraphBuildState(engine);
+            this._buildState = state;
             if (outputBlocks.length === 0) {
                 throw new Error(`NodeAsset "${this.name}" cannot build because no output block has been registered.`);
             }
 
-            const state = new AssetGraphBuildState();
-            buildState = state;
-            this._buildState = state;
             for (const outputBlock of outputBlocks) {
                 outputBlock._assertBuildAvailable(state);
             }
@@ -61,20 +63,28 @@ export class NodeAsset {
             this._successfulBuildState = state;
             this._successfulOutputBlocks = outputBlocks;
         } catch (error) {
-            if (ownsOutputBuild && buildState !== undefined) {
+            if (ownsOutputBuild && state !== undefined) {
                 for (const outputBlock of outputBlocks) {
-                    outputBlock._clearData(buildState);
+                    outputBlock._clearData(state);
                 }
             }
             throw error;
         } finally {
-            if (buildState !== undefined && this._buildState === buildState) {
-                this._buildState = undefined;
+            try {
+                state?._dispose();
+            } finally {
+                try {
+                    engine?.dispose();
+                } finally {
+                    if (state !== undefined && this._buildState === state) {
+                        this._buildState = undefined;
+                    }
+                    if (this._activeOutputBlocks === outputBlocks) {
+                        this._activeOutputBlocks = undefined;
+                    }
+                    this._buildInProgress = false;
+                }
             }
-            if (this._activeOutputBlocks === outputBlocks) {
-                this._activeOutputBlocks = undefined;
-            }
-            this._buildInProgress = false;
         }
     }
 

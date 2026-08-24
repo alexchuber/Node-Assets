@@ -1,6 +1,6 @@
 import { type ConnectionPoint, type File } from "./connectionPoint";
 import type { AssetGraphBuildState } from "./assetGraphBuildState";
-import { NodeAssetBlock } from "./nodeAssetBlock";
+import { getNodeAssetBlockBuildState, NodeAssetBlock } from "./nodeAssetBlock";
 
 export class OutputBlock extends NodeAssetBlock {
     public readonly input: ConnectionPoint<"File", "input">;
@@ -23,7 +23,7 @@ export class OutputBlock extends NodeAssetBlock {
 
     protected override async _buildAsync(): Promise<void> {
         this._data = await this.readInputAsync(this.input);
-        this._dataBuildState = this._getBuildState();
+        this._dataBuildState = getNodeAssetBlockBuildState(this);
     }
 
     /** @internal */

@@ -1,6 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { EngineStore } from "@babylonjs/core/Engines/engineStore.js";
+import { NullEngine } from "@babylonjs/core/Engines/nullEngine.js";
 
-import { InputBlock, NodeAsset, NodeAssetBlock, OutputBlock, type ConnectionPoint } from "../src/index";
+import { InputBlock, NodeAsset, NodeAssetBlock, OutputBlock, SceneAsset, type ConnectionPoint } from "../src/index";
 
 class SceneInputBlock extends NodeAssetBlock {
     public readonly input: ConnectionPoint<"SceneAsset", "input"> = this.registerInput("input", "SceneAsset");
@@ -191,10 +193,22 @@ class GatedOutputBlock extends OutputBlock {
 }
 
 describe("NodeAsset", () => {
-    it("rejects a build with no registered output block", async () => {
+    it("rejects a build with no registered output block and disposes its engine", async () => {
         const asset = new NodeAsset("graph");
+        const initialEngineCount = EngineStore.Instances.length;
+        const engineCreate = vi.spyOn(EngineStore.Instances, "push");
+        const engineDispose = vi.spyOn(NullEngine.prototype, "dispose");
 
-        await expect(asset.buildAsync()).rejects.toThrow('NodeAsset "graph" cannot build because no output block has been registered.');
+        try {
+            await expect(asset.buildAsync()).rejects.toThrow('NodeAsset "graph" cannot build because no output block has been registered.');
+            expect(engineCreate).toHaveBeenCalledTimes(1);
+            expect(engineDispose).toHaveBeenCalledTimes(1);
+            expect(EngineStore.Instances).toHaveLength(initialEngineCount);
+        } finally {
+            engineCreate.mockRestore();
+            engineDispose.mockRestore();
+            asset.dispose();
+        }
     });
 
     it("rejects an unconnected required input before executing the graph", async () => {
@@ -268,6 +282,14 @@ describe("NodeAsset", () => {
         expect(second.buildCount).toBe(0);
         expect(firstOutput.buildCount).toBe(0);
         expect(secondOutput.buildCount).toBe(0);
+    });
+
+    it("keeps SceneAsset opaque and non-user-constructible", () => {
+        expect(SceneAsset).toBeDefined();
+        expect(() => {
+            // @ts-expect-error SceneAsset instances are created by graph blocks only.
+            new SceneAsset(Symbol());
+        }).toThrow("SceneAsset instances can only be created internally.");
     });
 
     it("flows input bytes to an output block", async () => {
