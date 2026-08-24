@@ -17,6 +17,32 @@ export interface AssetGraphValidation {
     }[];
 }
 
+interface GraphValidationFinding {
+    readonly kindRank: number;
+    readonly producerName: string;
+    readonly portName: string;
+    readonly message: string;
+}
+
+function compareText(left: string, right: string): number {
+    if (left < right) {
+        return -1;
+    }
+    if (left > right) {
+        return 1;
+    }
+    return 0;
+}
+
+function compareGraphValidationFindings(left: GraphValidationFinding, right: GraphValidationFinding): number {
+    return (
+        left.kindRank - right.kindRank ||
+        compareText(left.producerName, right.producerName) ||
+        compareText(left.portName, right.portName) ||
+        compareText(left.message, right.message)
+    );
+}
+
 /** @internal */
 export class AssetGraphBuildState {
     private readonly _outputValues = new Map<ConnectionPoint<ConnectionPointType, "output">, ConnectionPointValue<ConnectionPointType>>();
@@ -39,7 +65,7 @@ export class AssetGraphBuildState {
         const duplicateOutputNames = [...nameCounts.entries()]
             .filter(([, count]) => count > 1)
             .map(([name]) => name)
-            .sort();
+            .sort(compareText);
         const missingInputs: Array<{ block: NodeAssetBlock; input: ConnectionPoint<ConnectionPointType, "input"> }> = [];
         const sceneAssetFanOuts: Array<{ block: NodeAssetBlock; output: ConnectionPoint<ConnectionPointType, "output"> }> = [];
         const visitedBlocks = new Set<NodeAssetBlock>();
@@ -71,14 +97,32 @@ export class AssetGraphBuildState {
             visit(root);
         }
 
-        const details = [
-            ...(duplicateOutputNames.length > 0 ? [`Duplicate output block names: ${duplicateOutputNames.map((name) => `"${name}"`).join(", ")}.`] : []),
-            ...missingInputs.map(({ block, input }) => `Block "${block.name}" has an unconnected required input "${input.name}".`),
-            ...sceneAssetFanOuts.map(
-                ({ block, output }) =>
-                    `Block "${block.name}" output "${output.name}" produces a SceneAsset value that is moved to its consumer and cannot feed multiple consumers in v0.`
-            ),
+        const findings: GraphValidationFinding[] = [
+            ...(duplicateOutputNames.length > 0
+                ? [
+                      {
+                          kindRank: 0,
+                          producerName: "",
+                          portName: duplicateOutputNames.join(", "),
+                          message: `Duplicate output block names: ${duplicateOutputNames.map((name) => `"${name}"`).join(", ")}.`,
+                      },
+                  ]
+                : []),
+            ...missingInputs.map(({ block, input }) => ({
+                kindRank: 1,
+                producerName: block.name,
+                portName: input.name,
+                message: `Block "${block.name}" has an unconnected required input "${input.name}".`,
+            })),
+            ...sceneAssetFanOuts.map(({ block, output }) => ({
+                kindRank: 2,
+                producerName: block.name,
+                portName: output.name,
+                message: `Block "${block.name}" output "${output.name}" produces a SceneAsset value that is moved to its consumer and cannot feed multiple consumers in v0.`,
+            })),
         ];
+        findings.sort(compareGraphValidationFindings);
+        const details = findings.map(({ message }) => message);
 
         return { details, duplicateOutputNames, missingInputs, sceneAssetFanOuts };
     }
