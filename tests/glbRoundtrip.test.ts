@@ -88,7 +88,7 @@ describe("GLB roundtrip", () => {
             queueMicrotask(() => {
                 activationWasAsynchronous = importReturned;
                 SceneLoader.OnPluginActivatedObservable.notifyObservers({ ...control.plugin, name: "obj" });
-                SceneLoader.OnPluginActivatedObservable.notifyObservers(control.plugin);
+                SceneLoader.OnPluginActivatedObservable.notifyObservers({ ...control.plugin, name: "GLTF" });
                 control.resolveReady();
                 queueMicrotask(() => control.complete());
             });

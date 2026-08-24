@@ -160,7 +160,7 @@ async function captureLoaderLifecycleAsync(
         observer?.remove();
     };
     const onPluginActivated = (plugin: SceneLoaderPlugin): void => {
-        if (activationCaptured || plugin.name.toLowerCase() !== "gltf") {
+        if (activationCaptured || !isGlbPlugin(plugin)) {
             return;
         }
 
@@ -224,6 +224,10 @@ async function captureLoaderLifecycleAsync(
         completion?.dispose();
         throw error;
     }
+}
+
+function isGlbPlugin(plugin: SceneLoaderPlugin): boolean {
+    return typeof plugin.name === "string" && plugin.name.toLowerCase() === "gltf";
 }
 
 function hasLoaderLifecycle(plugin: SceneLoaderPlugin): plugin is LoaderWithLifecycle {
