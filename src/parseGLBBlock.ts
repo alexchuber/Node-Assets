@@ -304,10 +304,25 @@ function waitForLoaderCompletion(plugin: LoaderWithLifecycle, abortSignal: Abort
     let completeObserver: IObserver | undefined;
     let errorObserver: IObserver | undefined;
     let disposed = false;
-    const onAbort = (): void => {
-        if (!disposed) {
-            rejectCompletion(getAbortReason(abortSignal));
+    const removeLifecycleObservers = (): void => {
+        try {
+            errorObserver?.remove();
+        } finally {
+            completeObserver?.remove();
         }
+    };
+    const onAbort = (): void => {
+        if (disposed) {
+            return;
+        }
+
+        disposed = true;
+        try {
+            removeLifecycleObservers();
+        } finally {
+            abortSignal.removeEventListener("abort", onAbort);
+        }
+        rejectCompletion(getAbortReason(abortSignal));
     };
     const promise = new Promise<void>((resolve, reject) => {
         resolveCompletion = resolve;
@@ -334,11 +349,10 @@ function waitForLoaderCompletion(plugin: LoaderWithLifecycle, abortSignal: Abort
         }
     } catch (error) {
         try {
-            errorObserver?.remove();
+            removeLifecycleObservers();
         } finally {
-            completeObserver?.remove();
+            abortSignal.removeEventListener("abort", onAbort);
         }
-        abortSignal.removeEventListener("abort", onAbort);
         throw error;
     }
 
@@ -351,13 +365,9 @@ function waitForLoaderCompletion(plugin: LoaderWithLifecycle, abortSignal: Abort
 
             disposed = true;
             try {
-                errorObserver?.remove();
+                removeLifecycleObservers();
             } finally {
-                try {
-                    completeObserver?.remove();
-                } finally {
-                    abortSignal.removeEventListener("abort", onAbort);
-                }
+                abortSignal.removeEventListener("abort", onAbort);
             }
         },
     };

@@ -12,7 +12,9 @@ import type * as SceneLoaderTypes from "@babylonjs/core/Loading/sceneLoader.js";
 import type { IGLTFLoaderData } from "@babylonjs/loaders/glTF/glTFFileLoader.pure.js";
 import { describe, expect, it, vi } from "vitest";
 
-import { InputBlock, NodeAsset, OutputBlock, ParseGLBBlock, SerializeGLBBlock } from "../src/index";
+import { InputBlock, NodeAsset, NodeAssetBlock, OutputBlock, ParseGLBBlock, SerializeGLBBlock } from "../src/index";
+import { type ConnectionPoint } from "../src/connectionPoint";
+import { getNodeAssetBlockBuildState } from "../src/nodeAssetBlock";
 import { createGlbFixtureAsync, readGlbStructureAsync, readGlbStructureWithSwappedFirstTriangleAsync } from "./glbFixture";
 
 type ImportMeshAsync = typeof SceneLoaderTypes.ImportMeshAsync;
@@ -27,6 +29,7 @@ type PublicLoaderPlugin = SceneLoaderTypes.ISceneLoaderPluginAsync & {
 
 interface PublicObservable<T> {
     addOnce(callback: (eventData: T) => void): IObserver;
+    readonly observers: readonly unknown[];
 }
 
 interface PublicObservableWithObservers<T> extends PublicObservable<T> {
@@ -35,6 +38,25 @@ interface PublicObservableWithObservers<T> extends PublicObservable<T> {
 
 interface PublicObservableObserver {
     readonly callback: (...args: never[]) => unknown;
+}
+
+class StateCapturingFileBlock extends NodeAssetBlock {
+    public readonly output: ConnectionPoint<"File", "output">;
+    public state: ReturnType<typeof getNodeAssetBlockBuildState> | undefined;
+
+    public constructor(
+        name: string,
+        private readonly bytes: Uint8Array
+    ) {
+        super(name);
+        this.output = this.registerOutput("output", "File");
+    }
+
+    protected override _buildAsync(): Promise<void> {
+        this.state = getNodeAssetBlockBuildState(this);
+        this.writeOutput(this.output, this.bytes);
+        return Promise.resolve();
+    }
 }
 
 interface LoaderControl {
@@ -642,6 +664,75 @@ describe("GLB roundtrip", () => {
             externalControl?.complete();
             await build.catch(() => undefined);
             graph.asset.dispose();
+        }
+    });
+
+    it("aborts lifecycle observation synchronously after COMPLETE while READY remains pending", async () => {
+        const fixture = await createGlbFixtureAsync();
+        const input = new StateCapturingFileBlock("source", fixture.bytes);
+        const parse = new ParseGLBBlock("parse");
+        const serialize = new SerializeGLBBlock("serialize");
+        const output = new OutputBlock("destination");
+        const asset = new NodeAsset("graph");
+        input.output.connectTo(parse.input);
+        parse.output.connectTo(serialize.input);
+        serialize.output.connectTo(output.input);
+        asset.addOutputBlock(output);
+
+        let importStarted!: () => void;
+        const importStartedPromise = new Promise<void>((resolve) => {
+            importStarted = resolve;
+        });
+        let control: LoaderControl | undefined;
+        let completionFired = false;
+        let readySettled = false;
+        publicImportOverride.current = (_source, scene, options) => {
+            const loaderControl = createLoaderControl(MeshBuilder.CreateBox("aborted-load", { size: 1 }, scene), getCorrelationMarker(options));
+            control = loaderControl;
+            void loaderControl.readyPromise.then(() => {
+                readySettled = true;
+            });
+            SceneLoader.OnPluginActivatedObservable.notifyObservers(loaderControl.plugin);
+            loaderControl.complete();
+            completionFired = true;
+            importStarted();
+            return loaderControl.readyPromise;
+        };
+
+        const build = asset.buildAsync();
+        try {
+            await importStartedPromise;
+            const loaderControl = control;
+            const state = input.state;
+            if (loaderControl === undefined || state === undefined) {
+                throw new Error("Expected the GLB loader and build state.");
+            }
+
+            expect(completionFired).toBe(true);
+            expect(readySettled).toBe(false);
+            expect(loaderControl.plugin.onCompleteObservable.observers).toHaveLength(1);
+            expect(loaderControl.plugin.onErrorObservable.observers).toHaveLength(1);
+
+            state._dispose();
+
+            expect(loaderControl.plugin.onCompleteObservable.observers).toHaveLength(0);
+            expect(loaderControl.plugin.onErrorObservable.observers).toHaveLength(0);
+
+            loaderControl.resolveReady();
+            loaderControl.fail(new Error("late loader error"));
+            const error = await build.catch((reason: unknown) => reason);
+            expect(error).toBeInstanceOf(Error);
+            if (error instanceof Error) {
+                expect(error.message).toContain('Parse GLB block "parse" failed');
+            }
+
+            publicImportOverride.current = undefined;
+            await expect(asset.buildAsync()).resolves.toBeUndefined();
+        } finally {
+            publicImportOverride.current = undefined;
+            control?.resolveReady();
+            await build.catch(() => undefined);
+            asset.dispose();
         }
     });
 
