@@ -141,6 +141,81 @@ describe("GLB roundtrip", () => {
         }
     });
 
+    it("aggregates duplicate output names with missing inputs and SceneAsset fan-out", async () => {
+        const parse = new ParseGLBBlock("parse");
+        const firstSerialize = new SerializeGLBBlock("first serialize");
+        const secondSerialize = new SerializeGLBBlock("second serialize");
+        const firstOutput = new OutputBlock("duplicate.glb");
+        const secondOutput = new OutputBlock("duplicate.glb");
+        const asset = new NodeAsset("graph");
+
+        parse.output.connectTo(firstSerialize.input);
+        parse.output.connectTo(secondSerialize.input);
+        firstSerialize.output.connectTo(firstOutput.input);
+        secondSerialize.output.connectTo(secondOutput.input);
+        asset.addOutputBlock(firstOutput);
+        asset.addOutputBlock(secondOutput);
+
+        publicImportCalls.length = 0;
+        const serializeGlb = vi.spyOn(GLTF2Export, "GLBAsync");
+        try {
+            const error = await asset.buildAsync().catch((reason: unknown) => reason);
+            expect(error).toBeInstanceOf(Error);
+            if (!(error instanceof Error)) {
+                return;
+            }
+
+            expect(error.message).toBe(
+                'NodeAsset "graph" cannot build because the graph has structural errors:\n' +
+                    'Duplicate output block names: "duplicate.glb".\n' +
+                    'Block "parse" has an unconnected required input "input".\n' +
+                    'Block "parse" output "output" produces a SceneAsset value that is moved to its consumer and cannot feed multiple consumers in v0.'
+            );
+            expect(publicImportCalls).toHaveLength(0);
+            expect(serializeGlb).not.toHaveBeenCalled();
+            expect(() => firstOutput.data).toThrow('Output block "duplicate.glb"');
+            expect(() => secondOutput.data).toThrow('Output block "duplicate.glb"');
+        } finally {
+            serializeGlb.mockRestore();
+            publicImportCalls.length = 0;
+            asset.dispose();
+        }
+    });
+
+    it("canonicalizes structural diagnostics regardless of output root registration order", async () => {
+        const forward = createInvalidDiagnosticsGraph(false);
+        const reverse = createInvalidDiagnosticsGraph(true);
+        const expected =
+            'NodeAsset "graph" cannot build because the graph has structural errors:\n' +
+            'Duplicate output block names: "a.glb", "z.glb".\n' +
+            'Block "fanout parse" has an unconnected required input "input".\n' +
+            'Block "missing parse" has an unconnected required input "input".\n' +
+            'Block "fanout parse" output "output" produces a SceneAsset value that is moved to its consumer and cannot feed multiple consumers in v0.\n' +
+            'Block "missing parse" output "output" produces a SceneAsset value that is moved to its consumer and cannot feed multiple consumers in v0.';
+
+        publicImportCalls.length = 0;
+        try {
+            const forwardError = await forward.asset.buildAsync().catch((reason: unknown) => reason);
+            const reverseError = await reverse.asset.buildAsync().catch((reason: unknown) => reason);
+
+            expect(forwardError).toBeInstanceOf(Error);
+            expect(reverseError).toBeInstanceOf(Error);
+            if (!(forwardError instanceof Error) || !(reverseError instanceof Error)) {
+                return;
+            }
+
+            expect(forwardError.message).toBe(expected);
+            expect(reverseError.message).toBe(expected);
+            expect(publicImportCalls).toHaveLength(0);
+            for (const output of [...forward.outputs, ...reverse.outputs]) {
+                expect(() => output.data).toThrow(`Output block "${output.name}"`);
+            }
+        } finally {
+            forward.asset.dispose();
+            reverse.asset.dispose();
+        }
+    });
+
     it("preserves a published output owned by another graph on fan-out validation failure", async () => {
         const fixture = await createGlbFixtureAsync();
         const input = new InputBlock("source");
@@ -731,10 +806,16 @@ describe("GLB roundtrip", () => {
         const geometryDispose = vi.spyOn(Geometry.prototype, "dispose");
         const sceneDispose = vi.spyOn(Scene.prototype, "dispose");
         const engineDispose = vi.spyOn(NullEngine.prototype, "dispose");
-        const serialize = vi.spyOn(GLTF2Export, "GLBAsync").mockRejectedValue(new Error("forced serializer failure"));
+        const failure = new Error("forced serializer failure");
+        const serialize = vi.spyOn(GLTF2Export, "GLBAsync").mockRejectedValue(failure);
 
         try {
-            await expect(buildRoundtripAsync(fixture.bytes)).rejects.toThrow('Serialize GLB block "serialize" failed: forced serializer failure');
+            const error = await buildRoundtripAsync(fixture.bytes).catch((reason: unknown) => reason);
+            expect(error).toBeInstanceOf(Error);
+            if (error instanceof Error) {
+                expect(error.message).toBe('Serialize GLB block "serialize" failed: forced serializer failure');
+                expect(error.cause).toBe(failure);
+            }
             expect(publicImportCalls).toHaveLength(1);
             expect(containerDispose).toHaveBeenCalledTimes(1);
             expect(meshDispose).toHaveBeenCalled();
@@ -880,7 +961,12 @@ describe("GLB roundtrip", () => {
         serialize.output.connectTo(output.input);
         asset.addOutputBlock(output);
 
-        await expect(asset.buildAsync()).rejects.toThrow('Parse GLB block "parse" failed');
+        const error = await asset.buildAsync().catch((reason: unknown) => reason);
+        expect(error).toBeInstanceOf(Error);
+        if (error instanceof Error) {
+            expect(error.message).toMatch(/^Parse GLB block "parse" failed:/);
+            expect(error.message.match(/Parse GLB block "parse"/g)).toHaveLength(1);
+        }
         expect(() => output.data).toThrow('Output block "destination"');
 
         asset.dispose();
@@ -1011,6 +1097,41 @@ function addUniqueExtension(extensions: readonly string[] | undefined, extension
 interface RoundtripGraph {
     readonly asset: NodeAsset;
     readonly output: OutputBlock;
+}
+
+interface InvalidDiagnosticsGraph {
+    readonly asset: NodeAsset;
+    readonly outputs: readonly OutputBlock[];
+}
+
+function createInvalidDiagnosticsGraph(reverseRoots: boolean): InvalidDiagnosticsGraph {
+    const firstParse = new ParseGLBBlock("fanout parse");
+    const firstSerialize = new SerializeGLBBlock("first serialize");
+    const secondSerialize = new SerializeGLBBlock("second serialize");
+    const firstOutput = new OutputBlock("z.glb");
+    const secondOutput = new OutputBlock("z.glb");
+    firstParse.output.connectTo(firstSerialize.input);
+    firstParse.output.connectTo(secondSerialize.input);
+    firstSerialize.output.connectTo(firstOutput.input);
+    secondSerialize.output.connectTo(secondOutput.input);
+
+    const secondParse = new ParseGLBBlock("missing parse");
+    const thirdSerialize = new SerializeGLBBlock("third serialize");
+    const fourthSerialize = new SerializeGLBBlock("fourth serialize");
+    const thirdOutput = new OutputBlock("a.glb");
+    const fourthOutput = new OutputBlock("a.glb");
+    secondParse.output.connectTo(thirdSerialize.input);
+    secondParse.output.connectTo(fourthSerialize.input);
+    thirdSerialize.output.connectTo(thirdOutput.input);
+    fourthSerialize.output.connectTo(fourthOutput.input);
+
+    const asset = new NodeAsset("graph");
+    const outputs = [firstOutput, secondOutput, thirdOutput, fourthOutput];
+    for (const output of reverseRoots ? [...outputs].reverse() : outputs) {
+        asset.addOutputBlock(output);
+    }
+
+    return { asset, outputs };
 }
 
 function createLoaderControl(mesh: Mesh): LoaderControl {

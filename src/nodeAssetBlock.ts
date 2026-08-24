@@ -57,6 +57,11 @@ export abstract class NodeAssetBlock {
 
         try {
             await this._buildAsync();
+        } catch (error) {
+            if (!isNodeAssetBlockError(error)) {
+                throw createNodeAssetBlockError(this, `Block "${this.name}" failed: ${getNodeAssetBlockErrorReason(error)}`, error);
+            }
+            throw error;
         } finally {
             if (ownsBuildState && blockBuildStates.get(this) === state) {
                 blockBuildStates.delete(this);
@@ -76,6 +81,31 @@ export abstract class NodeAssetBlock {
 }
 
 const blockBuildStates = new WeakMap<NodeAssetBlock, AssetGraphBuildState>();
+const contextualizedBlockErrors = new WeakMap<Error, NodeAssetBlock>();
+
+/** @internal */
+export function createNodeAssetBlockError(block: NodeAssetBlock, message: string, cause: unknown): Error {
+    const error = new Error(message, { cause });
+    contextualizedBlockErrors.set(error, block);
+    return error;
+}
+
+/** @internal */
+export function getNodeAssetBlockErrorReason(reason: unknown): string {
+    try {
+        if (reason instanceof Error) {
+            return reason.message;
+        }
+
+        return String(reason);
+    } catch {
+        return "an error reason that could not be converted to text";
+    }
+}
+
+function isNodeAssetBlockError(reason: unknown): reason is Error {
+    return reason instanceof Error && contextualizedBlockErrors.has(reason);
+}
 
 /** @internal */
 export function getNodeAssetBlockBuildState(block: NodeAssetBlock): AssetGraphBuildState {

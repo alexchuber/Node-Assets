@@ -1,5 +1,5 @@
 import { type ConnectionPoint } from "./connectionPoint";
-import { getNodeAssetBlockBuildState, NodeAssetBlock } from "./nodeAssetBlock";
+import { createNodeAssetBlockError, getNodeAssetBlockErrorReason, getNodeAssetBlockBuildState, NodeAssetBlock } from "./nodeAssetBlock";
 import { SceneAsset } from "./sceneAsset";
 import type { IObserver } from "@babylonjs/core/Misc/observable.js";
 import type { Scene } from "@babylonjs/core/scene.js";
@@ -79,8 +79,7 @@ export class ParseGLBBlock extends NodeAssetBlock {
             assetContainer.addAllToScene();
             this.writeOutput(this.output, sceneAsset);
         } catch (error) {
-            const message = error instanceof Error ? error.message : String(error);
-            throw new Error(`Parse GLB block "${this.name}" failed: ${message}`, { cause: error });
+            throw createNodeAssetBlockError(this, `Parse GLB block "${this.name}" failed: ${getNodeAssetBlockErrorReason(error)}`, error);
         }
     }
 }
