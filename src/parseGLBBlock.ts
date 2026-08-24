@@ -29,6 +29,7 @@ export class ParseGLBBlock extends NodeAssetBlock {
                 loadSceneLoaderAsync(),
                 import("@babylonjs/core/scene.js"),
             ]);
+            state._throwIfDisposed();
 
             const scene = new Scene(state._engine);
             const sceneAsset = SceneAsset._create(scene);
