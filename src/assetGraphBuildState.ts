@@ -48,6 +48,7 @@ export class AssetGraphBuildState {
     private readonly _outputValues = new Map<ConnectionPoint<ConnectionPointType, "output">, ConnectionPointValue<ConnectionPointType>>();
     private readonly _blockBuilds = new Map<NodeAssetBlock, Promise<void>>();
     private readonly _sceneAssets = new Set<SceneAsset>();
+    private readonly _fileRootUrls = new Map<Uint8Array, string>();
     private readonly _abortController = new AbortController();
     private readonly _graphName: string;
     private _disposed = false;
@@ -210,6 +211,18 @@ export class AssetGraphBuildState {
     }
 
     /** @internal */
+    public _setFileRootUrl(file: Uint8Array, rootUrl: string): void {
+        this._throwIfDisposed();
+        this._fileRootUrls.set(file, rootUrl);
+    }
+
+    /** @internal */
+    public _getFileRootUrl(file: Uint8Array): string | undefined {
+        this._throwIfDisposed();
+        return this._fileRootUrls.get(file);
+    }
+
+    /** @internal */
     public _trackSceneAsset(sceneAsset: SceneAsset): void {
         this._throwIfDisposed();
         this._sceneAssets.add(sceneAsset);
@@ -233,6 +246,7 @@ export class AssetGraphBuildState {
                 this._sceneAssets.clear();
                 this._blockBuilds.clear();
                 this._outputValues.clear();
+                this._fileRootUrls.clear();
                 this._engine.dispose();
             }
         }

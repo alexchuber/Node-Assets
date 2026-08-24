@@ -43,10 +43,23 @@ export class InputBlock extends NodeAssetBlock {
                 throw new Error(`Received HTTP ${status}.`);
             }
 
-            this.writeOutput(this.output, new Uint8Array(await response.arrayBuffer()));
+            const bytes = new Uint8Array(await response.arrayBuffer());
+            this.writeOutput(this.output, bytes);
+            const rootUrl = getUrlDirectory(response.url || source);
+            if (rootUrl !== undefined) {
+                state._setFileRootUrl(bytes, rootUrl);
+            }
         } catch (error) {
             state._throwIfDisposed();
             throw createNodeAssetBlockError(this, `Input block "${this.name}" failed to load URL "${source}": ${getNodeAssetBlockErrorReason(error)}`, error);
         }
+    }
+}
+
+function getUrlDirectory(url: string): string | undefined {
+    try {
+        return new URL(".", url).href;
+    } catch {
+        return undefined;
     }
 }
