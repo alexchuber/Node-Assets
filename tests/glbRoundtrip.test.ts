@@ -759,9 +759,14 @@ describe("GLB roundtrip", () => {
 
     it("rejects GLBs that require the disabled spec-gloss extension", async () => {
         const fixture = await createGlbFixtureAsync();
-        const graph = createRoundtripGraph(withRequiredExtension(fixture.bytes, "KHR_materials_pbrSpecularGlossiness"));
+        const extension = "KHR_materials_pbrSpecularGlossiness";
+        const requiredFixture = withRequiredExtension(fixture.bytes, extension);
+        const graph = createRoundtripGraph(requiredFixture.bytes);
 
         try {
+            expect(requiredFixture.document.extensionsUsed).toContain(extension);
+            expect(requiredFixture.document.extensionsRequired).toContain(extension);
+            expect(requiredFixture.document.materials?.[0]?.extensions).toHaveProperty(extension);
             await expect(graph.asset.buildAsync()).rejects.toThrow('Parse GLB block "parse" failed: Required extension KHR_materials_pbrSpecularGlossiness is disabled');
         } finally {
             graph.asset.dispose();
@@ -824,15 +829,39 @@ function createRoundtripGraph(source: Uint8Array): RoundtripGraph {
     return { asset, output };
 }
 
-function withRequiredExtension(bytes: Uint8Array, extension: string): Uint8Array {
+interface GlbDocument {
+    extensionsRequired?: string[];
+    extensionsUsed?: string[];
+    materials?: Array<{ extensions?: Record<string, unknown> }>;
+}
+
+interface RequiredExtensionFixture {
+    readonly bytes: Uint8Array;
+    readonly document: GlbDocument;
+}
+
+function withRequiredExtension(bytes: Uint8Array, extension: string): RequiredExtensionFixture {
     const inputView = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
     const jsonLength = inputView.getUint32(12, true);
     const jsonStart = 20;
     const jsonEnd = jsonStart + jsonLength;
-    const json = JSON.parse(new TextDecoder().decode(bytes.subarray(jsonStart, jsonEnd))) as { extensionsRequired?: string[] };
-    json.extensionsRequired = [...(json.extensionsRequired ?? []), extension];
+    const document = JSON.parse(new TextDecoder().decode(bytes.subarray(jsonStart, jsonEnd))) as GlbDocument;
+    document.extensionsUsed = addUniqueExtension(document.extensionsUsed, extension);
+    document.extensionsRequired = addUniqueExtension(document.extensionsRequired, extension);
+    const material = document.materials?.[0];
+    if (material === undefined) {
+        throw new Error("Expected the GLB fixture to contain a material.");
+    }
+    material.extensions = {
+        ...material.extensions,
+        [extension]: {
+            diffuseFactor: [0.8, 0.7, 0.6, 1],
+            glossinessFactor: 0.5,
+            specularFactor: [0.04, 0.04, 0.04],
+        },
+    };
 
-    const jsonBytes = new TextEncoder().encode(JSON.stringify(json));
+    const jsonBytes = new TextEncoder().encode(JSON.stringify(document));
     const paddedJsonLength = (jsonBytes.byteLength + 3) & ~3;
     const result = new Uint8Array(bytes.byteLength + paddedJsonLength - jsonLength);
     result.set(bytes.subarray(0, jsonStart));
@@ -843,7 +872,11 @@ function withRequiredExtension(bytes: Uint8Array, extension: string): Uint8Array
     const resultView = new DataView(result.buffer);
     resultView.setUint32(8, result.byteLength, true);
     resultView.setUint32(12, paddedJsonLength, true);
-    return result;
+    return { bytes: result, document };
+}
+
+function addUniqueExtension(extensions: readonly string[] | undefined, extension: string): string[] {
+    return [...new Set([...(extensions ?? []), extension])];
 }
 
 interface RoundtripGraph {
