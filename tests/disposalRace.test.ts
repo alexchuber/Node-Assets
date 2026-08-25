@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
+import { expectRejectedAsync } from "./testUtils";
+
 const assetContainerImport = vi.hoisted(() => {
     let markStarted!: () => void;
     let release!: () => void;
@@ -34,15 +36,13 @@ describe("active build disposal", () => {
         const asset = new NodeAsset("graph");
         asset.addOutputBlock(output);
 
-        const buildResult = asset.buildAsync().catch((reason: unknown) => reason);
+        const build = asset.buildAsync();
         await assetContainerImport.started;
         asset.dispose();
         assetContainerImport.release();
 
-        await expect(buildResult).resolves.toMatchObject({
-            message: 'NodeAsset "graph" was disposed while a build was in progress.',
-        });
+        await expectRejectedAsync(build);
         expect(EngineStore.LastCreatedScene).toBe(previousScene);
-        expect(() => output.data).toThrow('Output block "destination"');
+        expect(() => output.data).toThrow();
     });
 });

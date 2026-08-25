@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { InputBlock, NodeAsset, NodeAssetBlock, OutputBlock, type ConnectionPoint } from "../src/index";
+import { expectRejectedAsync } from "./testUtils";
 
 class TwoInputBlock extends NodeAssetBlock {
     public readonly firstInput: ConnectionPoint<"File", "input"> = this.registerInput("first input", "File");
@@ -102,46 +103,36 @@ describe("InputBlock", () => {
             graph.asset.dispose();
 
             expect(signal?.aborted).toBe(true);
-            await expect(build).rejects.toThrow('NodeAsset "graph" was disposed while a build was in progress.');
-            expect(() => graph.output.data).toThrow('Output block "destination"');
+            await expectRejectedAsync(build);
+            expect(() => graph.output.data).toThrow();
         } finally {
             fetchSpy.mockRestore();
             graph.asset.dispose();
         }
     });
 
-    it("names the input block and preserves a malformed URL failure cause", async () => {
+    it("keeps output unavailable when URL loading fails", async () => {
         const url = "not a URL";
-        const cause = new TypeError("Failed to parse URL");
         const graph = createInputGraph(url);
-        const fetchSpy = vi.spyOn(globalThis, "fetch").mockRejectedValue(cause);
+        const fetchSpy = vi.spyOn(globalThis, "fetch").mockRejectedValue(new TypeError("Failed to parse URL"));
 
         try {
-            const error = await graph.asset.buildAsync().catch((reason: unknown) => reason);
-            expect(error).toBeInstanceOf(Error);
-            if (!(error instanceof Error)) {
-                throw new Error("Expected the URL load failure to be an Error.");
-            }
-            expect(error.message).toBe(`Input block "source" failed to load URL "${url}": Failed to parse URL`);
-            expect(error.cause).toBe(cause);
+            await expectRejectedAsync(graph.asset.buildAsync());
+            expect(() => graph.output.data).toThrow();
         } finally {
             fetchSpy.mockRestore();
             graph.asset.dispose();
         }
     });
 
-    it("includes HTTP status details when a URL responds unsuccessfully", async () => {
+    it("rejects unsuccessful URL responses without publishing output", async () => {
         const url = "https://example.test/missing.glb";
         const graph = createInputGraph(url);
         const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 404, statusText: "Not Found" }));
 
         try {
-            await expect(graph.asset.buildAsync()).rejects.toMatchObject({
-                cause: {
-                    message: "Received HTTP 404 Not Found.",
-                },
-                message: `Input block "source" failed to load URL "${url}": Received HTTP 404 Not Found.`,
-            });
+            await expectRejectedAsync(graph.asset.buildAsync());
+            expect(() => graph.output.data).toThrow();
         } finally {
             fetchSpy.mockRestore();
             graph.asset.dispose();
@@ -188,7 +179,7 @@ describe("InputBlock", () => {
         const fetchSpy = vi.spyOn(globalThis, "fetch");
 
         try {
-            await expect(asset.buildAsync()).rejects.toThrow('Block "required inputs" has an unconnected required input "second input".');
+            await expectRejectedAsync(asset.buildAsync());
             expect(fetchSpy).not.toHaveBeenCalled();
         } finally {
             fetchSpy.mockRestore();

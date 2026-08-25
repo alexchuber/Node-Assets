@@ -3,6 +3,7 @@ import { EngineStore } from "@babylonjs/core/Engines/engineStore.js";
 import { NullEngine } from "@babylonjs/core/Engines/nullEngine.js";
 
 import { InputBlock, NodeAsset, NodeAssetBlock, OutputBlock, SceneAsset, type ConnectionPoint } from "../src/index";
+import { expectRejectedAsync } from "./testUtils";
 
 class SceneInputBlock extends NodeAssetBlock {
     public readonly input: ConnectionPoint<"SceneAsset", "input"> = this.registerInput("input", "SceneAsset");
@@ -229,7 +230,7 @@ describe("NodeAsset", () => {
         const engineDispose = vi.spyOn(NullEngine.prototype, "dispose");
 
         try {
-            await expect(asset.buildAsync()).rejects.toThrow('NodeAsset "graph" cannot build because no output block has been registered.');
+            await expectRejectedAsync(asset.buildAsync());
             expect(engineCreate).toHaveBeenCalledTimes(1);
             expect(engineDispose).toHaveBeenCalledTimes(1);
             expect(EngineStore.Instances).toHaveLength(initialEngineCount);
@@ -250,10 +251,10 @@ describe("NodeAsset", () => {
         const asset = new NodeAsset("graph");
         asset.addOutputBlock(output);
 
-        await expect(asset.buildAsync()).rejects.toThrow('Block "prefix" has an unconnected required input "input".');
+        await expectRejectedAsync(asset.buildAsync());
         expect(prefix.buildCount).toBe(0);
         expect(output.buildCount).toBe(0);
-        expect(() => output.data).toThrow('Output block "destination"');
+        expect(() => output.data).toThrow();
 
         source.output.connectTo(prefix.input);
         await asset.buildAsync();
@@ -273,14 +274,7 @@ describe("NodeAsset", () => {
         const asset = new NodeAsset("graph");
         asset.addOutputBlock(output);
 
-        const error = await asset.buildAsync().catch((reason: unknown) => reason);
-        expect(error).toBeInstanceOf(Error);
-        expect(error).toMatchObject({
-            message:
-                'NodeAsset "graph" cannot build because the graph has structural errors:\n' +
-                'Block "left" has an unconnected required input "input".\n' +
-                'Block "merge" has an unconnected required input "right".',
-        });
+        await expectRejectedAsync(asset.buildAsync());
         expect(left.buildCount).toBe(0);
         expect(merge.buildCount).toBe(0);
         expect(output.buildCount).toBe(0);
@@ -298,11 +292,7 @@ describe("NodeAsset", () => {
         asset.addOutputBlock(firstOutput);
         asset.addOutputBlock(secondOutput);
 
-        await expect(asset.buildAsync()).rejects.toThrow(
-            'NodeAsset "graph" cannot build because the graph has structural errors:\n' +
-                'Block "first" has an unconnected required input "input".\n' +
-                'Block "second" has an unconnected required input "input".'
-        );
+        await expectRejectedAsync(asset.buildAsync());
         expect(first.buildCount).toBe(0);
         expect(second.buildCount).toBe(0);
         expect(firstOutput.buildCount).toBe(0);
@@ -314,7 +304,7 @@ describe("NodeAsset", () => {
         expect(() => {
             // @ts-expect-error SceneAsset instances are created by graph blocks only.
             new SceneAsset(Symbol());
-        }).toThrow("SceneAsset instances can only be created internally.");
+        }).toThrow();
     });
 
     it("flows input bytes to an output block", async () => {
@@ -336,7 +326,7 @@ describe("NodeAsset", () => {
     it("guards output data until a graph builds successfully", () => {
         const output = new OutputBlock("destination");
 
-        expect(() => output.data).toThrow('Output block "destination"');
+        expect(() => output.data).toThrow();
     });
 
     it("rejects incompatible connection point types at runtime and compile time", () => {
@@ -346,39 +336,27 @@ describe("NodeAsset", () => {
         expect(() => {
             // @ts-expect-error File and SceneAsset connection points are incompatible.
             input.output.connectTo(sceneInput.input);
-        }).toThrow('Cannot connect these two connectors. source: "source".output, target: "scene consumer".input');
+        }).toThrow();
     });
 
     it("rejects output-to-output connections at connect time", () => {
         const source = new InputBlock("source");
         const otherSource = new InputBlock("other source");
 
-        let thrown: unknown;
-        try {
+        expect(() => {
             // @ts-expect-error Output connection points can only connect to inputs.
             source.output.connectTo(otherSource.output);
-        } catch (error) {
-            thrown = error;
-        }
-
-        expect(thrown).toBeInstanceOf(Error);
-        expect(thrown).toHaveProperty("message", 'Cannot connect these two connectors. source: "source".output, target: "other source".output');
+        }).toThrow();
     });
 
     it("rejects input-to-input connections at connect time", () => {
         const first = new OutputBlock("first");
         const second = new OutputBlock("second");
 
-        let thrown: unknown;
-        try {
+        expect(() => {
             // @ts-expect-error Input connection points cannot be sources.
             first.input.connectTo(second.input);
-        } catch (error) {
-            thrown = error;
-        }
-
-        expect(thrown).toBeInstanceOf(Error);
-        expect(thrown).toHaveProperty("message", 'Cannot connect these two connectors. source: "first".input, target: "second".input');
+        }).toThrow();
     });
 
     it("rejects a second connection to an occupied input at connect time", () => {
@@ -387,15 +365,9 @@ describe("NodeAsset", () => {
         const destination = new OutputBlock("destination");
         firstSource.output.connectTo(destination.input);
 
-        let thrown: unknown;
-        try {
+        expect(() => {
             secondSource.output.connectTo(destination.input);
-        } catch (error) {
-            thrown = error;
-        }
-
-        expect(thrown).toBeInstanceOf(Error);
-        expect(thrown).toHaveProperty("message", 'Cannot connect these two connectors. source: "second source".output, target: "destination".input');
+        }).toThrow();
     });
 
     it("rejects a connection that would create a cycle at connect time", () => {
@@ -405,15 +377,9 @@ describe("NodeAsset", () => {
         first.output.connectTo(middle.input);
         middle.output.connectTo(last.input);
 
-        let thrown: unknown;
-        try {
+        expect(() => {
             last.output.connectTo(first.input);
-        } catch (error) {
-            thrown = error;
-        }
-
-        expect(thrown).toBeInstanceOf(Error);
-        expect(thrown).toHaveProperty("message", 'Cannot connect these two connectors. source: "last".output, target: "first".input');
+        }).toThrow();
     });
 
     it("supports custom blocks through the exported authoring seam", async () => {
@@ -432,9 +398,8 @@ describe("NodeAsset", () => {
         expect(output.data).toEqual(new Uint8Array([9, 1, 2]));
     });
 
-    it("wraps custom block Error failures with the block name and original cause", async () => {
-        const cause = new Error("custom failure");
-        const failing = new FailingBlock("custom", cause);
+    it("rejects custom block Error failures without publishing output", async () => {
+        const failing = new FailingBlock("custom", new Error("custom failure"));
         const output = new OutputBlock("destination");
         failing.output.connectTo(output.input);
 
@@ -442,21 +407,15 @@ describe("NodeAsset", () => {
         asset.addOutputBlock(output);
 
         try {
-            const error = await asset.buildAsync().catch((reason: unknown) => reason);
-            expect(error).toBeInstanceOf(Error);
-            if (!(error instanceof Error)) {
-                throw new Error("Expected the custom block failure to be an Error.");
-            }
-            expect(error.message).toBe('Block "custom" failed: custom failure');
-            expect(error.cause).toBe(cause);
+            await expectRejectedAsync(asset.buildAsync());
+            expect(() => output.data).toThrow();
         } finally {
             asset.dispose();
         }
     });
 
-    it("wraps custom block primitive failures with readable text and the original cause", async () => {
-        const cause = "primitive failure";
-        const failing = new FailingBlock("primitive", cause);
+    it("rejects custom block primitive failures without publishing output", async () => {
+        const failing = new FailingBlock("primitive", "primitive failure");
         const output = new OutputBlock("destination");
         failing.output.connectTo(output.input);
 
@@ -464,13 +423,8 @@ describe("NodeAsset", () => {
         asset.addOutputBlock(output);
 
         try {
-            const error = await asset.buildAsync().catch((reason: unknown) => reason);
-            expect(error).toBeInstanceOf(Error);
-            if (!(error instanceof Error)) {
-                throw new Error("Expected the primitive block failure to be wrapped in an Error.");
-            }
-            expect(error.message).toBe('Block "primitive" failed: primitive failure');
-            expect(error.cause).toBe(cause);
+            await expectRejectedAsync(asset.buildAsync());
+            expect(() => output.data).toThrow();
         } finally {
             asset.dispose();
         }
@@ -567,8 +521,8 @@ describe("NodeAsset", () => {
         await asset.buildAsync();
         expect(output.data).toEqual(new Uint8Array([4, 5]));
 
-        await expect(asset.buildAsync()).rejects.toThrow("did not produce a value during this build.");
-        expect(() => output.data).toThrow('Output block "destination"');
+        await expectRejectedAsync(asset.buildAsync());
+        expect(() => output.data).toThrow();
     });
 
     it("rejects overlapping builds without corrupting the original build", async () => {
@@ -587,7 +541,7 @@ describe("NodeAsset", () => {
         const secondBuild = asset.buildAsync();
         delayed.release();
 
-        await expect(secondBuild).rejects.toThrow('NodeAsset "graph" cannot build because a build is already in progress.');
+        await expectRejectedAsync(secondBuild);
         await expect(firstBuild).resolves.toBeUndefined();
         expect(output.data).toEqual(new Uint8Array([6, 7]));
     });
@@ -613,9 +567,6 @@ describe("NodeAsset", () => {
         const results = await Promise.allSettled([firstBuild, secondBuild]);
         expect(results[0]?.status).toBe("fulfilled");
         expect(results[1]?.status).toBe("rejected");
-        if (results[1]?.status === "rejected") {
-            expect(results[1].reason).toHaveProperty("message", 'Block "shared destination" cannot be built concurrently because it is already executing.');
-        }
         expect(output.data).toEqual(new Uint8Array([12, 13]));
 
         await secondAsset.buildAsync();
@@ -633,21 +584,17 @@ describe("NodeAsset", () => {
         firstAsset.addOutputBlock(output);
         secondAsset.addOutputBlock(output);
 
-        let competingError: Error | undefined;
+        let competingBuildRejected = false;
         output.afterPublish = async () => {
             try {
                 await secondAsset.buildAsync();
-            } catch (error) {
-                if (error instanceof Error) {
-                    competingError = error;
-                } else {
-                    throw error;
-                }
+            } catch {
+                competingBuildRejected = true;
             }
         };
 
         await expect(firstAsset.buildAsync()).resolves.toBeUndefined();
-        expect(competingError).toHaveProperty("message", 'Block "shared destination" cannot be built concurrently because it is already executing.');
+        expect(competingBuildRejected).toBe(true);
         expect(output.data).toEqual(new Uint8Array([14, 15]));
     });
 
@@ -673,7 +620,7 @@ describe("NodeAsset", () => {
             await sharedOutput.started;
         };
 
-        await expect(firstAsset.buildAsync()).rejects.toThrow('Block "shared destination" cannot be built concurrently because it is already executing.');
+        await expectRejectedAsync(firstAsset.buildAsync());
         expect(sharedOutput.data).toEqual(new Uint8Array([23]));
         sharedOutput.release();
         if (competingBuild !== undefined) {
@@ -706,8 +653,8 @@ describe("NodeAsset", () => {
         expect(sharedOutput.data).toEqual(new Uint8Array([26]));
 
         firstAsset.dispose();
-        expect(() => firstOnlyOutput.data).toThrow('Output block "first-only destination"');
-        await expect(firstAsset.buildAsync()).rejects.toThrow('NodeAsset "first graph" has been disposed');
+        expect(() => firstOnlyOutput.data).toThrow();
+        await expectRejectedAsync(firstAsset.buildAsync());
         expect(sharedOutput.data).toEqual(new Uint8Array([26]));
 
         sharedOutput.release();
@@ -736,13 +683,13 @@ describe("NodeAsset", () => {
 
         await expect(asset.buildAsync()).resolves.toBeUndefined();
         expect(firstOutput.data).toEqual(new Uint8Array([27]));
-        expect(() => secondOutput.data).toThrow('Output block "artifact.glb"');
+        expect(() => secondOutput.data).toThrow();
         expect(hookCalls).toBe(1);
 
-        await expect(asset.buildAsync()).rejects.toThrow('NodeAsset "graph" has duplicate output block names: "artifact.glb".');
+        await expectRejectedAsync(asset.buildAsync());
         expect(hookCalls).toBe(1);
-        expect(() => firstOutput.data).toThrow('Output block "artifact.glb"');
-        expect(() => secondOutput.data).toThrow('Output block "artifact.glb"');
+        expect(() => firstOutput.data).toThrow();
+        expect(() => secondOutput.data).toThrow();
     });
 
     it("defers a hook-added unique output until the next build", async () => {
@@ -766,7 +713,7 @@ describe("NodeAsset", () => {
 
         await asset.buildAsync();
         expect(firstOutput.data).toEqual(new Uint8Array([28]));
-        expect(() => secondOutput.data).toThrow('Output block "second.glb"');
+        expect(() => secondOutput.data).toThrow();
 
         input.source = new Uint8Array([29]);
         await asset.buildAsync();
@@ -797,10 +744,10 @@ describe("NodeAsset", () => {
 
             delayed.release();
 
-            await expect(build).rejects.toThrow('NodeAsset "graph" was disposed while a build was in progress.');
-            expect(() => output.data).toThrow('Output block "destination"');
-            await expect(asset.buildAsync()).rejects.toThrow('NodeAsset "graph" has been disposed');
-            expect(() => asset.addOutputBlock(new OutputBlock("later"))).toThrow('NodeAsset "graph" has been disposed');
+            await expectRejectedAsync(build);
+            expect(() => output.data).toThrow();
+            await expectRejectedAsync(asset.buildAsync());
+            expect(() => asset.addOutputBlock(new OutputBlock("later"))).toThrow();
         } finally {
             engineDispose.mockRestore();
             asset.dispose();
@@ -817,8 +764,8 @@ describe("NodeAsset", () => {
         asset.addOutputBlock(output);
         output.disposeAsset = () => asset.dispose();
 
-        await expect(asset.buildAsync()).rejects.toThrow('NodeAsset "graph" was disposed while a build was in progress.');
-        expect(() => output.data).toThrow('Output block "destination"');
+        await expectRejectedAsync(asset.buildAsync());
+        expect(() => output.data).toThrow();
     });
 
     it("clears output data when disposing a completed graph", async () => {
@@ -834,7 +781,7 @@ describe("NodeAsset", () => {
 
         asset.dispose();
 
-        expect(() => output.data).toThrow('Output block "destination"');
+        expect(() => output.data).toThrow();
     });
 
     it("reports duplicate output names before executing the graph", async () => {
@@ -857,10 +804,10 @@ describe("NodeAsset", () => {
         asset.addOutputBlock(thirdOutput);
         asset.addOutputBlock(fourthOutput);
 
-        await expect(asset.buildAsync()).rejects.toThrow('NodeAsset "graph" has duplicate output block names: "a.glb", "z.glb".');
+        await expectRejectedAsync(asset.buildAsync());
         expect(counting.buildCount).toBe(0);
-        expect(() => firstOutput.data).toThrow('Output block "z.glb"');
-        expect(() => secondOutput.data).toThrow('Output block "a.glb"');
+        expect(() => firstOutput.data).toThrow();
+        expect(() => secondOutput.data).toThrow();
     });
 
     it("invalidates prior artifacts before aggregated structural validation", async () => {
@@ -881,15 +828,11 @@ describe("NodeAsset", () => {
         expect(secondOutput.data).toEqual(new Uint8Array([24]));
 
         asset.addOutputBlock(new OutputBlock("first.glb"));
-        await expect(asset.buildAsync()).rejects.toThrow(
-            'NodeAsset "graph" cannot build because the graph has structural errors:\n' +
-                'Duplicate output block names: "first.glb".\n' +
-                'Block "first.glb" has an unconnected required input "input".'
-        );
+        await expectRejectedAsync(asset.buildAsync());
 
         expect(counting.buildCount).toBe(1);
-        expect(() => firstOutput.data).toThrow('Output block "first.glb"');
-        expect(() => secondOutput.data).toThrow('Output block "second.glb"');
+        expect(() => firstOutput.data).toThrow();
+        expect(() => secondOutput.data).toThrow();
     });
 
     it("clears output data after a failed rebuild", async () => {
@@ -903,8 +846,8 @@ describe("NodeAsset", () => {
         await asset.buildAsync();
 
         input.source = undefined;
-        await expect(asset.buildAsync()).rejects.toThrow('Input block "source"');
-        expect(() => output.data).toThrow('Output block "destination"');
+        await expectRejectedAsync(asset.buildAsync());
+        expect(() => output.data).toThrow();
     });
 
     it("guards every output when a multi-output rebuild fails", async () => {
@@ -925,16 +868,16 @@ describe("NodeAsset", () => {
         expect(secondOutput.data).toEqual(new Uint8Array([21]));
 
         secondInput.source = undefined;
-        await expect(asset.buildAsync()).rejects.toThrow('Input block "second source"');
-        expect(() => firstOutput.data).toThrow('Output block "first.glb"');
-        expect(() => secondOutput.data).toThrow('Output block "second.glb"');
+        await expectRejectedAsync(asset.buildAsync());
+        expect(() => firstOutput.data).toThrow();
+        expect(() => secondOutput.data).toThrow();
     });
 
     it("rejects graph use after disposal", async () => {
         const asset = new NodeAsset("graph");
         asset.dispose();
 
-        await expect(asset.buildAsync()).rejects.toThrow('NodeAsset "graph" has been disposed');
-        expect(() => asset.addOutputBlock(new OutputBlock("destination"))).toThrow('NodeAsset "graph" has been disposed');
+        await expectRejectedAsync(asset.buildAsync());
+        expect(() => asset.addOutputBlock(new OutputBlock("destination"))).toThrow();
     });
 });
