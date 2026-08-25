@@ -156,6 +156,19 @@ class PublishingOutputBlock extends OutputBlock {
     }
 }
 
+class MicrotaskDisposingOutputBlock extends OutputBlock {
+    public disposeAsset: (() => void) | undefined;
+
+    protected override async _buildAsync(): Promise<void> {
+        await super._buildAsync();
+        queueMicrotask(() => {
+            queueMicrotask(() => {
+                queueMicrotask(() => this.disposeAsset?.());
+            });
+        });
+    }
+}
+
 class DelayedOutputBlock extends OutputBlock {
     public readonly started: Promise<void>;
 
@@ -261,17 +274,13 @@ describe("NodeAsset", () => {
         asset.addOutputBlock(output);
 
         const error = await asset.buildAsync().catch((reason: unknown) => reason);
-
         expect(error).toBeInstanceOf(Error);
-        if (!(error instanceof Error)) {
-            return;
-        }
-
-        expect(error.message).toBe(
-            'NodeAsset "graph" cannot build because the graph has structural errors:\n' +
+        expect(error).toMatchObject({
+            message:
+                'NodeAsset "graph" cannot build because the graph has structural errors:\n' +
                 'Block "left" has an unconnected required input "input".\n' +
-                'Block "merge" has an unconnected required input "right".'
-        );
+                'Block "merge" has an unconnected required input "right".',
+        });
         expect(left.buildCount).toBe(0);
         expect(merge.buildCount).toBe(0);
         expect(output.buildCount).toBe(0);
@@ -434,12 +443,10 @@ describe("NodeAsset", () => {
 
         try {
             const error = await asset.buildAsync().catch((reason: unknown) => reason);
-
             expect(error).toBeInstanceOf(Error);
             if (!(error instanceof Error)) {
-                return;
+                throw new Error("Expected the custom block failure to be an Error.");
             }
-
             expect(error.message).toBe('Block "custom" failed: custom failure');
             expect(error.cause).toBe(cause);
         } finally {
@@ -458,12 +465,10 @@ describe("NodeAsset", () => {
 
         try {
             const error = await asset.buildAsync().catch((reason: unknown) => reason);
-
             expect(error).toBeInstanceOf(Error);
             if (!(error instanceof Error)) {
-                return;
+                throw new Error("Expected the primitive block failure to be wrapped in an Error.");
             }
-
             expect(error.message).toBe('Block "primitive" failed: primitive failure');
             expect(error.cause).toBe(cause);
         } finally {
@@ -800,6 +805,20 @@ describe("NodeAsset", () => {
             engineDispose.mockRestore();
             asset.dispose();
         }
+    });
+
+    it("rejects disposal between the final block check and successful publication", async () => {
+        const input = new InputBlock("source");
+        input.source = new Uint8Array([30]);
+        const output = new MicrotaskDisposingOutputBlock("destination");
+        input.output.connectTo(output.input);
+
+        const asset = new NodeAsset("graph");
+        asset.addOutputBlock(output);
+        output.disposeAsset = () => asset.dispose();
+
+        await expect(asset.buildAsync()).rejects.toThrow('NodeAsset "graph" was disposed while a build was in progress.');
+        expect(() => output.data).toThrow('Output block "destination"');
     });
 
     it("clears output data when disposing a completed graph", async () => {

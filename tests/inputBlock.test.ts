@@ -118,10 +118,12 @@ describe("InputBlock", () => {
 
         try {
             const error = await graph.asset.buildAsync().catch((reason: unknown) => reason);
-
             expect(error).toBeInstanceOf(Error);
-            expect(error).toHaveProperty("cause", cause);
-            expect(error).toHaveProperty("message", `Input block "source" failed to load URL "${url}": Failed to parse URL`);
+            if (!(error instanceof Error)) {
+                throw new Error("Expected the URL load failure to be an Error.");
+            }
+            expect(error.message).toBe(`Input block "source" failed to load URL "${url}": Failed to parse URL`);
+            expect(error.cause).toBe(cause);
         } finally {
             fetchSpy.mockRestore();
             graph.asset.dispose();
@@ -134,12 +136,12 @@ describe("InputBlock", () => {
         const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 404, statusText: "Not Found" }));
 
         try {
-            const error = await graph.asset.buildAsync().catch((reason: unknown) => reason);
-
-            expect(error).toBeInstanceOf(Error);
-            expect(error).toHaveProperty("message", `Input block "source" failed to load URL "${url}": Received HTTP 404 Not Found.`);
-            expect(error).toHaveProperty("cause");
-            expect(error).toHaveProperty("cause.message", "Received HTTP 404 Not Found.");
+            await expect(graph.asset.buildAsync()).rejects.toMatchObject({
+                cause: {
+                    message: "Received HTTP 404 Not Found.",
+                },
+                message: `Input block "source" failed to load URL "${url}": Received HTTP 404 Not Found.`,
+            });
         } finally {
             fetchSpy.mockRestore();
             graph.asset.dispose();

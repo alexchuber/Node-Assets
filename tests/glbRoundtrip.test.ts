@@ -116,14 +116,11 @@ describe("GLB roundtrip", () => {
         try {
             const error = await asset.buildAsync().catch((reason: unknown) => reason);
             expect(error).toBeInstanceOf(Error);
-            if (!(error instanceof Error)) {
-                return;
-            }
-
-            expect(error.message).toBe(
-                'NodeAsset "graph" cannot build because the graph has structural errors:\n' +
-                    'Block "parse" output "output" produces a SceneAsset value that is moved to its consumer and cannot feed multiple consumers in v0.'
-            );
+            expect(error).toMatchObject({
+                message:
+                    'NodeAsset "graph" cannot build because the graph has structural errors:\n' +
+                    'Block "parse" output "output" produces a SceneAsset value that is moved to its consumer and cannot feed multiple consumers in v0.',
+            });
             expect(publicImportCalls).toHaveLength(0);
             expect(serializeGlb).not.toHaveBeenCalled();
             expect(() => firstOutput.data).toThrow('Output block "first.glb"');
@@ -153,17 +150,12 @@ describe("GLB roundtrip", () => {
         publicImportCalls.length = 0;
         const serializeGlb = vi.spyOn(GLTF2Export, "GLBAsync");
         try {
-            const error = await asset.buildAsync().catch((reason: unknown) => reason);
-            expect(error).toBeInstanceOf(Error);
-            if (!(error instanceof Error)) {
-                return;
-            }
-
-            expect(error.message).toBe(
-                'NodeAsset "graph" cannot build because the graph has structural errors:\n' +
+            await expect(asset.buildAsync()).rejects.toMatchObject({
+                message:
+                    'NodeAsset "graph" cannot build because the graph has structural errors:\n' +
                     'Block "parse" has an unconnected required input "input".\n' +
-                    'Block "parse" output "output" produces a SceneAsset value that is moved to its consumer and cannot feed multiple consumers in v0.'
-            );
+                    'Block "parse" output "output" produces a SceneAsset value that is moved to its consumer and cannot feed multiple consumers in v0.',
+            });
             expect(publicImportCalls).toHaveLength(0);
             expect(serializeGlb).not.toHaveBeenCalled();
             expect(() => firstOutput.data).toThrow('Output block "first.glb"');
@@ -193,18 +185,13 @@ describe("GLB roundtrip", () => {
         publicImportCalls.length = 0;
         const serializeGlb = vi.spyOn(GLTF2Export, "GLBAsync");
         try {
-            const error = await asset.buildAsync().catch((reason: unknown) => reason);
-            expect(error).toBeInstanceOf(Error);
-            if (!(error instanceof Error)) {
-                return;
-            }
-
-            expect(error.message).toBe(
-                'NodeAsset "graph" cannot build because the graph has structural errors:\n' +
+            await expect(asset.buildAsync()).rejects.toMatchObject({
+                message:
+                    'NodeAsset "graph" cannot build because the graph has structural errors:\n' +
                     'Duplicate output block names: "duplicate.glb".\n' +
                     'Block "parse" has an unconnected required input "input".\n' +
-                    'Block "parse" output "output" produces a SceneAsset value that is moved to its consumer and cannot feed multiple consumers in v0.'
-            );
+                    'Block "parse" output "output" produces a SceneAsset value that is moved to its consumer and cannot feed multiple consumers in v0.',
+            });
             expect(publicImportCalls).toHaveLength(0);
             expect(serializeGlb).not.toHaveBeenCalled();
             expect(() => firstOutput.data).toThrow('Output block "duplicate.glb"');
@@ -229,17 +216,8 @@ describe("GLB roundtrip", () => {
 
         publicImportCalls.length = 0;
         try {
-            const forwardError = await forward.asset.buildAsync().catch((reason: unknown) => reason);
-            const reverseError = await reverse.asset.buildAsync().catch((reason: unknown) => reason);
-
-            expect(forwardError).toBeInstanceOf(Error);
-            expect(reverseError).toBeInstanceOf(Error);
-            if (!(forwardError instanceof Error) || !(reverseError instanceof Error)) {
-                return;
-            }
-
-            expect(forwardError.message).toBe(expected);
-            expect(reverseError.message).toBe(expected);
+            await expect(forward.asset.buildAsync()).rejects.toMatchObject({ message: expected });
+            await expect(reverse.asset.buildAsync()).rejects.toMatchObject({ message: expected });
             expect(publicImportCalls).toHaveLength(0);
             for (const output of [...forward.outputs, ...reverse.outputs]) {
                 expect(() => output.data).toThrow(`Output block "${output.name}"`);
@@ -935,32 +913,7 @@ describe("GLB roundtrip", () => {
         const importStartedPromise = new Promise<void>((resolve) => {
             importStarted = resolve;
         });
-        const disposalOrder: string[] = [];
-        const originalContainerDispose = captureDispose(AssetContainer.prototype);
-        const originalMeshDispose = captureDispose(Mesh.prototype);
-        const originalGeometryDispose = captureDispose(Geometry.prototype);
-        const originalSceneDispose = captureDispose(Scene.prototype);
-        const originalEngineDispose = captureDispose(NullEngine.prototype);
-        const containerDispose = vi.spyOn(AssetContainer.prototype, "dispose").mockImplementation(function (this: AssetContainer): void {
-            disposalOrder.push("container");
-            originalContainerDispose(this);
-        });
-        const meshDispose = vi.spyOn(Mesh.prototype, "dispose").mockImplementation(function (this: Mesh): void {
-            disposalOrder.push("mesh");
-            originalMeshDispose(this);
-        });
-        const geometryDispose = vi.spyOn(Geometry.prototype, "dispose").mockImplementation(function (this: Geometry): void {
-            disposalOrder.push("geometry");
-            originalGeometryDispose(this);
-        });
-        const sceneDispose = vi.spyOn(Scene.prototype, "dispose").mockImplementation(function (this: Scene): void {
-            originalSceneDispose(this);
-            disposalOrder.push("scene");
-        });
-        const engineDispose = vi.spyOn(NullEngine.prototype, "dispose").mockImplementation(function (this: NullEngine): void {
-            disposalOrder.push("engine");
-            originalEngineDispose(this);
-        });
+        const disposal = trackResourceDisposalOrder();
         const serialize = vi.spyOn(GLTF2Export, "GLBAsync");
         publicImportOverride.current = (_source, scene, options) => {
             const mesh = MeshBuilder.CreateBox("post-ready-error", { size: 1 }, scene);
@@ -987,15 +940,11 @@ describe("GLB roundtrip", () => {
             await expect(build).rejects.toThrow('Parse GLB block "parse" failed: forced post-ready loader failure');
             expect(serialize).not.toHaveBeenCalled();
             expect(() => graph.output.data).toThrow('Output block "destination"');
-            expect(disposalOrder).toEqual(["container", "mesh", "geometry", "scene", "engine"]);
+            expect(disposal.entries).toEqual(["container", "mesh", "geometry", "scene", "engine"]);
         } finally {
             publicImportOverride.current = undefined;
             serialize.mockRestore();
-            geometryDispose.mockRestore();
-            meshDispose.mockRestore();
-            containerDispose.mockRestore();
-            sceneDispose.mockRestore();
-            engineDispose.mockRestore();
+            disposal.restore();
             graph.asset.dispose();
         }
     });
@@ -1121,11 +1070,7 @@ describe("GLB roundtrip", () => {
         const externalResourceUrl = "https://example.test/assets/meshes/fixture.bin";
         const externalGlb = withExternalBufferUri(fixture.bytes, "meshes/fixture.bin");
         const binaryChunk = getGlbBinaryChunk(fixture.bytes);
-        const input = new InputBlock("source");
-        const parse = new ParseGLBBlock("parse");
-        const serialize = new SerializeGLBBlock("serialize");
-        const output = new OutputBlock("destination");
-        const asset = new NodeAsset("graph");
+        const graph = createRoundtripGraph(sourceUrl);
         const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation((request) => {
             const url = getRequestUrl(request);
             if (url === sourceUrl) {
@@ -1139,20 +1084,14 @@ describe("GLB roundtrip", () => {
         });
         vi.stubGlobal("XMLHttpRequest", FetchBackedXMLHttpRequest);
 
-        input.source = sourceUrl;
-        input.output.connectTo(parse.input);
-        parse.output.connectTo(serialize.input);
-        serialize.output.connectTo(output.input);
-        asset.addOutputBlock(output);
-
         try {
-            await expect(asset.buildAsync()).resolves.toBeUndefined();
+            await expect(graph.asset.buildAsync()).resolves.toBeUndefined();
             expect(fetchSpy.mock.calls.map(([request]) => getRequestUrl(request))).toEqual([sourceUrl, externalResourceUrl]);
-            expect(new TextDecoder().decode(output.data.subarray(0, 4))).toBe("glTF");
+            expect(new TextDecoder().decode(graph.output.data.subarray(0, 4))).toBe("glTF");
         } finally {
             vi.unstubAllGlobals();
             fetchSpy.mockRestore();
-            asset.dispose();
+            graph.asset.dispose();
         }
     });
 
@@ -1330,29 +1269,19 @@ describe("GLB roundtrip", () => {
 
     it("supports repeated builds with fresh headless scenes and engines", async () => {
         const fixture = await createGlbFixtureAsync();
-        const input = new InputBlock("source");
-        const parse = new ParseGLBBlock("parse");
-        const serialize = new SerializeGLBBlock("serialize");
-        const output = new OutputBlock("destination");
-        const asset = new NodeAsset("graph");
-
-        input.source = fixture.bytes;
-        input.output.connectTo(parse.input);
-        parse.output.connectTo(serialize.input);
-        serialize.output.connectTo(output.input);
-        asset.addOutputBlock(output);
+        const graph = createRoundtripGraph(fixture.bytes);
 
         try {
-            await asset.buildAsync();
-            const firstResult = output.data;
-            await asset.buildAsync();
-            const secondResult = output.data;
+            await graph.asset.buildAsync();
+            const firstResult = graph.output.data;
+            await graph.asset.buildAsync();
+            const secondResult = graph.output.data;
 
             expect(secondResult).not.toBe(firstResult);
             expect(await readGlbStructureAsync(firstResult)).toEqual(fixture.structure);
             expect(await readGlbStructureAsync(secondResult)).toEqual(fixture.structure);
         } finally {
-            asset.dispose();
+            graph.asset.dispose();
         }
     });
 
@@ -1400,10 +1329,11 @@ describe("GLB roundtrip", () => {
         try {
             const error = await buildRoundtripAsync(fixture.bytes).catch((reason: unknown) => reason);
             expect(error).toBeInstanceOf(Error);
-            if (error instanceof Error) {
-                expect(error.message).toBe('Serialize GLB block "serialize" failed: forced serializer failure');
-                expect(error.cause).toBe(failure);
+            if (!(error instanceof Error)) {
+                throw new Error("Expected the serializer failure to be an Error.");
             }
+            expect(error.message).toBe('Serialize GLB block "serialize" failed: forced serializer failure');
+            expect(error.cause).toBe(failure);
             expect(publicImportCalls).toHaveLength(1);
             expect(containerDispose).toHaveBeenCalledTimes(1);
             expect(meshDispose).toHaveBeenCalled();
@@ -1426,32 +1356,7 @@ describe("GLB roundtrip", () => {
     it("disposes resources allocated before import failure exactly once", async () => {
         const fixture = await createGlbFixtureAsync();
         publicImportCalls.length = 0;
-        const disposalOrder: string[] = [];
-        const originalContainerDispose = captureDispose(AssetContainer.prototype);
-        const originalMeshDispose = captureDispose(Mesh.prototype);
-        const originalGeometryDispose = captureDispose(Geometry.prototype);
-        const originalSceneDispose = captureDispose(Scene.prototype);
-        const originalEngineDispose = captureDispose(NullEngine.prototype);
-        const containerDispose = vi.spyOn(AssetContainer.prototype, "dispose").mockImplementation(function (this: AssetContainer): void {
-            disposalOrder.push("container");
-            originalContainerDispose(this);
-        });
-        const meshDispose = vi.spyOn(Mesh.prototype, "dispose").mockImplementation(function (this: Mesh): void {
-            disposalOrder.push("mesh");
-            originalMeshDispose(this);
-        });
-        const geometryDispose = vi.spyOn(Geometry.prototype, "dispose").mockImplementation(function (this: Geometry): void {
-            disposalOrder.push("geometry");
-            originalGeometryDispose(this);
-        });
-        const sceneDispose = vi.spyOn(Scene.prototype, "dispose").mockImplementation(function (this: Scene): void {
-            originalSceneDispose(this);
-            disposalOrder.push("scene");
-        });
-        const engineDispose = vi.spyOn(NullEngine.prototype, "dispose").mockImplementation(function (this: NullEngine): void {
-            disposalOrder.push("engine");
-            originalEngineDispose(this);
-        });
+        const disposal = trackResourceDisposalOrder();
         publicImportOverride.current = (_source, scene, options) => {
             const mesh = MeshBuilder.CreateBox("partial-import", { size: 1 }, scene);
             SceneLoader.OnPluginActivatedObservable.notifyObservers(createLoaderControl(mesh, getCorrelationMarker(options)).plugin);
@@ -1461,52 +1366,18 @@ describe("GLB roundtrip", () => {
         try {
             await expect(buildRoundtripAsync(fixture.bytes)).rejects.toThrow('Parse GLB block "parse" failed: forced import failure');
             expect(publicImportCalls).toHaveLength(1);
-            expect(disposalOrder).toEqual(["container", "mesh", "geometry", "scene", "engine"]);
-            expect(containerDispose).toHaveBeenCalledTimes(1);
-            expect(meshDispose).toHaveBeenCalledTimes(1);
-            expect(geometryDispose).toHaveBeenCalledTimes(1);
-            expect(sceneDispose).toHaveBeenCalledTimes(1);
-            expect(engineDispose).toHaveBeenCalledTimes(1);
+            expect(disposal.entries).toEqual(["container", "mesh", "geometry", "scene", "engine"]);
         } finally {
             publicImportOverride.current = undefined;
             publicImportCalls.length = 0;
-            geometryDispose.mockRestore();
-            meshDispose.mockRestore();
-            containerDispose.mockRestore();
-            sceneDispose.mockRestore();
-            engineDispose.mockRestore();
+            disposal.restore();
         }
     });
 
     it("disposes resources allocated before completion failure exactly once", async () => {
         const fixture = await createGlbFixtureAsync();
         publicImportCalls.length = 0;
-        const disposalOrder: string[] = [];
-        const originalContainerDispose = captureDispose(AssetContainer.prototype);
-        const originalMeshDispose = captureDispose(Mesh.prototype);
-        const originalGeometryDispose = captureDispose(Geometry.prototype);
-        const originalSceneDispose = captureDispose(Scene.prototype);
-        const originalEngineDispose = captureDispose(NullEngine.prototype);
-        const containerDispose = vi.spyOn(AssetContainer.prototype, "dispose").mockImplementation(function (this: AssetContainer): void {
-            disposalOrder.push("container");
-            originalContainerDispose(this);
-        });
-        const meshDispose = vi.spyOn(Mesh.prototype, "dispose").mockImplementation(function (this: Mesh): void {
-            disposalOrder.push("mesh");
-            originalMeshDispose(this);
-        });
-        const geometryDispose = vi.spyOn(Geometry.prototype, "dispose").mockImplementation(function (this: Geometry): void {
-            disposalOrder.push("geometry");
-            originalGeometryDispose(this);
-        });
-        const sceneDispose = vi.spyOn(Scene.prototype, "dispose").mockImplementation(function (this: Scene): void {
-            originalSceneDispose(this);
-            disposalOrder.push("scene");
-        });
-        const engineDispose = vi.spyOn(NullEngine.prototype, "dispose").mockImplementation(function (this: NullEngine): void {
-            disposalOrder.push("engine");
-            originalEngineDispose(this);
-        });
+        const disposal = trackResourceDisposalOrder();
         publicImportOverride.current = async (_source, scene, options) => {
             const mesh = MeshBuilder.CreateBox("partial-completion", { size: 1 }, scene);
             SceneLoader.OnPluginActivatedObservable.notifyObservers(createLoaderControl(mesh, getCorrelationMarker(options)).plugin);
@@ -1519,45 +1390,26 @@ describe("GLB roundtrip", () => {
                 'Parse GLB block "parse" failed: forced import completion failure after partial-completion allocation'
             );
             expect(publicImportCalls).toHaveLength(1);
-            expect(disposalOrder).toEqual(["container", "mesh", "geometry", "scene", "engine"]);
-            expect(containerDispose).toHaveBeenCalledTimes(1);
-            expect(meshDispose).toHaveBeenCalledTimes(1);
-            expect(geometryDispose).toHaveBeenCalledTimes(1);
-            expect(sceneDispose).toHaveBeenCalledTimes(1);
-            expect(engineDispose).toHaveBeenCalledTimes(1);
+            expect(disposal.entries).toEqual(["container", "mesh", "geometry", "scene", "engine"]);
         } finally {
             publicImportOverride.current = undefined;
             publicImportCalls.length = 0;
-            geometryDispose.mockRestore();
-            meshDispose.mockRestore();
-            containerDispose.mockRestore();
-            sceneDispose.mockRestore();
-            engineDispose.mockRestore();
+            disposal.restore();
         }
     });
 
     it("includes the parse block name when loading fails", async () => {
-        const input = new InputBlock("source");
-        const parse = new ParseGLBBlock("parse");
-        const serialize = new SerializeGLBBlock("serialize");
-        const output = new OutputBlock("destination");
-        const asset = new NodeAsset("graph");
+        const graph = createRoundtripGraph(new Uint8Array([0, 1, 2, 3]));
 
-        input.source = new Uint8Array([0, 1, 2, 3]);
-        input.output.connectTo(parse.input);
-        parse.output.connectTo(serialize.input);
-        serialize.output.connectTo(output.input);
-        asset.addOutputBlock(output);
-
-        const error = await asset.buildAsync().catch((reason: unknown) => reason);
+        const error = await graph.asset.buildAsync().catch((reason: unknown) => reason);
         expect(error).toBeInstanceOf(Error);
         if (error instanceof Error) {
             expect(error.message).toMatch(/^Parse GLB block "parse" failed:/);
             expect(error.message.match(/Parse GLB block "parse"/g)).toHaveLength(1);
         }
-        expect(() => output.data).toThrow('Output block "destination"');
+        expect(() => graph.output.data).toThrow('Output block "destination"');
 
-        asset.dispose();
+        graph.asset.dispose();
     });
 
     it("rejects GLBs that require the disabled spec-gloss extension", async () => {
@@ -1578,29 +1430,19 @@ describe("GLB roundtrip", () => {
 
     it("clears failed GLB output and permits a later rebuild", async () => {
         const fixture = await createGlbFixtureAsync();
-        const input = new InputBlock("source");
-        const parse = new ParseGLBBlock("parse");
-        const serialize = new SerializeGLBBlock("serialize");
-        const output = new OutputBlock("destination");
-        const asset = new NodeAsset("graph");
-
-        input.source = fixture.bytes;
-        input.output.connectTo(parse.input);
-        parse.output.connectTo(serialize.input);
-        serialize.output.connectTo(output.input);
-        asset.addOutputBlock(output);
+        const graph = createRoundtripGraph(fixture.bytes);
 
         try {
-            await asset.buildAsync();
-            input.source = new Uint8Array([0, 1, 2, 3]);
-            await expect(asset.buildAsync()).rejects.toThrow('Parse GLB block "parse" failed');
-            expect(() => output.data).toThrow('Output block "destination"');
+            await graph.asset.buildAsync();
+            graph.input.source = new Uint8Array([0, 1, 2, 3]);
+            await expect(graph.asset.buildAsync()).rejects.toThrow('Parse GLB block "parse" failed');
+            expect(() => graph.output.data).toThrow('Output block "destination"');
 
-            input.source = fixture.bytes;
-            await asset.buildAsync();
-            expect(await readGlbStructureAsync(output.data)).toEqual(fixture.structure);
+            graph.input.source = fixture.bytes;
+            await graph.asset.buildAsync();
+            expect(await readGlbStructureAsync(graph.output.data)).toEqual(fixture.structure);
         } finally {
-            asset.dispose();
+            graph.asset.dispose();
         }
     });
 });
@@ -1629,7 +1471,7 @@ function createRoundtripGraph(source: InputSource): RoundtripGraph {
     serialize.output.connectTo(output.input);
     asset.addOutputBlock(output);
 
-    return { asset, output };
+    return { asset, input, output };
 }
 
 interface GlbDocument {
@@ -1798,6 +1640,7 @@ class FetchBackedXMLHttpRequest {
 
 interface RoundtripGraph {
     readonly asset: NodeAsset;
+    readonly input: InputBlock;
     readonly output: OutputBlock;
 }
 
@@ -1924,6 +1767,51 @@ function expectVectorToBeClose(actual: readonly number[], expected: readonly num
     for (const [index, expectedValue] of expected.entries()) {
         expect(actual[index]).toBeCloseTo(expectedValue, 5);
     }
+}
+
+interface ResourceDisposalOrder {
+    readonly entries: readonly string[];
+    restore(): void;
+}
+
+function trackResourceDisposalOrder(): ResourceDisposalOrder {
+    const entries: string[] = [];
+    const originalContainerDispose = captureDispose(AssetContainer.prototype);
+    const originalMeshDispose = captureDispose(Mesh.prototype);
+    const originalGeometryDispose = captureDispose(Geometry.prototype);
+    const originalSceneDispose = captureDispose(Scene.prototype);
+    const originalEngineDispose = captureDispose(NullEngine.prototype);
+    const containerDispose = vi.spyOn(AssetContainer.prototype, "dispose").mockImplementation(function (this: AssetContainer): void {
+        entries.push("container");
+        originalContainerDispose(this);
+    });
+    const meshDispose = vi.spyOn(Mesh.prototype, "dispose").mockImplementation(function (this: Mesh): void {
+        entries.push("mesh");
+        originalMeshDispose(this);
+    });
+    const geometryDispose = vi.spyOn(Geometry.prototype, "dispose").mockImplementation(function (this: Geometry): void {
+        entries.push("geometry");
+        originalGeometryDispose(this);
+    });
+    const sceneDispose = vi.spyOn(Scene.prototype, "dispose").mockImplementation(function (this: Scene): void {
+        originalSceneDispose(this);
+        entries.push("scene");
+    });
+    const engineDispose = vi.spyOn(NullEngine.prototype, "dispose").mockImplementation(function (this: NullEngine): void {
+        entries.push("engine");
+        originalEngineDispose(this);
+    });
+
+    return {
+        entries,
+        restore() {
+            geometryDispose.mockRestore();
+            meshDispose.mockRestore();
+            containerDispose.mockRestore();
+            sceneDispose.mockRestore();
+            engineDispose.mockRestore();
+        },
+    };
 }
 
 function captureDispose<T extends { dispose(): void }>(prototype: T): (instance: T) => void {
