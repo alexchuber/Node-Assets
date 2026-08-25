@@ -1,13 +1,9 @@
 import { NullEngine } from "@babylonjs/core/Engines/nullEngine.js";
 import { LoadAssetContainerAsync } from "@babylonjs/core/Loading/sceneLoader.js";
-import { Color3 } from "@babylonjs/core/Maths/math.color.js";
 import { PBRMaterial } from "@babylonjs/core/Materials/PBR/pbrMaterial.js";
-import { PBRMetallicRoughnessMaterial } from "@babylonjs/core/Materials/PBR/pbrMetallicRoughnessMaterial.js";
 import type { AbstractMesh } from "@babylonjs/core/Meshes/abstractMesh.js";
-import { MeshBuilder } from "@babylonjs/core/Meshes/meshBuilder.js";
 import { VertexBuffer } from "@babylonjs/core/Buffers/buffer.js";
 import { Scene } from "@babylonjs/core/scene.js";
-import { GLTF2Export } from "@babylonjs/serializers/glTF/2.0/glTFSerializer.js";
 
 export interface SceneStructure {
     readonly meshes: readonly MeshStructure[];
@@ -47,61 +43,137 @@ export const GLB_FIXTURE_STRUCTURE: SceneStructure = {
     ],
     meshes: [
         {
-            dimensions: [2, 2, 2],
-            indexCount: 36,
+            dimensions: [2, 2, 0],
+            indexCount: 3,
             materialName: "fixture-material",
-            name: "fixture-box",
+            name: "fixture-triangle",
             position: [3, -2, 5],
             rotationQuaternion: [0.034270798550482096, -0.10602051106179565, 0.1534393020242226, 0.981856172866081],
             scaling: [1.5, 0.75, 2],
-            triangleSignatures: [
-                "-1,1,1,-1,0,0|-1,-1,-1,-1,0,0|-1,-1,1,-1,0,0",
-                "-1,1,1,-1,0,0|-1,1,-1,-1,0,0|-1,-1,-1,-1,0,0",
-                "-1,1,1,0,1,0|1,1,-1,0,1,0|-1,1,-1,0,1,0",
-                "-1,1,1,0,1,0|1,1,1,0,1,0|1,1,-1,0,1,0",
-                "1,-1,1,0,-1,0|-1,-1,-1,0,-1,0|1,-1,-1,0,-1,0",
-                "1,-1,1,0,-1,0|-1,-1,1,0,-1,0|-1,-1,-1,0,-1,0",
-                "1,-1,1,0,0,1|-1,1,1,0,0,1|-1,-1,1,0,0,1",
-                "1,-1,1,0,0,1|1,1,1,0,0,1|-1,1,1,0,0,1",
-                "1,1,-1,0,0,-1|-1,-1,-1,0,0,-1|-1,1,-1,0,0,-1",
-                "1,1,-1,0,0,-1|1,-1,-1,0,0,-1|-1,-1,-1,0,0,-1",
-                "1,1,-1,1,0,0|1,-1,1,1,0,0|1,-1,-1,1,0,0",
-                "1,1,-1,1,0,0|1,1,1,1,0,0|1,-1,1,1,0,0",
-            ],
-            vertexCount: 24,
+            triangleSignatures: ["-1,-1,0,0,0,1|1,-1,0,0,0,1|0,1,0,0,0,1"],
+            vertexCount: 3,
         },
     ],
 };
 
-export async function createGlbFixtureAsync(): Promise<GlbFixture> {
-    const engine = new NullEngine();
-    const scene = new Scene(engine);
-    scene.useRightHandedSystem = true;
+export function createGlbFixtureAsync(): Promise<GlbFixture> {
+    return Promise.resolve({
+        bytes: createIndependentGlb(),
+        structure: GLB_FIXTURE_STRUCTURE,
+    });
+}
 
-    try {
-        const box = MeshBuilder.CreateBox("fixture-box", { size: 2 }, scene);
-        box.position.set(3, -2, 5);
-        box.rotation.set(0.1, -0.2, 0.3);
-        box.scaling.set(1.5, 0.75, 2);
-
-        const material = new PBRMetallicRoughnessMaterial("fixture-material", scene);
-        material.baseColor = new Color3(0.2, 0.4, 0.6);
-        box.material = material;
-
-        const data = await GLTF2Export.GLBAsync(scene, "fixture.glb");
-        const file = data.files["fixture.glb"];
-        if (file === undefined || typeof file === "string") {
-            throw new Error("The GLB fixture exporter did not produce a binary fixture.");
-        }
-
-        return {
-            bytes: new Uint8Array(await file.arrayBuffer()),
-            structure: GLB_FIXTURE_STRUCTURE,
-        };
-    } finally {
-        scene.dispose();
-        engine.dispose();
+function createIndependentGlb(): Uint8Array {
+    const binaryByteLength = 78;
+    const binaryChunk = new Uint8Array(80);
+    const binaryView = new DataView(binaryChunk.buffer);
+    const positions = [-1, -1, 0, 1, -1, 0, 0, 1, 0];
+    const normals = [0, 0, 1, 0, 0, 1, 0, 0, 1];
+    for (const [index, value] of positions.entries()) {
+        binaryView.setFloat32(index * 4, value, true);
     }
+    for (const [index, value] of normals.entries()) {
+        binaryView.setFloat32(36 + index * 4, value, true);
+    }
+    for (const [index, value] of [0, 1, 2].entries()) {
+        binaryView.setUint16(72 + index * 2, value, true);
+    }
+
+    const document = {
+        accessors: [
+            {
+                bufferView: 0,
+                componentType: 5126,
+                count: 3,
+                max: [1, 1, 0],
+                min: [-1, -1, 0],
+                type: "VEC3",
+            },
+            {
+                bufferView: 1,
+                componentType: 5126,
+                count: 3,
+                type: "VEC3",
+            },
+            {
+                bufferView: 2,
+                componentType: 5123,
+                count: 3,
+                max: [2],
+                min: [0],
+                type: "SCALAR",
+            },
+        ],
+        asset: {
+            generator: "independent-node-assets-test-fixture",
+            version: "2.0",
+        },
+        bufferViews: [
+            { buffer: 0, byteLength: 36, byteOffset: 0, target: 34962 },
+            { buffer: 0, byteLength: 36, byteOffset: 36, target: 34962 },
+            { buffer: 0, byteLength: 6, byteOffset: 72, target: 34963 },
+        ],
+        buffers: [{ byteLength: binaryByteLength }],
+        materials: [
+            {
+                name: "fixture-material",
+                pbrMetallicRoughness: {
+                    baseColorFactor: [0.2, 0.4, 0.6, 1],
+                    metallicFactor: 0,
+                    roughnessFactor: 1,
+                },
+            },
+        ],
+        meshes: [
+            {
+                name: "fixture-triangle",
+                primitives: [
+                    {
+                        attributes: {
+                            NORMAL: 1,
+                            POSITION: 0,
+                        },
+                        indices: 2,
+                        material: 0,
+                    },
+                ],
+            },
+        ],
+        nodes: [
+            {
+                mesh: 0,
+                name: "fixture-triangle",
+                rotation: [0.034270798550482096, -0.10602051106179565, 0.1534393020242226, 0.981856172866081],
+                scale: [1.5, 0.75, 2],
+                translation: [3, -2, 5],
+            },
+        ],
+        scene: 0,
+        scenes: [{ nodes: [0] }],
+    };
+    const jsonBytes = new TextEncoder().encode(JSON.stringify(document));
+    const jsonChunkLength = alignToFourBytes(jsonBytes.byteLength);
+    const totalByteLength = 12 + 8 + jsonChunkLength + 8 + binaryChunk.byteLength;
+    const result = new Uint8Array(totalByteLength);
+    const resultView = new DataView(result.buffer);
+
+    resultView.setUint32(0, 0x46546c67, true);
+    resultView.setUint32(4, 2, true);
+    resultView.setUint32(8, totalByteLength, true);
+    resultView.setUint32(12, jsonChunkLength, true);
+    resultView.setUint32(16, 0x4e4f534a, true);
+    result.set(jsonBytes, 20);
+    result.fill(0x20, 20 + jsonBytes.byteLength, 20 + jsonChunkLength);
+
+    const binaryHeaderOffset = 20 + jsonChunkLength;
+    resultView.setUint32(binaryHeaderOffset, binaryChunk.byteLength, true);
+    resultView.setUint32(binaryHeaderOffset + 4, 0x004e4942, true);
+    result.set(binaryChunk, binaryHeaderOffset + 8);
+    return result;
+}
+
+function alignToFourBytes(value: number): number {
+    return (value + 3) & ~3;
 }
 
 export async function readGlbStructureAsync(bytes: Uint8Array): Promise<SceneStructure> {

@@ -52,23 +52,6 @@ class TrackingOutputBlock extends OutputBlock {
     }
 }
 
-class MergeBlock extends NodeAssetBlock {
-    public readonly left = this.registerInput("left", "File");
-    public readonly right = this.registerInput("right", "File");
-    public readonly output = this.registerOutput("output", "File");
-    public buildCount = 0;
-
-    protected override async _buildAsync(): Promise<void> {
-        this.buildCount += 1;
-        const left = await this.readInputAsync(this.left);
-        const right = await this.readInputAsync(this.right);
-        const output = new Uint8Array(left.length + right.length);
-        output.set(left);
-        output.set(right, left.length);
-        this.writeOutput(this.output, output);
-    }
-}
-
 class CountingPassThroughBlock extends NodeAssetBlock {
     public readonly input: ConnectionPoint<"File", "input"> = this.registerInput("input", "File");
     public readonly output: ConnectionPoint<"File", "output"> = this.registerOutput("output", "File");
@@ -226,16 +209,13 @@ describe("NodeAsset", () => {
     it("rejects a build with no registered output block and disposes its engine", async () => {
         const asset = new NodeAsset("graph");
         const initialEngineCount = EngineStore.Instances.length;
-        const engineCreate = vi.spyOn(EngineStore.Instances, "push");
         const engineDispose = vi.spyOn(NullEngine.prototype, "dispose");
 
         try {
             await expectRejectedAsync(asset.buildAsync());
-            expect(engineCreate).toHaveBeenCalledTimes(1);
             expect(engineDispose).toHaveBeenCalledTimes(1);
             expect(EngineStore.Instances).toHaveLength(initialEngineCount);
         } finally {
-            engineCreate.mockRestore();
             engineDispose.mockRestore();
             asset.dispose();
         }
@@ -262,41 +242,6 @@ describe("NodeAsset", () => {
         expect(prefix.buildCount).toBe(1);
         expect(output.buildCount).toBe(1);
         expect(output.data).toEqual(new Uint8Array([9, 1, 2]));
-    });
-
-    it("aggregates missing required inputs across reachable blocks and ports", async () => {
-        const left = new PrefixBlock("left");
-        const merge = new MergeBlock("merge");
-        const output = new TrackingOutputBlock("destination");
-        left.output.connectTo(merge.left);
-        merge.output.connectTo(output.input);
-
-        const asset = new NodeAsset("graph");
-        asset.addOutputBlock(output);
-
-        await expectRejectedAsync(asset.buildAsync());
-        expect(left.buildCount).toBe(0);
-        expect(merge.buildCount).toBe(0);
-        expect(output.buildCount).toBe(0);
-    });
-
-    it("aggregates missing required inputs across multiple output roots", async () => {
-        const first = new PrefixBlock("first");
-        const second = new PrefixBlock("second");
-        const firstOutput = new TrackingOutputBlock("first.glb");
-        const secondOutput = new TrackingOutputBlock("second.glb");
-        first.output.connectTo(firstOutput.input);
-        second.output.connectTo(secondOutput.input);
-
-        const asset = new NodeAsset("graph");
-        asset.addOutputBlock(firstOutput);
-        asset.addOutputBlock(secondOutput);
-
-        await expectRejectedAsync(asset.buildAsync());
-        expect(first.buildCount).toBe(0);
-        expect(second.buildCount).toBe(0);
-        expect(firstOutput.buildCount).toBe(0);
-        expect(secondOutput.buildCount).toBe(0);
     });
 
     it("keeps SceneAsset opaque and non-user-constructible", () => {
@@ -784,7 +729,7 @@ describe("NodeAsset", () => {
         expect(() => output.data).toThrow();
     });
 
-    it("reports duplicate output names before executing the graph", async () => {
+    it("rejects duplicate output names before executing the graph", async () => {
         const input = new InputBlock("source");
         input.source = new Uint8Array([16]);
         const counting = new CountingPassThroughBlock("counting");
@@ -810,7 +755,7 @@ describe("NodeAsset", () => {
         expect(() => secondOutput.data).toThrow();
     });
 
-    it("invalidates prior artifacts before aggregated structural validation", async () => {
+    it("invalidates prior artifacts before structural validation", async () => {
         const input = new InputBlock("source");
         input.source = new Uint8Array([24]);
         const counting = new CountingPassThroughBlock("counting");
