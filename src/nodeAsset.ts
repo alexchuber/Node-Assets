@@ -1,6 +1,6 @@
 import { NullEngine } from "@babylonjs/core/Engines/nullEngine.js";
 import { AssetGraphBuildState } from "./assetGraphBuildState";
-import type { OutputBlock } from "./outputBlock";
+import type { OutputBlock } from "./blocks/outputBlock";
 
 export class NodeAsset {
     public readonly name: string;

@@ -1,5 +1,5 @@
-import { type ConnectionPoint, type File } from "./connectionPoint";
-import type { AssetGraphBuildState } from "./assetGraphBuildState";
+import { type ConnectionPoint, type File } from "../connectionPoint";
+import type { AssetGraphBuildState } from "../assetGraphBuildState";
 import { getNodeAssetBlockBuildState, NodeAssetBlock } from "./nodeAssetBlock";
 
 export class OutputBlock extends NodeAssetBlock {

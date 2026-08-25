@@ -1,5 +1,5 @@
 import type { ConnectionPoint, ConnectionPointType, ConnectionPointValue } from "./connectionPoint";
-import type { NodeAssetBlock } from "./nodeAssetBlock";
+import type { NodeAssetBlock } from "./blocks/nodeAssetBlock";
 import type { NullEngine } from "@babylonjs/core/Engines/nullEngine.js";
 import type { SceneAsset } from "./sceneAsset";
 

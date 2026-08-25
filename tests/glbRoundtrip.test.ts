@@ -15,7 +15,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { InputBlock, NodeAsset, NodeAssetBlock, OutputBlock, ParseGLBBlock, SerializeGLBBlock, type InputSource } from "../src/index";
 import { type ConnectionPoint } from "../src/connectionPoint";
-import { getNodeAssetBlockBuildState } from "../src/nodeAssetBlock";
+import { getNodeAssetBlockBuildState } from "../src/blocks/nodeAssetBlock";
 import { createGlbFixtureAsync, readGlbStructureAsync, readGlbStructureWithSwappedFirstTriangleAsync } from "./glbFixture";
 
 type ImportMeshAsync = typeof SceneLoaderTypes.ImportMeshAsync;

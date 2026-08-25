@@ -1,5 +1,5 @@
-import { ConnectionPoint, type ConnectionPointType, type ConnectionPointValue } from "./connectionPoint";
-import type { AssetGraphBuildState } from "./assetGraphBuildState";
+import { ConnectionPoint, type ConnectionPointType, type ConnectionPointValue } from "../connectionPoint";
+import type { AssetGraphBuildState } from "../assetGraphBuildState";
 
 export abstract class NodeAssetBlock {
     public readonly name: string;

@@ -1,4 +1,4 @@
-import { type ConnectionPoint } from "./connectionPoint";
+import { type ConnectionPoint } from "../connectionPoint";
 import { createNodeAssetBlockError, getNodeAssetBlockBuildState, getNodeAssetBlockErrorReason, NodeAssetBlock } from "./nodeAssetBlock";
 
 export type InputSource = string | ArrayBuffer | ArrayBufferView;

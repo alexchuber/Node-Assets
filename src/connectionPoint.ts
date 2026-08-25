@@ -1,4 +1,4 @@
-import type { NodeAssetBlock } from "./nodeAssetBlock";
+import type { NodeAssetBlock } from "./blocks/nodeAssetBlock";
 import type { SceneAsset } from "./sceneAsset";
 
 export type ConnectionPointType = "File" | "SceneAsset";

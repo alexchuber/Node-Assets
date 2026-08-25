@@ -1,6 +1,6 @@
-import { type ConnectionPoint } from "./connectionPoint";
+import { type ConnectionPoint } from "../connectionPoint";
 import { createNodeAssetBlockError, getNodeAssetBlockBuildState, getNodeAssetBlockErrorReason, NodeAssetBlock } from "./nodeAssetBlock";
-import { SceneAsset } from "./sceneAsset";
+import { SceneAsset } from "../sceneAsset";
 import type { IObserver } from "@babylonjs/core/Misc/observable.js";
 import type { Scene } from "@babylonjs/core/scene.js";
 import type * as SceneLoaderTypes from "@babylonjs/core/Loading/sceneLoader.js";
