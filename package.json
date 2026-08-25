@@ -49,6 +49,8 @@
         "format": "prettier --write \"src/**/*.ts\" \"tests/**/*.ts\" \"*.config.ts\" \"*.config.mjs\"",
         "format:check": "prettier --check \"src/**/*.ts\" \"tests/**/*.ts\" \"*.config.ts\" \"*.config.mjs\"",
         "test": "vitest run",
+        "test:unit": "vitest run --exclude \"tests/**/*.integration.test.ts\"",
+        "test:integration": "vitest run tests/cdnRoundtrip.integration.test.ts",
         "test:watch": "vitest",
         "docs": "typedoc"
     },
@@ -60,6 +62,7 @@
     "devDependencies": {
         "@eslint/js": "^10.0.1",
         "@types/node": "^26.1.1",
+        "@vitest/coverage-v8": "4.1.10",
         "eslint": "^10.7.0",
         "eslint-config-prettier": "^10.1.8",
         "eslint-plugin-prettier": "^5.5.6",

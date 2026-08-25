@@ -1,0 +1,828 @@
+import { describe, expect, it, vi } from "vitest";
+import { EngineStore } from "@babylonjs/core/Engines/engineStore.js";
+import { NullEngine } from "@babylonjs/core/Engines/nullEngine.js";
+
+import { InputBlock, NodeAsset, NodeAssetBlock, OutputBlock, SceneAsset, type ConnectionPoint } from "../src/index";
+import { expectRejectedAsync } from "./testUtils";
+
+class SceneInputBlock extends NodeAssetBlock {
+    public readonly input: ConnectionPoint<"SceneAsset", "input"> = this.registerInput("input", "SceneAsset");
+
+    protected override _buildAsync(): Promise<void> {
+        return Promise.resolve();
+    }
+}
+
+class PrefixBlock extends NodeAssetBlock {
+    public readonly input: ConnectionPoint<"File", "input"> = this.registerInput("input", "File");
+    public readonly output: ConnectionPoint<"File", "output"> = this.registerOutput("output", "File");
+    public buildCount = 0;
+
+    protected override async _buildAsync(): Promise<void> {
+        this.buildCount += 1;
+        const input = await this.readInputAsync(this.input);
+        const output = new Uint8Array(input.length + 1);
+        output[0] = 9;
+        output.set(input, 1);
+        this.writeOutput(this.output, output);
+    }
+}
+
+class FailingBlock extends NodeAssetBlock {
+    public readonly output: ConnectionPoint<"File", "output"> = this.registerOutput("output", "File");
+
+    public constructor(
+        name: string,
+        private readonly _reason: unknown
+    ) {
+        super(name);
+    }
+
+    protected override _buildAsync(): Promise<void> {
+        throw this._reason;
+    }
+}
+
+class TrackingOutputBlock extends OutputBlock {
+    public buildCount = 0;
+
+    protected override async _buildAsync(): Promise<void> {
+        this.buildCount += 1;
+        await super._buildAsync();
+    }
+}
+
+class CountingPassThroughBlock extends NodeAssetBlock {
+    public readonly input: ConnectionPoint<"File", "input"> = this.registerInput("input", "File");
+    public readonly output: ConnectionPoint<"File", "output"> = this.registerOutput("output", "File");
+    public buildCount = 0;
+
+    protected override async _buildAsync(): Promise<void> {
+        this.buildCount += 1;
+        this.writeOutput(this.output, await this.readInputAsync(this.input));
+    }
+}
+
+class DuplicateInputBlock extends NodeAssetBlock {
+    public readonly firstInput: ConnectionPoint<"File", "input"> = this.registerInput("first input", "File");
+    public readonly secondInput: ConnectionPoint<"File", "input"> = this.registerInput("second input", "File");
+    public readonly output: ConnectionPoint<"File", "output"> = this.registerOutput("output", "File");
+
+    protected override async _buildAsync(): Promise<void> {
+        const firstInput = await this.readInputAsync(this.firstInput);
+        const secondInput = await this.readInputAsync(this.secondInput);
+        const output = new Uint8Array(firstInput.length + secondInput.length);
+        output.set(firstInput);
+        output.set(secondInput, firstInput.length);
+        this.writeOutput(this.output, output);
+    }
+}
+
+class SingleUseBlock extends NodeAssetBlock {
+    public readonly input: ConnectionPoint<"File", "input"> = this.registerInput("input", "File");
+    public readonly output: ConnectionPoint<"File", "output"> = this.registerOutput("output", "File");
+
+    private _buildCount = 0;
+
+    protected override async _buildAsync(): Promise<void> {
+        this._buildCount += 1;
+        if (this._buildCount === 1) {
+            this.writeOutput(this.output, await this.readInputAsync(this.input));
+        }
+    }
+}
+
+class DelayedBlock extends NodeAssetBlock {
+    public readonly input: ConnectionPoint<"File", "input"> = this.registerInput("input", "File");
+    public readonly output: ConnectionPoint<"File", "output"> = this.registerOutput("output", "File");
+    public readonly started: Promise<void>;
+
+    private _releaseBuild!: () => void;
+    private readonly _releasePromise: Promise<void>;
+    private _buildCount = 0;
+
+    public constructor(name: string) {
+        super(name);
+        this._releasePromise = new Promise<void>((resolve) => {
+            this._releaseBuild = resolve;
+        });
+        this.started = new Promise<void>((resolve) => {
+            this._startBuild = resolve;
+        });
+    }
+
+    private _startBuild!: () => void;
+
+    public release(): void {
+        this._releaseBuild();
+    }
+
+    protected override async _buildAsync(): Promise<void> {
+        this._buildCount += 1;
+        this._startBuild();
+        const input = await this.readInputAsync(this.input);
+        if (this._buildCount === 1) {
+            await this._releasePromise;
+        }
+
+        this.writeOutput(this.output, input);
+    }
+}
+
+class PublishingOutputBlock extends OutputBlock {
+    public afterPublish: (() => Promise<void>) | undefined;
+
+    protected override async _buildAsync(): Promise<void> {
+        await super._buildAsync();
+        if (this.afterPublish !== undefined) {
+            await this.afterPublish();
+        }
+    }
+}
+
+class MicrotaskDisposingOutputBlock extends OutputBlock {
+    public disposeAsset: (() => void) | undefined;
+
+    protected override async _buildAsync(): Promise<void> {
+        await super._buildAsync();
+        queueMicrotask(() => {
+            queueMicrotask(() => {
+                queueMicrotask(() => this.disposeAsset?.());
+            });
+        });
+    }
+}
+
+class DelayedOutputBlock extends OutputBlock {
+    public readonly started: Promise<void>;
+
+    private readonly _releasePromise: Promise<void>;
+    private _releaseBuild!: () => void;
+    private _startBuild!: () => void;
+
+    public constructor(name: string) {
+        super(name);
+        this._releasePromise = new Promise<void>((resolve) => {
+            this._releaseBuild = resolve;
+        });
+        this.started = new Promise<void>((resolve) => {
+            this._startBuild = resolve;
+        });
+    }
+
+    public release(): void {
+        this._releaseBuild();
+    }
+
+    protected override async _buildAsync(): Promise<void> {
+        await super._buildAsync();
+        this._startBuild();
+        await this._releasePromise;
+    }
+}
+
+class GatedOutputBlock extends OutputBlock {
+    public started: Promise<void> = Promise.resolve();
+
+    private _releaseBuild!: () => void;
+    private _startBuild!: () => void;
+
+    public release(): void {
+        this._releaseBuild();
+    }
+
+    protected override async _buildAsync(): Promise<void> {
+        const releasePromise = new Promise<void>((resolve) => {
+            this._releaseBuild = resolve;
+        });
+        this.started = new Promise<void>((resolve) => {
+            this._startBuild = resolve;
+        });
+
+        await super._buildAsync();
+        this._startBuild();
+        await releasePromise;
+    }
+}
+
+describe("NodeAsset", () => {
+    it("rejects a build with no registered output block and disposes its engine", async () => {
+        const asset = new NodeAsset("graph");
+        const initialEngineCount = EngineStore.Instances.length;
+        const engineDispose = vi.spyOn(NullEngine.prototype, "dispose");
+
+        try {
+            await expectRejectedAsync(asset.buildAsync());
+            expect(engineDispose).toHaveBeenCalledTimes(1);
+            expect(EngineStore.Instances).toHaveLength(initialEngineCount);
+        } finally {
+            engineDispose.mockRestore();
+            asset.dispose();
+        }
+    });
+
+    it("rejects an unconnected required input before executing the graph", async () => {
+        const source = new InputBlock("source");
+        source.source = new Uint8Array([1, 2]);
+        const prefix = new PrefixBlock("prefix");
+        const output = new TrackingOutputBlock("destination");
+        prefix.output.connectTo(output.input);
+
+        const asset = new NodeAsset("graph");
+        asset.addOutputBlock(output);
+
+        await expectRejectedAsync(asset.buildAsync());
+        expect(prefix.buildCount).toBe(0);
+        expect(output.buildCount).toBe(0);
+        expect(() => output.data).toThrow();
+
+        source.output.connectTo(prefix.input);
+        await asset.buildAsync();
+
+        expect(prefix.buildCount).toBe(1);
+        expect(output.buildCount).toBe(1);
+        expect(output.data).toEqual(new Uint8Array([9, 1, 2]));
+    });
+
+    it("keeps SceneAsset opaque and non-user-constructible", () => {
+        expect(SceneAsset).toBeDefined();
+        expect(() => {
+            // @ts-expect-error SceneAsset instances are created by graph blocks only.
+            new SceneAsset(Symbol());
+        }).toThrow();
+    });
+
+    it("flows input bytes to an output block", async () => {
+        const bytes = new Uint8Array([0, 1, 2, 255]);
+        const input = new InputBlock("source");
+        input.source = bytes;
+        const output = new OutputBlock("destination");
+
+        input.output.connectTo(output.input);
+
+        const asset = new NodeAsset("graph");
+        asset.addOutputBlock(output);
+
+        await asset.buildAsync();
+
+        expect(output.data).toEqual(bytes);
+    });
+
+    it("guards output data until a graph builds successfully", () => {
+        const output = new OutputBlock("destination");
+
+        expect(() => output.data).toThrow();
+    });
+
+    it("rejects incompatible connection point types at runtime and compile time", () => {
+        const input = new InputBlock("source");
+        const sceneInput = new SceneInputBlock("scene consumer");
+
+        expect(() => {
+            // @ts-expect-error File and SceneAsset connection points are incompatible.
+            input.output.connectTo(sceneInput.input);
+        }).toThrow();
+    });
+
+    it("rejects output-to-output connections at connect time", () => {
+        const source = new InputBlock("source");
+        const otherSource = new InputBlock("other source");
+
+        expect(() => {
+            // @ts-expect-error Output connection points can only connect to inputs.
+            source.output.connectTo(otherSource.output);
+        }).toThrow();
+    });
+
+    it("rejects input-to-input connections at connect time", () => {
+        const first = new OutputBlock("first");
+        const second = new OutputBlock("second");
+
+        expect(() => {
+            // @ts-expect-error Input connection points cannot be sources.
+            first.input.connectTo(second.input);
+        }).toThrow();
+    });
+
+    it("rejects a second connection to an occupied input at connect time", () => {
+        const firstSource = new InputBlock("first source");
+        const secondSource = new InputBlock("second source");
+        const destination = new OutputBlock("destination");
+        firstSource.output.connectTo(destination.input);
+
+        expect(() => {
+            secondSource.output.connectTo(destination.input);
+        }).toThrow();
+    });
+
+    it("rejects a connection that would create a cycle at connect time", () => {
+        const first = new PrefixBlock("first");
+        const middle = new PrefixBlock("middle");
+        const last = new PrefixBlock("last");
+        first.output.connectTo(middle.input);
+        middle.output.connectTo(last.input);
+
+        expect(() => {
+            last.output.connectTo(first.input);
+        }).toThrow();
+    });
+
+    it("supports custom blocks through the exported authoring seam", async () => {
+        const input = new InputBlock("source");
+        input.source = new Uint8Array([1, 2]);
+        const prefix = new PrefixBlock("prefix");
+        const output = new OutputBlock("destination");
+
+        input.output.connectTo(prefix.input);
+        prefix.output.connectTo(output.input);
+
+        const asset = new NodeAsset("graph");
+        asset.addOutputBlock(output);
+        await asset.buildAsync();
+
+        expect(output.data).toEqual(new Uint8Array([9, 1, 2]));
+    });
+
+    it("rejects custom block Error failures without publishing output", async () => {
+        const failing = new FailingBlock("custom", new Error("custom failure"));
+        const output = new OutputBlock("destination");
+        failing.output.connectTo(output.input);
+
+        const asset = new NodeAsset("graph");
+        asset.addOutputBlock(output);
+
+        try {
+            await expectRejectedAsync(asset.buildAsync());
+            expect(() => output.data).toThrow();
+        } finally {
+            asset.dispose();
+        }
+    });
+
+    it("rejects custom block primitive failures without publishing output", async () => {
+        const failing = new FailingBlock("primitive", "primitive failure");
+        const output = new OutputBlock("destination");
+        failing.output.connectTo(output.input);
+
+        const asset = new NodeAsset("graph");
+        asset.addOutputBlock(output);
+
+        try {
+            await expectRejectedAsync(asset.buildAsync());
+            expect(() => output.data).toThrow();
+        } finally {
+            asset.dispose();
+        }
+    });
+
+    it("evaluates a shared File-producing block once when its output fans out", async () => {
+        const input = new InputBlock("source");
+        input.source = new Uint8Array([1, 2]);
+        const counting = new CountingPassThroughBlock("counting");
+        const duplicate = new DuplicateInputBlock("duplicate");
+        const output = new OutputBlock("destination");
+
+        input.output.connectTo(counting.input);
+        counting.output.connectTo(duplicate.firstInput);
+        counting.output.connectTo(duplicate.secondInput);
+        duplicate.output.connectTo(output.input);
+
+        const asset = new NodeAsset("graph");
+        asset.addOutputBlock(output);
+        await asset.buildAsync();
+
+        expect(output.data).toEqual(new Uint8Array([1, 2, 1, 2]));
+        expect(counting.buildCount).toBe(1);
+    });
+
+    it("builds multiple output blocks and retains each artifact", async () => {
+        const input = new InputBlock("source");
+        input.source = new Uint8Array([3, 4]);
+        const firstOutput = new OutputBlock("first.glb");
+        const secondOutput = new OutputBlock("second.glb");
+
+        input.output.connectTo(firstOutput.input);
+        input.output.connectTo(secondOutput.input);
+
+        const asset = new NodeAsset("graph");
+        asset.addOutputBlock(firstOutput);
+        asset.addOutputBlock(secondOutput);
+        await asset.buildAsync();
+
+        expect(firstOutput.data).toEqual(new Uint8Array([3, 4]));
+        expect(secondOutput.data).toEqual(new Uint8Array([3, 4]));
+    });
+
+    it("uses fresh build state when rebuilding the graph", async () => {
+        const input = new InputBlock("source");
+        const output = new OutputBlock("destination");
+        input.output.connectTo(output.input);
+
+        const asset = new NodeAsset("graph");
+        asset.addOutputBlock(output);
+
+        input.source = new Uint8Array([1]);
+        await asset.buildAsync();
+        input.source = new Uint8Array([2, 3]);
+        await asset.buildAsync();
+
+        expect(output.data).toEqual(new Uint8Array([2, 3]));
+    });
+
+    it("refreshes every output on a sequential rebuild", async () => {
+        const input = new InputBlock("source");
+        const counting = new CountingPassThroughBlock("counting");
+        const firstOutput = new OutputBlock("first.glb");
+        const secondOutput = new OutputBlock("second.glb");
+        input.output.connectTo(counting.input);
+        counting.output.connectTo(firstOutput.input);
+        counting.output.connectTo(secondOutput.input);
+
+        const asset = new NodeAsset("graph");
+        asset.addOutputBlock(firstOutput);
+        asset.addOutputBlock(secondOutput);
+
+        input.source = new Uint8Array([17]);
+        await asset.buildAsync();
+        input.source = new Uint8Array([18, 19]);
+        await asset.buildAsync();
+
+        expect(firstOutput.data).toEqual(new Uint8Array([18, 19]));
+        expect(secondOutput.data).toEqual(new Uint8Array([18, 19]));
+        expect(counting.buildCount).toBe(2);
+    });
+
+    it("does not reuse transient values after a failed rebuild", async () => {
+        const input = new InputBlock("source");
+        input.source = new Uint8Array([4, 5]);
+        const singleUse = new SingleUseBlock("single use");
+        const output = new OutputBlock("destination");
+
+        input.output.connectTo(singleUse.input);
+        singleUse.output.connectTo(output.input);
+
+        const asset = new NodeAsset("graph");
+        asset.addOutputBlock(output);
+        await asset.buildAsync();
+        expect(output.data).toEqual(new Uint8Array([4, 5]));
+
+        await expectRejectedAsync(asset.buildAsync());
+        expect(() => output.data).toThrow();
+    });
+
+    it("rejects overlapping builds without corrupting the original build", async () => {
+        const input = new InputBlock("source");
+        input.source = new Uint8Array([6, 7]);
+        const delayed = new DelayedBlock("delayed");
+        const output = new OutputBlock("destination");
+        input.output.connectTo(delayed.input);
+        delayed.output.connectTo(output.input);
+
+        const asset = new NodeAsset("graph");
+        asset.addOutputBlock(output);
+        const firstBuild = asset.buildAsync();
+        await delayed.started;
+
+        const secondBuild = asset.buildAsync();
+        delayed.release();
+
+        await expectRejectedAsync(secondBuild);
+        await expect(firstBuild).resolves.toBeUndefined();
+        expect(output.data).toEqual(new Uint8Array([6, 7]));
+    });
+
+    it("rejects concurrent builds that share a block across assets", async () => {
+        const input = new InputBlock("source");
+        input.source = new Uint8Array([12, 13]);
+        const delayed = new DelayedBlock("delayed");
+        const output = new OutputBlock("shared destination");
+        input.output.connectTo(delayed.input);
+        delayed.output.connectTo(output.input);
+
+        const firstAsset = new NodeAsset("first graph");
+        const secondAsset = new NodeAsset("second graph");
+        firstAsset.addOutputBlock(output);
+        secondAsset.addOutputBlock(output);
+
+        const firstBuild = firstAsset.buildAsync();
+        await delayed.started;
+        const secondBuild = secondAsset.buildAsync();
+        delayed.release();
+
+        const results = await Promise.allSettled([firstBuild, secondBuild]);
+        expect(results[0]?.status).toBe("fulfilled");
+        expect(results[1]?.status).toBe("rejected");
+        expect(output.data).toEqual(new Uint8Array([12, 13]));
+
+        await secondAsset.buildAsync();
+        expect(output.data).toEqual(new Uint8Array([12, 13]));
+    });
+
+    it("preserves a published output when a competing graph starts afterward", async () => {
+        const input = new InputBlock("source");
+        input.source = new Uint8Array([14, 15]);
+        const output = new PublishingOutputBlock("shared destination");
+        input.output.connectTo(output.input);
+
+        const firstAsset = new NodeAsset("first graph");
+        const secondAsset = new NodeAsset("second graph");
+        firstAsset.addOutputBlock(output);
+        secondAsset.addOutputBlock(output);
+
+        let competingBuildRejected = false;
+        output.afterPublish = async () => {
+            try {
+                await secondAsset.buildAsync();
+            } catch {
+                competingBuildRejected = true;
+            }
+        };
+
+        await expect(firstAsset.buildAsync()).resolves.toBeUndefined();
+        expect(competingBuildRejected).toBe(true);
+        expect(output.data).toEqual(new Uint8Array([14, 15]));
+    });
+
+    it("does not clear another graph's published output after a multi-output overlap", async () => {
+        const firstInput = new InputBlock("first source");
+        firstInput.source = new Uint8Array([22]);
+        const secondInput = new InputBlock("second source");
+        secondInput.source = new Uint8Array([23]);
+        const firstOutput = new PublishingOutputBlock("first destination");
+        const sharedOutput = new DelayedOutputBlock("shared destination");
+        firstInput.output.connectTo(firstOutput.input);
+        secondInput.output.connectTo(sharedOutput.input);
+
+        const firstAsset = new NodeAsset("first graph");
+        const secondAsset = new NodeAsset("second graph");
+        firstAsset.addOutputBlock(firstOutput);
+        firstAsset.addOutputBlock(sharedOutput);
+        secondAsset.addOutputBlock(sharedOutput);
+
+        let competingBuild: Promise<void> | undefined;
+        firstOutput.afterPublish = async () => {
+            competingBuild = secondAsset.buildAsync();
+            await sharedOutput.started;
+        };
+
+        await expectRejectedAsync(firstAsset.buildAsync());
+        expect(sharedOutput.data).toEqual(new Uint8Array([23]));
+        sharedOutput.release();
+        if (competingBuild !== undefined) {
+            await expect(competingBuild).resolves.toBeUndefined();
+        }
+    });
+
+    it("preserves a newer shared output when an older graph is disposed", async () => {
+        const input = new InputBlock("source");
+        const sharedOutput = new GatedOutputBlock("shared destination");
+        const firstOnlyOutput = new OutputBlock("first-only destination");
+        input.output.connectTo(sharedOutput.input);
+        input.output.connectTo(firstOnlyOutput.input);
+
+        const firstAsset = new NodeAsset("first graph");
+        const secondAsset = new NodeAsset("second graph");
+        firstAsset.addOutputBlock(sharedOutput);
+        firstAsset.addOutputBlock(firstOnlyOutput);
+        secondAsset.addOutputBlock(sharedOutput);
+
+        input.source = new Uint8Array([25]);
+        const firstBuild = firstAsset.buildAsync();
+        await sharedOutput.started;
+        sharedOutput.release();
+        await expect(firstBuild).resolves.toBeUndefined();
+
+        input.source = new Uint8Array([26]);
+        const secondBuild = secondAsset.buildAsync();
+        await sharedOutput.started;
+        expect(sharedOutput.data).toEqual(new Uint8Array([26]));
+
+        firstAsset.dispose();
+        expect(() => firstOnlyOutput.data).toThrow();
+        await expectRejectedAsync(firstAsset.buildAsync());
+        expect(sharedOutput.data).toEqual(new Uint8Array([26]));
+
+        sharedOutput.release();
+        await expect(secondBuild).resolves.toBeUndefined();
+        expect(sharedOutput.data).toEqual(new Uint8Array([26]));
+    });
+
+    it("snapshots output roots before a hook can add a duplicate", async () => {
+        const input = new InputBlock("source");
+        input.source = new Uint8Array([27]);
+        const firstOutput = new PublishingOutputBlock("artifact.glb");
+        const secondOutput = new OutputBlock("artifact.glb");
+        input.output.connectTo(firstOutput.input);
+        input.output.connectTo(secondOutput.input);
+
+        const asset = new NodeAsset("graph");
+        asset.addOutputBlock(firstOutput);
+        let hookCalls = 0;
+        firstOutput.afterPublish = () => {
+            hookCalls += 1;
+            if (hookCalls === 1) {
+                asset.addOutputBlock(secondOutput);
+            }
+            return Promise.resolve();
+        };
+
+        await expect(asset.buildAsync()).resolves.toBeUndefined();
+        expect(firstOutput.data).toEqual(new Uint8Array([27]));
+        expect(() => secondOutput.data).toThrow();
+        expect(hookCalls).toBe(1);
+
+        await expectRejectedAsync(asset.buildAsync());
+        expect(hookCalls).toBe(1);
+        expect(() => firstOutput.data).toThrow();
+        expect(() => secondOutput.data).toThrow();
+    });
+
+    it("defers a hook-added unique output until the next build", async () => {
+        const input = new InputBlock("source");
+        input.source = new Uint8Array([28]);
+        const firstOutput = new PublishingOutputBlock("first.glb");
+        const secondOutput = new OutputBlock("second.glb");
+        input.output.connectTo(firstOutput.input);
+        input.output.connectTo(secondOutput.input);
+
+        const asset = new NodeAsset("graph");
+        asset.addOutputBlock(firstOutput);
+        let outputAdded = false;
+        firstOutput.afterPublish = () => {
+            if (!outputAdded) {
+                outputAdded = true;
+                asset.addOutputBlock(secondOutput);
+            }
+            return Promise.resolve();
+        };
+
+        await asset.buildAsync();
+        expect(firstOutput.data).toEqual(new Uint8Array([28]));
+        expect(() => secondOutput.data).toThrow();
+
+        input.source = new Uint8Array([29]);
+        await asset.buildAsync();
+        expect(firstOutput.data).toEqual(new Uint8Array([29]));
+        expect(secondOutput.data).toEqual(new Uint8Array([29]));
+    });
+
+    it("disposes active build resources immediately and keeps disposal terminal", async () => {
+        const input = new InputBlock("source");
+        input.source = new Uint8Array([8, 9]);
+        const delayed = new DelayedBlock("delayed");
+        const output = new OutputBlock("destination");
+        input.output.connectTo(delayed.input);
+        delayed.output.connectTo(output.input);
+
+        const asset = new NodeAsset("graph");
+        asset.addOutputBlock(output);
+        const initialEngineCount = EngineStore.Instances.length;
+        const engineDispose = vi.spyOn(NullEngine.prototype, "dispose");
+        const build = asset.buildAsync();
+        await delayed.started;
+
+        try {
+            asset.dispose();
+            asset.dispose();
+            expect(engineDispose).toHaveBeenCalledTimes(1);
+            expect(EngineStore.Instances).toHaveLength(initialEngineCount);
+
+            delayed.release();
+
+            await expectRejectedAsync(build);
+            expect(() => output.data).toThrow();
+            await expectRejectedAsync(asset.buildAsync());
+            expect(() => asset.addOutputBlock(new OutputBlock("later"))).toThrow();
+        } finally {
+            engineDispose.mockRestore();
+            asset.dispose();
+        }
+    });
+
+    it("rejects disposal between the final block check and successful publication", async () => {
+        const input = new InputBlock("source");
+        input.source = new Uint8Array([30]);
+        const output = new MicrotaskDisposingOutputBlock("destination");
+        input.output.connectTo(output.input);
+
+        const asset = new NodeAsset("graph");
+        asset.addOutputBlock(output);
+        output.disposeAsset = () => asset.dispose();
+
+        await expectRejectedAsync(asset.buildAsync());
+        expect(() => output.data).toThrow();
+    });
+
+    it("clears output data when disposing a completed graph", async () => {
+        const input = new InputBlock("source");
+        input.source = new Uint8Array([10, 11]);
+        const output = new OutputBlock("destination");
+        input.output.connectTo(output.input);
+
+        const asset = new NodeAsset("graph");
+        asset.addOutputBlock(output);
+        await asset.buildAsync();
+        expect(output.data).toEqual(new Uint8Array([10, 11]));
+
+        asset.dispose();
+
+        expect(() => output.data).toThrow();
+    });
+
+    it("rejects duplicate output names before executing the graph", async () => {
+        const input = new InputBlock("source");
+        input.source = new Uint8Array([16]);
+        const counting = new CountingPassThroughBlock("counting");
+        const firstOutput = new OutputBlock("z.glb");
+        const secondOutput = new OutputBlock("a.glb");
+        const thirdOutput = new OutputBlock("z.glb");
+        const fourthOutput = new OutputBlock("a.glb");
+        input.output.connectTo(counting.input);
+        counting.output.connectTo(firstOutput.input);
+        counting.output.connectTo(secondOutput.input);
+        counting.output.connectTo(thirdOutput.input);
+        counting.output.connectTo(fourthOutput.input);
+
+        const asset = new NodeAsset("graph");
+        asset.addOutputBlock(firstOutput);
+        asset.addOutputBlock(secondOutput);
+        asset.addOutputBlock(thirdOutput);
+        asset.addOutputBlock(fourthOutput);
+
+        await expectRejectedAsync(asset.buildAsync());
+        expect(counting.buildCount).toBe(0);
+        expect(() => firstOutput.data).toThrow();
+        expect(() => secondOutput.data).toThrow();
+    });
+
+    it("invalidates prior artifacts before structural validation", async () => {
+        const input = new InputBlock("source");
+        input.source = new Uint8Array([24]);
+        const counting = new CountingPassThroughBlock("counting");
+        const firstOutput = new OutputBlock("first.glb");
+        const secondOutput = new OutputBlock("second.glb");
+        input.output.connectTo(counting.input);
+        counting.output.connectTo(firstOutput.input);
+        counting.output.connectTo(secondOutput.input);
+
+        const asset = new NodeAsset("graph");
+        asset.addOutputBlock(firstOutput);
+        asset.addOutputBlock(secondOutput);
+        await asset.buildAsync();
+        expect(firstOutput.data).toEqual(new Uint8Array([24]));
+        expect(secondOutput.data).toEqual(new Uint8Array([24]));
+
+        asset.addOutputBlock(new OutputBlock("first.glb"));
+        await expectRejectedAsync(asset.buildAsync());
+
+        expect(counting.buildCount).toBe(1);
+        expect(() => firstOutput.data).toThrow();
+        expect(() => secondOutput.data).toThrow();
+    });
+
+    it("clears output data after a failed rebuild", async () => {
+        const input = new InputBlock("source");
+        input.source = new Uint8Array([1]);
+        const output = new OutputBlock("destination");
+        input.output.connectTo(output.input);
+
+        const asset = new NodeAsset("graph");
+        asset.addOutputBlock(output);
+        await asset.buildAsync();
+
+        input.source = undefined;
+        await expectRejectedAsync(asset.buildAsync());
+        expect(() => output.data).toThrow();
+    });
+
+    it("guards every output when a multi-output rebuild fails", async () => {
+        const firstInput = new InputBlock("first source");
+        firstInput.source = new Uint8Array([20]);
+        const secondInput = new InputBlock("second source");
+        secondInput.source = new Uint8Array([21]);
+        const firstOutput = new OutputBlock("first.glb");
+        const secondOutput = new OutputBlock("second.glb");
+        firstInput.output.connectTo(firstOutput.input);
+        secondInput.output.connectTo(secondOutput.input);
+
+        const asset = new NodeAsset("graph");
+        asset.addOutputBlock(firstOutput);
+        asset.addOutputBlock(secondOutput);
+        await asset.buildAsync();
+        expect(firstOutput.data).toEqual(new Uint8Array([20]));
+        expect(secondOutput.data).toEqual(new Uint8Array([21]));
+
+        secondInput.source = undefined;
+        await expectRejectedAsync(asset.buildAsync());
+        expect(() => firstOutput.data).toThrow();
+        expect(() => secondOutput.data).toThrow();
+    });
+
+    it("rejects graph use after disposal", async () => {
+        const asset = new NodeAsset("graph");
+        asset.dispose();
+
+        await expectRejectedAsync(asset.buildAsync());
+        expect(() => asset.addOutputBlock(new OutputBlock("destination"))).toThrow();
+    });
+});
