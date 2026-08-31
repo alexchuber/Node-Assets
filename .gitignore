@@ -6,7 +6,7 @@ package-lock.json
 yarn.lock
 
 dist/
-docs/
+docs/typedocs
 test-results/
 *.tsbuildinfo
 .vite/
