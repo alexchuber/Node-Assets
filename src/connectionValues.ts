@@ -21,10 +21,13 @@ export type Artifact<TRepresentationKind extends RepresentationKind = Representa
 export type Scene<TRepresentationKind extends RepresentationKind = RepresentationKind> = ConnectionValue<PayloadKind.Scene, TRepresentationKind>;
 
 export interface GltfArtifact extends Artifact<RepresentationKind.GLTF> {
+    readonly container: GltfContainer;
     readonly data: Uint8Array;
     readonly fileName: string;
     readonly files: Readonly<Record<string, string | Blob | Uint8Array>>;
 }
+
+export type GltfContainer = "gltf" | "glb";
 
 export interface BabylonScene extends Scene<RepresentationKind.Babylon> {
     readonly scene: BabylonSceneObject;

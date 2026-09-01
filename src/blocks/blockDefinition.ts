@@ -5,13 +5,23 @@ declare const valueType: unique symbol;
 export interface ValueType<TValue> {
     readonly id: string;
     readonly [valueType]: TValue;
+    accepts(type: ValueType<unknown>): boolean;
     is(value: unknown): value is TValue;
 }
 
 export type ValueOf<TType extends ValueType<unknown>> = TType extends ValueType<infer TValue> ? TValue : never;
 
 export function defineValueType<TValue>(id: string, isValue: (value: unknown) => value is TValue): ValueType<TValue> {
-    return Object.freeze({ id, is: isValue }) as ValueType<TValue>;
+    const type = Object.freeze({ id, accepts: (candidate: ValueType<unknown>) => candidate === type, is: isValue }) as ValueType<TValue>;
+    return type;
+}
+
+export function oneOfValueTypes<const TTypes extends readonly [ValueType<unknown>, ...ValueType<unknown>[]]>(...types: TTypes): ValueType<ValueOf<TTypes[number]>> {
+    return Object.freeze({
+        id: types.map(({ id }) => id).join(" | "),
+        accepts: (candidate: ValueType<unknown>) => types.some((type) => type.accepts(candidate)),
+        is: (value: unknown): value is ValueOf<TTypes[number]> => types.some((type) => type.is(value)),
+    }) as ValueType<ValueOf<TTypes[number]>>;
 }
 
 declare const configType: unique symbol;
@@ -50,15 +60,15 @@ export interface _AnyBlockDefinition<TKind extends "input" | "transform" | "outp
     readonly resources: ResourceRequirements;
     readonly run?: unknown;
     readonly runAsync?: unknown;
-    readonly resolveBlock?: unknown;
+    readonly resolveRoute?: unknown;
 }
 
-type SwitchTarget<TInput extends ValueType<unknown>, TOutput extends ValueType<unknown>> =
-    | (_AnyBlockDefinition & { readonly input: TInput; readonly output: TOutput })
-    | {
-          readonly definition: _AnyBlockDefinition & { readonly input: TInput; readonly output: TOutput };
-          readonly config: Readonly<Record<string, unknown>>;
-      };
+/** @internal */
+export interface _RouteBlock {
+    readonly definition: _AnyBlockDefinition;
+    readonly config: Readonly<Record<string, unknown>>;
+    readonly name: string;
+}
 
 type Runner<TInput extends ValueType<unknown>, TOutput extends ValueType<unknown>, TConfig extends ConfigDefinition, TResources extends ResourceRequirements> =
     | {
@@ -86,15 +96,15 @@ type Definition<
     readonly resources: TResources;
 } & Runner<TInput, TOutput, TConfig, TResources>;
 
-type SwitchDefinition<TKind extends string, TInput extends ValueType<unknown>, TOutput extends ValueType<unknown>, TConfig extends ConfigDefinition> = {
-    readonly kind: TKind;
+type RoutedOutputDefinition<TInput extends ValueType<unknown>, TOutput extends ValueType<unknown>, TConfig extends ConfigDefinition> = {
+    readonly kind: "output";
     readonly type: string;
     readonly version: 1;
     readonly input: TInput;
     readonly output: TOutput;
     readonly config: TConfig;
     readonly resources: Record<never, never>;
-    readonly resolveBlock: (input: ValueOf<TInput>, config: ConfigValues<TConfig>) => SwitchTarget<TInput, TOutput>;
+    readonly resolveRoute: (sourceType: ValueType<unknown>, config: ConfigValues<TConfig>) => readonly _RouteBlock[];
     readonly run?: never;
     readonly runAsync?: never;
 };
@@ -122,23 +132,11 @@ export type OutputBlockDefinition<
 
 export type BlockDefinition = InputBlockDefinition | TransformBlockDefinition | OutputBlockDefinition;
 
-export type SwitchInputBlockDefinition<
+export type RoutedOutputBlockDefinition<
     TInput extends ValueType<unknown> = ValueType<unknown>,
     TOutput extends ValueType<unknown> = ValueType<unknown>,
     TConfig extends ConfigDefinition = ConfigDefinition,
-> = SwitchDefinition<"input", TInput, TOutput, TConfig>;
-
-export type SwitchTransformBlockDefinition<
-    TInput extends ValueType<unknown> = ValueType<unknown>,
-    TOutput extends ValueType<unknown> = ValueType<unknown>,
-    TConfig extends ConfigDefinition = ConfigDefinition,
-> = SwitchDefinition<"transform", TInput, TOutput, TConfig>;
-
-export type SwitchOutputBlockDefinition<
-    TInput extends ValueType<unknown> = ValueType<unknown>,
-    TOutput extends ValueType<unknown> = ValueType<unknown>,
-    TConfig extends ConfigDefinition = ConfigDefinition,
-> = SwitchDefinition<"output", TInput, TOutput, TConfig>;
+> = RoutedOutputDefinition<TInput, TOutput, TConfig>;
 
 type DefinitionOptions<TInput extends ValueType<unknown>, TOutput extends ValueType<unknown>, TConfig extends ConfigDefinition, TResources extends ResourceRequirements> = {
     readonly type: string;
@@ -148,12 +146,12 @@ type DefinitionOptions<TInput extends ValueType<unknown>, TOutput extends ValueT
     readonly resources?: TResources;
 } & Runner<TInput, TOutput, TConfig, TResources>;
 
-interface SwitchDefinitionOptions<TInput extends ValueType<unknown>, TOutput extends ValueType<unknown>, TConfig extends ConfigDefinition> {
+interface RoutedOutputDefinitionOptions<TInput extends ValueType<unknown>, TOutput extends ValueType<unknown>, TConfig extends ConfigDefinition> {
     readonly type: string;
     readonly input: TInput;
     readonly output: TOutput;
     readonly config?: TConfig;
-    readonly resolveBlock: (input: ValueOf<TInput>, config: ConfigValues<TConfig>) => SwitchTarget<TInput, TOutput>;
+    readonly resolveRoute: (sourceType: ValueType<unknown>, config: ConfigValues<TConfig>) => readonly _RouteBlock[];
 }
 
 export function defineInputBlock<
@@ -183,28 +181,13 @@ export function defineOutputBlock<
     return freezeDefinition("output", definition);
 }
 
-export function defineSwitchInputBlock<
+export function defineRoutedOutputBlock<
     const TInput extends ValueType<unknown>,
     const TOutput extends ValueType<unknown>,
     const TConfig extends ConfigDefinition = Record<never, never>,
->(definition: SwitchDefinitionOptions<TInput, TOutput, TConfig>): SwitchInputBlockDefinition<TInput, TOutput, TConfig> {
-    return freezeSwitchDefinition("input", definition);
-}
-
-export function defineSwitchTransformBlock<
-    const TInput extends ValueType<unknown>,
-    const TOutput extends ValueType<unknown>,
-    const TConfig extends ConfigDefinition = Record<never, never>,
->(definition: SwitchDefinitionOptions<TInput, TOutput, TConfig>): SwitchTransformBlockDefinition<TInput, TOutput, TConfig> {
-    return freezeSwitchDefinition("transform", definition);
-}
-
-export function defineSwitchOutputBlock<
-    const TInput extends ValueType<unknown>,
-    const TOutput extends ValueType<unknown>,
-    const TConfig extends ConfigDefinition = Record<never, never>,
->(definition: SwitchDefinitionOptions<TInput, TOutput, TConfig>): SwitchOutputBlockDefinition<TInput, TOutput, TConfig> {
-    return freezeSwitchDefinition("output", definition);
+>(definition: RoutedOutputDefinitionOptions<TInput, TOutput, TConfig>): RoutedOutputBlockDefinition<TInput, TOutput, TConfig> {
+    const config = Object.freeze({ ...(definition.config ?? {}) }) as TConfig;
+    return Object.freeze({ ...definition, config, resources: Object.freeze({}), kind: "output", version: 1 });
 }
 
 function freezeDefinition<
@@ -217,14 +200,4 @@ function freezeDefinition<
     const config = Object.freeze({ ...(definition.config ?? {}) }) as TConfig;
     const resources = Object.freeze({ ...(definition.resources ?? {}) }) as TResources;
     return Object.freeze({ ...definition, config, resources, kind, version: 1 });
-}
-
-function freezeSwitchDefinition<
-    const TKind extends "input" | "transform" | "output",
-    const TInput extends ValueType<unknown>,
-    const TOutput extends ValueType<unknown>,
-    const TConfig extends ConfigDefinition,
->(kind: TKind, definition: SwitchDefinitionOptions<TInput, TOutput, TConfig>): SwitchDefinition<TKind, TInput, TOutput, TConfig> {
-    const config = Object.freeze({ ...(definition.config ?? {}) }) as TConfig;
-    return Object.freeze({ ...definition, config, resources: Object.freeze({}), kind, version: 1 });
 }

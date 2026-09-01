@@ -2,13 +2,14 @@ import { describe, expect, it } from "vitest";
 
 import { InputBlock, OutputBlock } from "../src/blocks/block";
 import { defineInputBlock, defineOutputBlock } from "../src/blocks/blockDefinition";
-import { GltfArtifactType, GltfBytesType } from "../src/gltfValues";
-import { GlbOutputBlock, GltfInputBlock, NodeAsset, ParseGltfToBabylonBlock, SerializeBabylonToGltfBlock } from "../src/index";
+import { GltfArtifactType } from "../src/gltfValues";
+import { PayloadKind, RepresentationKind, type GltfArtifact } from "../src/connectionValues";
+import { GlbOutputBlock, GltfInputBlock, GltfToBabylonSceneBlock, NodeAsset, SerializeBabylonToGltfBlock } from "../src/index";
 
-const GltfBytesInputBlock = defineInputBlock({
-    type: "gltf-bytes-input",
-    input: GltfBytesType,
-    output: GltfBytesType,
+const GltfArtifactInputBlock = defineInputBlock({
+    type: "gltf-artifact-input",
+    input: GltfArtifactType,
+    output: GltfArtifactType,
     run: (input) => input,
 });
 
@@ -47,6 +48,18 @@ function createGltfBytes(): Uint8Array {
     );
 }
 
+function createGltfArtifact(): GltfArtifact {
+    const data = createGltfBytes();
+    return {
+        payloadKind: PayloadKind.Artifact,
+        representationKind: RepresentationKind.GLTF,
+        container: "gltf",
+        data,
+        fileName: "scene.gltf",
+        files: Object.freeze({ "scene.gltf": data }),
+    };
+}
+
 describe("GLTF pipeline", () => {
     it("parses GLTF bytes into Babylon and serializes them as GLB", async () => {
         const source = new GltfInputBlock({
@@ -73,8 +86,8 @@ describe("GLTF pipeline", () => {
     });
 
     it("executes the primitive parser and serializer blocks", async () => {
-        const source = new InputBlock(GltfBytesInputBlock, { input: createGltfBytes() });
-        const parser = new ParseGltfToBabylonBlock();
+        const source = new InputBlock(GltfArtifactInputBlock, { input: createGltfArtifact() });
+        const parser = new GltfToBabylonSceneBlock();
         const serializer = new SerializeBabylonToGltfBlock();
         const destination = new OutputBlock(GltfArtifactOutputBlock);
         source.output.connectTo(parser.input);
@@ -86,5 +99,19 @@ describe("GLTF pipeline", () => {
 
         expect(result.output.fileName).toBe("scene.gltf");
         expect(JSON.parse(new TextDecoder().decode(result.output.data))).toMatchObject({ asset: { version: "2.0" } });
+    });
+
+    it("routes Babylon scenes directly to the GLB serializer", async () => {
+        const source = new InputBlock(GltfArtifactInputBlock, { input: createGltfArtifact() });
+        const parser = new GltfToBabylonSceneBlock();
+        const destination = new GlbOutputBlock();
+        source.output.connectTo(parser.input);
+        parser.output.connectTo(destination.input);
+
+        const asset = new NodeAsset({ name: "babylon-to-glb", outputBlock: destination });
+        const result = await asset.executeAsync();
+
+        expect(result.output.container).toBe("glb");
+        expect(new TextDecoder().decode(result.output.data.subarray(0, 4))).toBe("glTF");
     });
 });

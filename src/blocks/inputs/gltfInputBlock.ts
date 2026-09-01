@@ -1,19 +1,32 @@
 import { InputBlock, type InputBlockOptions } from "../block";
-import { defineSwitchInputBlock } from "../blockDefinition";
-import { ParseGltfToBabylonBlock } from "../parsers/gltfToBabylonScene";
-import { BabylonSceneType, GltfBytesType } from "../../gltfValues";
+import { defineInputBlock } from "../blockDefinition";
+import { GltfArtifactType, GltfBytesType } from "../../gltfValues";
+import { PayloadKind, RepresentationKind, type GltfArtifact } from "../../connectionValues";
 
-const GltfInputBlockDefinition = defineSwitchInputBlock({
+const GltfInputBlockDefinition = defineInputBlock({
     type: "gltf.input",
     input: GltfBytesType,
-    output: BabylonSceneType,
-    resolveBlock: (data) => new ParseGltfToBabylonBlock({ container: isGlb(data) ? "glb" : "gltf" }),
+    output: GltfArtifactType,
+    run: (data) => createArtifact(data),
 });
 
 export class GltfInputBlock extends InputBlock<typeof GltfInputBlockDefinition> {
     public constructor(options?: InputBlockOptions<typeof GltfInputBlockDefinition>) {
         super(GltfInputBlockDefinition, options);
     }
+}
+
+function createArtifact(data: Uint8Array): GltfArtifact {
+    const container = isGlb(data) ? "glb" : "gltf";
+    const fileName = `scene.${container}`;
+    return {
+        payloadKind: PayloadKind.Artifact,
+        representationKind: RepresentationKind.GLTF,
+        container,
+        data,
+        fileName,
+        files: Object.freeze({ [fileName]: data }),
+    };
 }
 
 function isGlb(data: Uint8Array): boolean {

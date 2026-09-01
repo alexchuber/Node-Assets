@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { InputBlock, OutputBlock, TransformBlock } from "../src/blocks/block";
-import { defineInputBlock, defineOutputBlock, defineSwitchTransformBlock, defineTransformBlock, defineValueType, enumValue, value } from "../src/blocks/blockDefinition";
+import { defineInputBlock, defineOutputBlock, defineRoutedOutputBlock, defineTransformBlock, defineValueType, enumValue, value } from "../src/blocks/blockDefinition";
 import { NodeAsset, NodeAssetContext } from "../src/index";
 
 const NumberType = defineValueType<number>("number", (value): value is number => typeof value === "number");
@@ -38,25 +38,11 @@ const OtherNumberOutputBlock = defineOutputBlock({
     run: (input) => input,
 });
 
-const DoubleBlock = defineTransformBlock({
-    type: "double",
+const PassthroughOutputBlock = defineRoutedOutputBlock({
+    type: "passthrough-output",
     input: NumberType,
     output: NumberType,
-    run: (input) => input * 2,
-});
-
-const TripleBlock = defineTransformBlock({
-    type: "triple",
-    input: NumberType,
-    output: NumberType,
-    run: (input) => input * 3,
-});
-
-const ScaleSwitchBlock = defineSwitchTransformBlock({
-    type: "scale-switch",
-    input: NumberType,
-    output: NumberType,
-    resolveBlock: (input) => new TransformBlock(input < 0 ? DoubleBlock : TripleBlock),
+    resolveRoute: () => [],
 });
 
 describe("Block definitions", () => {
@@ -64,12 +50,6 @@ describe("Block definitions", () => {
         expect(NumberInputBlock).toMatchObject({ kind: "input", version: 1 });
         expect(ScaleBlock).toMatchObject({ kind: "transform", version: 1 });
         expect(NumberOutputBlock).toMatchObject({ kind: "output", version: 1 });
-    });
-
-    it("gives switch blocks a resolver instead of a runner", () => {
-        expect(ScaleSwitchBlock.resolveBlock).toBeTypeOf("function");
-        expect(ScaleSwitchBlock.run).toBeUndefined();
-        expect(ScaleSwitchBlock.runAsync).toBeUndefined();
     });
 
     it("freezes definitions and configuration descriptors", () => {
@@ -175,22 +155,14 @@ describe("Connections", () => {
 });
 
 describe("NodeAsset", () => {
-    it("resolves switch blocks from each execution input", async () => {
-        const inputBlock = new InputBlock(NumberInputBlock);
-        const switchBlock = new TransformBlock(ScaleSwitchBlock);
-        const outputBlock = new OutputBlock(NumberOutputBlock);
-        inputBlock.output.connectTo(switchBlock.input);
-        switchBlock.output.connectTo(outputBlock.input);
-        const nodeAsset = new NodeAsset({ name: "switch", outputBlock });
-        const negativeContext = new NodeAssetContext(nodeAsset);
-        negativeContext.setInput(inputBlock, -2);
-        const positiveContext = new NodeAssetContext(nodeAsset);
-        positiveContext.setInput(inputBlock, 2);
+    it("supports a zero-step output route", async () => {
+        const inputBlock = new InputBlock(NumberInputBlock, { input: 2 });
+        const outputBlock = new OutputBlock(PassthroughOutputBlock);
+        inputBlock.output.connectTo(outputBlock.input);
 
-        const [negativeResult, positiveResult] = await Promise.all([nodeAsset.executeAsync(negativeContext), nodeAsset.executeAsync(positiveContext)]);
+        const result = await new NodeAsset({ name: "passthrough", outputBlock }).executeAsync();
 
-        expect(negativeResult.output).toBe(-4);
-        expect(positiveResult.output).toBe(6);
+        expect(result.output).toBe(2);
     });
 
     it("rejects an unconnected output block", () => {

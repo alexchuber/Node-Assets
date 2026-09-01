@@ -1,8 +1,9 @@
 import type { BaseBlock, OutputBlock, TransformBlock } from "./blocks/block";
-import { _resolveConfig, InputBlock } from "./blocks/block";
+import { InputBlock } from "./blocks/block";
 import type { _AnyBlockDefinition, ValueOf } from "./blocks/blockDefinition";
 import { NodeAssetCoordinator } from "./nodeAssetCoordinator";
 import type { _ResourceResolver, ResourceRequirement } from "./resources/resource";
+import { _isRoutedOutputDefinition, _resolveRoute } from "./routePlanner";
 
 type AnyInputBlock = InputBlock<_AnyBlockDefinition<"input">>;
 type AnyTransformBlock = TransformBlock<_AnyBlockDefinition<"transform">>;
@@ -14,10 +15,6 @@ interface ErasedRunner {
     readonly runAsync?: (input: unknown, config: unknown, resources: Readonly<Record<string, unknown>>) => Promise<unknown>;
 }
 
-interface ErasedSwitch {
-    readonly resolveBlock?: (input: unknown, config: Readonly<Record<string, unknown>>) => _AnyBlockDefinition | BaseBlock<_AnyBlockDefinition>;
-}
-
 interface NodeAssetOptions<TOutput extends AnyOutputBlock> {
     readonly name: string;
     readonly outputBlock: TOutput;
@@ -25,6 +22,7 @@ interface NodeAssetOptions<TOutput extends AnyOutputBlock> {
 
 interface NodeRecord {
     readonly block: AnyBlock;
+    readonly runner: BaseBlock<_AnyBlockDefinition> | undefined;
     readonly source: AnyBlock | undefined;
 }
 
@@ -54,9 +52,12 @@ export class NodeAsset<TOutput extends AnyOutputBlock> {
     /** @internal */
     public async _prepareAsync(resolveResource: _ResourceResolver): Promise<void> {
         const pending: Promise<unknown>[] = [];
-        for (const { block } of this.#nodes) {
-            for (const requirement of Object.values(block.definition.resources)) {
-                if (requirement.isEnabled(block.config)) {
+        for (const { runner } of this.#nodes) {
+            if (runner === undefined) {
+                continue;
+            }
+            for (const requirement of Object.values(runner.definition.resources)) {
+                if (requirement.isEnabled(runner.config)) {
                     pending.push(resolveResource(requirement.definition));
                 }
             }
@@ -130,7 +131,29 @@ function captureTopology(outputBlock: AnyOutputBlock): readonly NodeRecord[] {
         }
         visiting.delete(block);
         visited.add(block);
-        records.push(Object.freeze({ block, source }));
+        if (_isRoutedOutputDefinition(block.definition)) {
+            if (source === undefined) {
+                throw new Error(`The input on block "${block.name}" is not connected.`);
+            }
+            const route = _resolveRoute(block.definition, source.definition.output, block.config);
+            if (route.length === 0) {
+                records.push(Object.freeze({ block, runner: undefined, source }));
+            } else {
+                let routeSource = source;
+                for (let index = 0; index < route.length; index += 1) {
+                    const runner = route[index];
+                    if (runner === undefined) {
+                        continue;
+                    }
+                    const routeBlock = runner as AnyBlock;
+                    const valueBlock = index === route.length - 1 ? block : routeBlock;
+                    records.push(Object.freeze({ block: valueBlock, runner, source: routeSource }));
+                    routeSource = valueBlock;
+                }
+            }
+        } else {
+            records.push(Object.freeze({ block, runner: block, source }));
+        }
     };
 
     visit(outputBlock);
@@ -145,7 +168,7 @@ async function executeAsync<TOutput extends AnyOutputBlock>(
 ): Promise<NodeAssetResult<TOutput>> {
     const values = new Map<AnyBlock, unknown>();
 
-    for (const { block, source } of nodes) {
+    for (const { block, runner, source } of nodes) {
         let input: unknown;
         if (block instanceof InputBlock) {
             input = contextInputs.has(block) ? contextInputs.get(block) : block.defaultInput;
@@ -159,54 +182,28 @@ async function executeAsync<TOutput extends AnyOutputBlock>(
             input = values.get(source);
         }
 
-        if (!block.definition.input.is(input)) {
+        if (runner === undefined) {
+            if (!block.definition.output.is(input)) {
+                throw new Error(`Block "${block.name}" received an invalid routed output value.`);
+            }
+            values.set(block, input);
+            continue;
+        }
+        if (!runner.definition.input.is(input)) {
             throw new Error(`Block "${block.name}" received an invalid input value.`);
         }
-        const resolved = resolveRunnableBlock(block, input);
         const resources: Record<string, unknown> = {};
-        for (const [name, erasedRequirement] of Object.entries(resolved.definition.resources)) {
+        for (const [name, erasedRequirement] of Object.entries(runner.definition.resources)) {
             const requirement = erasedRequirement as ResourceRequirement<unknown, unknown>;
-            resources[name] = requirement.isEnabled(resolved.config) ? await resolveResource(requirement.definition) : undefined;
+            resources[name] = requirement.isEnabled(runner.config) ? await resolveResource(requirement.definition) : undefined;
         }
-        const runner = resolved.definition as unknown as ErasedRunner;
-        const output = runner.run === undefined ? await runner.runAsync?.(input, resolved.config, resources) : runner.run(input, resolved.config, resources);
-        if (!block.definition.output.is(output)) {
+        const erasedRunner = runner.definition as unknown as ErasedRunner;
+        const output = erasedRunner.run === undefined ? await erasedRunner.runAsync?.(input, runner.config, resources) : erasedRunner.run(input, runner.config, resources);
+        if (!runner.definition.output.is(output) || !block.definition.output.is(output)) {
             throw new Error(`Block "${block.name}" produced an invalid output value.`);
         }
         values.set(block, output);
     }
 
     return new NodeAssetResult(outputBlock, values.get(outputBlock) as ValueOf<TOutput["definition"]["output"]>);
-}
-
-function resolveRunnableBlock(block: AnyBlock, input: unknown): { readonly definition: _AnyBlockDefinition; readonly config: Readonly<Record<string, unknown>> } {
-    const expectedInput = block.definition.input;
-    const expectedOutput = block.definition.output;
-    let definition = block.definition;
-    let config: Readonly<Record<string, unknown>> = block.config;
-    const visited = new Set<_AnyBlockDefinition>();
-
-    while (true) {
-        if (visited.has(definition)) {
-            throw new Error(`Switch block "${block.name}" contains a resolution cycle.`);
-        }
-        visited.add(definition);
-
-        const switchDefinition = definition as ErasedSwitch;
-        if (switchDefinition.resolveBlock === undefined) {
-            if (definition.input !== expectedInput || definition.output !== expectedOutput) {
-                throw new Error(`Switch block "${block.name}" resolved an incompatible block.`);
-            }
-            return { definition, config };
-        }
-
-        const target = switchDefinition.resolveBlock(input, config);
-        if ("definition" in target) {
-            definition = target.definition;
-            config = target.config;
-        } else {
-            definition = target;
-            config = _resolveConfig(definition.config, undefined);
-        }
-    }
 }

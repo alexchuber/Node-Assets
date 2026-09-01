@@ -16,7 +16,7 @@ export abstract class BaseBlock<TDefinition extends _AnyBlockDefinition> {
     protected constructor(definition: TDefinition, options: BlockOptions<TDefinition> | undefined) {
         this.definition = definition;
         this.name = options?.name ?? new.target.name;
-        this.config = _resolveConfig(definition.config, options);
+        this.config = resolveConfig(definition.config, options);
     }
 }
 
@@ -80,8 +80,8 @@ export class OutputPort<TType extends ValueType<unknown>> {
         public readonly type: TType
     ) {}
 
-    public connectTo(input: InputPort<NoInfer<TType>>): void {
-        if (this.type !== input.type) {
+    public connectTo<TInputType extends ValueType<unknown>>(input: ValueOf<TType> extends ValueOf<TInputType> ? InputPort<TInputType> : never): void {
+        if (!input.type.accepts(this.type)) {
             throw new Error(`Cannot connect value type "${this.type.id}" to "${input.type.id}".`);
         }
         if (input._source !== undefined) {
@@ -91,8 +91,8 @@ export class OutputPort<TType extends ValueType<unknown>> {
             throw new Error("The connection would create a cycle.");
         }
 
-        input._source = this;
-        this.#endpoints.add(input);
+        input._source = this as unknown as OutputPort<TInputType>;
+        this.#endpoints.add(input as unknown as InputPort<TType>);
     }
 
     /** @internal */
@@ -101,8 +101,7 @@ export class OutputPort<TType extends ValueType<unknown>> {
     }
 }
 
-/** @internal */
-export function _resolveConfig<TConfig extends ConfigDefinition>(config: TConfig, options: Readonly<Record<string, unknown>> | undefined): ConfigValues<TConfig> {
+function resolveConfig<TConfig extends ConfigDefinition>(config: TConfig, options: Readonly<Record<string, unknown>> | undefined): ConfigValues<TConfig> {
     const values: Record<string, unknown> = {};
     for (const [name, descriptor] of Object.entries(config)) {
         const value = options?.[name] ?? descriptor.defaultValue;

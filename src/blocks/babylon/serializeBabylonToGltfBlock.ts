@@ -1,8 +1,10 @@
 import { TransformBlock, type BlockOptions } from "../block";
 import { defineTransformBlock, enumValue } from "../blockDefinition";
-import { BabylonSceneType, GltfArtifactType } from "../../gltfValues";
-import { PayloadKind, RepresentationKind, type BabylonScene, type GltfArtifact, type GltfContainer } from "../../connectionValues";
+import { BabylonSceneType, GltfArtifactType } from "../gltf/gltfValues";
+import { PayloadKind, RepresentationKind, type BabylonScene, type GltfArtifact } from "../../connectionValues";
 import { defineResource, resource } from "../../resources/resource";
+
+export type GltfContainer = "gltf" | "glb";
 
 type SerializeBabylon = (value: BabylonScene, container: GltfContainer) => Promise<GltfArtifact>;
 
@@ -22,7 +24,6 @@ export const GltfSerializerResource = defineResource<SerializeBabylon>({
             return {
                 payloadKind: PayloadKind.Artifact,
                 representationKind: RepresentationKind.GLTF,
-                container,
                 fileName,
                 files: Object.freeze({ ...result.files }),
                 data: typeof root === "string" ? new TextEncoder().encode(root) : new Uint8Array(await root.arrayBuffer()),
