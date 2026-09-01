@@ -1,3 +1,6 @@
-// Placeholder entry point. See https://github.com/orgs/BabylonJS/projects/158
-// for planned pipeline blocks.
-export {};
+export { ParseGltfToBabylonBlock } from "./blocks/parsers/gltfToBabylonScene";
+export { SerializeBabylonToGltfBlock } from "./blocks/serializers/babylonSceneToGltfBlock";
+export { GlbOutputBlock } from "./blocks/outputs/glbOutputBlock";
+export { GltfInputBlock } from "./blocks/inputs/gltfInputBlock";
+export { NodeAsset, NodeAssetContext } from "./nodeAsset";
+export { NodeAssetCoordinator } from "./nodeAssetCoordinator";
