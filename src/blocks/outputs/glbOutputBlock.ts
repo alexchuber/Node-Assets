@@ -1,29 +1,30 @@
-import { OutputBlock, type BlockOptions } from "../block";
-import { defineRoutedOutputBlock, oneOfValueTypes } from "../blockDefinition";
-import { GltfToBabylonSceneBlock } from "../parsers/gltfToBabylonScene";
-import { SerializeBabylonToGltfBlock } from "../serializers/babylonSceneToGltfBlock";
-import { BabylonSceneType, GltfArtifactType } from "../../gltfValues";
+import type { Scene as BabylonScene } from "@babylonjs/core/scene";
 
-const GlbOutputInputType = oneOfValueTypes(GltfArtifactType, BabylonSceneType);
+import { Block, type BlockOptions } from "../block";
+import { defineBlock } from "../blockDefinition";
+import { BabylonSceneType } from "../../connectionTypes/babylon";
+import { GlbType } from "../../connectionTypes/gltf";
 
-const GlbOutputBlockDefinition = defineRoutedOutputBlock({
+const GLBOutputBlockDefinition = defineBlock({
     type: "gltf.output-glb",
-    input: GlbOutputInputType,
-    output: GltfArtifactType,
-    resolveRoute: (sourceType) => {
-        const serializer = new SerializeBabylonToGltfBlock({ container: "glb" });
-        if (GltfArtifactType.accepts(sourceType)) {
-            return [new GltfToBabylonSceneBlock(), serializer];
-        }
-        if (BabylonSceneType.accepts(sourceType)) {
-            return [serializer];
-        }
-        throw new Error(`GlbOutputBlock does not support "${sourceType.id}".`);
-    },
+    input: BabylonSceneType,
+    output: GlbType,
+    runAsync: serializeGlbAsync,
 });
 
-export class GlbOutputBlock extends OutputBlock<typeof GlbOutputBlockDefinition> {
-    public constructor(options?: BlockOptions<typeof GlbOutputBlockDefinition>) {
-        super(GlbOutputBlockDefinition, options);
+export class GLBOutputBlock extends Block<typeof GLBOutputBlockDefinition> {
+    public constructor(options?: BlockOptions<typeof GLBOutputBlockDefinition>) {
+        super(GLBOutputBlockDefinition, options);
     }
+}
+
+async function serializeGlbAsync(scene: BabylonScene): Promise<Uint8Array> {
+    const { GLTF2Export } = await import("@babylonjs/serializers/glTF/2.0/glTFSerializer");
+    const fileName = "scene.glb";
+    const result = await GLTF2Export.GLBAsync(scene, fileName);
+    const root = result.files[fileName];
+    if (!(root instanceof Blob)) {
+        throw new Error(`The Babylon glTF serializer did not produce "${fileName}".`);
+    }
+    return new Uint8Array(await root.arrayBuffer());
 }

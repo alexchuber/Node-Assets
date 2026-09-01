@@ -1,88 +1,52 @@
-import type { _AnyBlockDefinition, ConfigDefinition, ConfigValues, ValueOf, ValueType } from "./blockDefinition";
+import type { ConnectionPointType, RuntimeData } from "../connectionPointType";
+import type { _AnyBlockDefinition, ConfigDefinition, ConfigValues } from "./blockDefinition";
 
 export type BlockOptions<TDefinition extends _AnyBlockDefinition> = Partial<ConfigValues<TDefinition["config"]>> & {
+    readonly input?: RuntimeData<TDefinition["input"]>;
     readonly name?: string;
 };
 
-export type InputBlockOptions<TDefinition extends _AnyBlockDefinition<"input">> = BlockOptions<TDefinition> & {
-    readonly input?: ValueOf<TDefinition["input"]>;
-};
-
-export abstract class BaseBlock<TDefinition extends _AnyBlockDefinition> {
+export class Block<TDefinition extends _AnyBlockDefinition> {
     public readonly config: ConfigValues<TDefinition["config"]>;
+    public readonly defaultInput: RuntimeData<TDefinition["input"]> | undefined;
     public readonly definition: TDefinition;
+    public readonly input: InputPort<TDefinition["input"]>;
     public readonly name: string;
+    public readonly output: OutputPort<TDefinition["output"]>;
 
-    protected constructor(definition: TDefinition, options: BlockOptions<TDefinition> | undefined) {
+    public constructor(definition: TDefinition, options?: BlockOptions<TDefinition>) {
         this.definition = definition;
         this.name = options?.name ?? new.target.name;
         this.config = resolveConfig(definition.config, options);
-    }
-}
-
-export class InputBlock<TDefinition extends _AnyBlockDefinition<"input">> extends BaseBlock<TDefinition> {
-    public readonly defaultInput: ValueOf<TDefinition["input"]> | undefined;
-    public readonly output: OutputPort<TDefinition["output"]>;
-
-    public constructor(definition: TDefinition, options?: InputBlockOptions<TDefinition>) {
-        if (definition.kind !== "input") {
-            throw new Error(`InputBlock requires an input block definition, received "${definition.kind}".`);
-        }
-        super(definition, options);
         this.defaultInput = options?.input;
-        this.output = new OutputPort(this, definition.output);
-    }
-}
-
-export class TransformBlock<TDefinition extends _AnyBlockDefinition<"transform">> extends BaseBlock<TDefinition> {
-    public readonly input: InputPort<TDefinition["input"]>;
-    public readonly output: OutputPort<TDefinition["output"]>;
-
-    public constructor(definition: TDefinition, options?: BlockOptions<TDefinition>) {
-        if (definition.kind !== "transform") {
-            throw new Error(`TransformBlock requires a transform block definition, received "${definition.kind}".`);
-        }
-        super(definition, options);
         this.input = new InputPort(this, definition.input);
         this.output = new OutputPort(this, definition.output);
     }
 }
 
-export class OutputBlock<TDefinition extends _AnyBlockDefinition<"output">> extends BaseBlock<TDefinition> {
-    public readonly input: InputPort<TDefinition["input"]>;
-
-    public constructor(definition: TDefinition, options?: BlockOptions<TDefinition>) {
-        if (definition.kind !== "output") {
-            throw new Error(`OutputBlock requires an output block definition, received "${definition.kind}".`);
-        }
-        super(definition, options);
-        this.input = new InputPort(this, definition.input);
-    }
-}
-
-export class InputPort<TType extends ValueType<unknown>> {
+export class InputPort<TType extends ConnectionPointType<unknown>> {
     /** @internal */
     public _source: OutputPort<TType> | undefined;
 
     public constructor(
         /** @internal */
-        public readonly _block: BaseBlock<_AnyBlockDefinition>,
+        public readonly _block: Block<_AnyBlockDefinition>,
         public readonly type: TType
     ) {}
 }
 
-export class OutputPort<TType extends ValueType<unknown>> {
+export class OutputPort<TType extends ConnectionPointType<unknown>> {
     readonly #endpoints = new Set<InputPort<TType>>();
 
     public constructor(
         /** @internal */
-        public readonly _block: BaseBlock<_AnyBlockDefinition>,
+        public readonly _block: Block<_AnyBlockDefinition>,
         public readonly type: TType
     ) {}
 
-    public connectTo<TInputType extends ValueType<unknown>>(input: ValueOf<TType> extends ValueOf<TInputType> ? InputPort<TInputType> : never): void {
-        if (!input.type.accepts(this.type)) {
-            throw new Error(`Cannot connect value type "${this.type.id}" to "${input.type.id}".`);
+    public connectTo(input: InputPort<NoInfer<TType>>): void {
+        if (this.type !== input.type) {
+            throw new Error(`Cannot connect connection point type "${this.type.id}" to "${input.type.id}".`);
         }
         if (input._source !== undefined) {
             throw new Error(`The input on block "${input._block.name}" is already connected.`);
@@ -91,8 +55,8 @@ export class OutputPort<TType extends ValueType<unknown>> {
             throw new Error("The connection would create a cycle.");
         }
 
-        input._source = this as unknown as OutputPort<TInputType>;
-        this.#endpoints.add(input as unknown as InputPort<TType>);
+        input._source = this;
+        this.#endpoints.add(input);
     }
 
     /** @internal */
@@ -113,9 +77,9 @@ function resolveConfig<TConfig extends ConfigDefinition>(config: TConfig, option
     return Object.freeze(values) as ConfigValues<TConfig>;
 }
 
-function reaches(start: BaseBlock<_AnyBlockDefinition>, target: BaseBlock<_AnyBlockDefinition>): boolean {
+function reaches(start: Block<_AnyBlockDefinition>, target: Block<_AnyBlockDefinition>): boolean {
     const pending = [start];
-    const visited = new Set<BaseBlock<_AnyBlockDefinition>>();
+    const visited = new Set<Block<_AnyBlockDefinition>>();
 
     while (pending.length > 0) {
         const block = pending.pop();
@@ -127,10 +91,8 @@ function reaches(start: BaseBlock<_AnyBlockDefinition>, target: BaseBlock<_AnyBl
         }
 
         visited.add(block);
-        if (block instanceof InputBlock || block instanceof TransformBlock) {
-            for (const endpoint of block.output._endpoints) {
-                pending.push(endpoint._block);
-            }
+        for (const endpoint of block.output._endpoints) {
+            pending.push(endpoint._block);
         }
     }
     return false;

@@ -1,28 +1,4 @@
-import type { ResourceRequirements, ResourceValues } from "../resources/resource";
-
-declare const valueType: unique symbol;
-
-export interface ValueType<TValue> {
-    readonly id: string;
-    readonly [valueType]: TValue;
-    accepts(type: ValueType<unknown>): boolean;
-    is(value: unknown): value is TValue;
-}
-
-export type ValueOf<TType extends ValueType<unknown>> = TType extends ValueType<infer TValue> ? TValue : never;
-
-export function defineValueType<TValue>(id: string, isValue: (value: unknown) => value is TValue): ValueType<TValue> {
-    const type = Object.freeze({ id, accepts: (candidate: ValueType<unknown>) => candidate === type, is: isValue }) as ValueType<TValue>;
-    return type;
-}
-
-export function oneOfValueTypes<const TTypes extends readonly [ValueType<unknown>, ...ValueType<unknown>[]]>(...types: TTypes): ValueType<ValueOf<TTypes[number]>> {
-    return Object.freeze({
-        id: types.map(({ id }) => id).join(" | "),
-        accepts: (candidate: ValueType<unknown>) => types.some((type) => type.accepts(candidate)),
-        is: (value: unknown): value is ValueOf<TTypes[number]> => types.some((type) => type.is(value)),
-    }) as ValueType<ValueOf<TTypes[number]>>;
-}
+import type { ConnectionPointType, RuntimeData } from "../connectionPointType";
 
 declare const configType: unique symbol;
 
@@ -38,7 +14,7 @@ export type ConfigValues<TConfig extends ConfigDefinition> = {
     readonly [TName in keyof TConfig]: TConfig[TName] extends ConfigValue<infer TValue> ? TValue : never;
 };
 
-export function value<TValue>(type: ValueType<TValue>, defaultValue: TValue): ConfigValue<TValue> {
+export function value<TValue>(type: ConnectionPointType<TValue>, defaultValue: TValue): ConfigValue<TValue> {
     return Object.freeze({ defaultValue, is: type.is }) as ConfigValue<TValue>;
 }
 
@@ -50,154 +26,56 @@ export function enumValue<const TValues extends readonly [string, ...string[]]>(
 }
 
 /** @internal */
-export interface _AnyBlockDefinition<TKind extends "input" | "transform" | "output" = "input" | "transform" | "output"> {
-    readonly kind: TKind;
+export interface _AnyBlockDefinition {
     readonly type: string;
     readonly version: 1;
-    readonly input: ValueType<unknown>;
-    readonly output: ValueType<unknown>;
+    readonly input: ConnectionPointType<unknown>;
+    readonly output: ConnectionPointType<unknown>;
     readonly config: ConfigDefinition;
-    readonly resources: ResourceRequirements;
     readonly run?: unknown;
     readonly runAsync?: unknown;
-    readonly resolveRoute?: unknown;
 }
 
-/** @internal */
-export interface _RouteBlock {
-    readonly definition: _AnyBlockDefinition;
-    readonly config: Readonly<Record<string, unknown>>;
-    readonly name: string;
-}
-
-type Runner<TInput extends ValueType<unknown>, TOutput extends ValueType<unknown>, TConfig extends ConfigDefinition, TResources extends ResourceRequirements> =
+type Runner<TInput extends ConnectionPointType<unknown>, TOutput extends ConnectionPointType<unknown>, TConfig extends ConfigDefinition> =
     | {
-          readonly run: (input: ValueOf<TInput>, config: ConfigValues<TConfig>, resources: ResourceValues<TResources>) => ValueOf<TOutput>;
+          readonly run: (input: RuntimeData<TInput>, config: ConfigValues<TConfig>) => RuntimeData<TOutput>;
           readonly runAsync?: never;
       }
     | {
           readonly run?: never;
-          readonly runAsync: (input: ValueOf<TInput>, config: ConfigValues<TConfig>, resources: ResourceValues<TResources>) => Promise<ValueOf<TOutput>>;
+          readonly runAsync: (input: RuntimeData<TInput>, config: ConfigValues<TConfig>) => Promise<RuntimeData<TOutput>>;
       };
 
-type Definition<
-    TKind extends string,
-    TInput extends ValueType<unknown>,
-    TOutput extends ValueType<unknown>,
-    TConfig extends ConfigDefinition,
-    TResources extends ResourceRequirements,
+export type BlockDefinition<
+    TInput extends ConnectionPointType<unknown> = ConnectionPointType<unknown>,
+    TOutput extends ConnectionPointType<unknown> = ConnectionPointType<unknown>,
+    TConfig extends ConfigDefinition = ConfigDefinition,
 > = {
-    readonly kind: TKind;
     readonly type: string;
     readonly version: 1;
     readonly input: TInput;
     readonly output: TOutput;
     readonly config: TConfig;
-    readonly resources: TResources;
-} & Runner<TInput, TOutput, TConfig, TResources>;
+} & Runner<TInput, TOutput, TConfig>;
 
-type RoutedOutputDefinition<TInput extends ValueType<unknown>, TOutput extends ValueType<unknown>, TConfig extends ConfigDefinition> = {
-    readonly kind: "output";
-    readonly type: string;
-    readonly version: 1;
-    readonly input: TInput;
-    readonly output: TOutput;
-    readonly config: TConfig;
-    readonly resources: Record<never, never>;
-    readonly resolveRoute: (sourceType: ValueType<unknown>, config: ConfigValues<TConfig>) => readonly _RouteBlock[];
-    readonly run?: never;
-    readonly runAsync?: never;
-};
-
-export type InputBlockDefinition<
-    TInput extends ValueType<unknown> = ValueType<unknown>,
-    TOutput extends ValueType<unknown> = ValueType<unknown>,
-    TConfig extends ConfigDefinition = ConfigDefinition,
-    TResources extends ResourceRequirements = ResourceRequirements,
-> = Definition<"input", TInput, TOutput, TConfig, TResources>;
-
-export type TransformBlockDefinition<
-    TInput extends ValueType<unknown> = ValueType<unknown>,
-    TOutput extends ValueType<unknown> = ValueType<unknown>,
-    TConfig extends ConfigDefinition = ConfigDefinition,
-    TResources extends ResourceRequirements = ResourceRequirements,
-> = Definition<"transform", TInput, TOutput, TConfig, TResources>;
-
-export type OutputBlockDefinition<
-    TInput extends ValueType<unknown> = ValueType<unknown>,
-    TOutput extends ValueType<unknown> = ValueType<unknown>,
-    TConfig extends ConfigDefinition = ConfigDefinition,
-    TResources extends ResourceRequirements = ResourceRequirements,
-> = Definition<"output", TInput, TOutput, TConfig, TResources>;
-
-export type BlockDefinition = InputBlockDefinition | TransformBlockDefinition | OutputBlockDefinition;
-
-export type RoutedOutputBlockDefinition<
-    TInput extends ValueType<unknown> = ValueType<unknown>,
-    TOutput extends ValueType<unknown> = ValueType<unknown>,
-    TConfig extends ConfigDefinition = ConfigDefinition,
-> = RoutedOutputDefinition<TInput, TOutput, TConfig>;
-
-type DefinitionOptions<TInput extends ValueType<unknown>, TOutput extends ValueType<unknown>, TConfig extends ConfigDefinition, TResources extends ResourceRequirements> = {
+type DefinitionOptions<TInput extends ConnectionPointType<unknown>, TOutput extends ConnectionPointType<unknown>, TConfig extends ConfigDefinition> = {
     readonly type: string;
     readonly input: TInput;
     readonly output: TOutput;
     readonly config?: TConfig;
-    readonly resources?: TResources;
-} & Runner<TInput, TOutput, TConfig, TResources>;
+} & Runner<TInput, TOutput, TConfig>;
 
-interface RoutedOutputDefinitionOptions<TInput extends ValueType<unknown>, TOutput extends ValueType<unknown>, TConfig extends ConfigDefinition> {
-    readonly type: string;
-    readonly input: TInput;
-    readonly output: TOutput;
-    readonly config?: TConfig;
-    readonly resolveRoute: (sourceType: ValueType<unknown>, config: ConfigValues<TConfig>) => readonly _RouteBlock[];
+export function defineBlock<
+    const TInput extends ConnectionPointType<unknown>,
+    const TOutput extends ConnectionPointType<unknown>,
+    const TConfig extends ConfigDefinition = Record<never, never>,
+>(definition: DefinitionOptions<TInput, TOutput, TConfig>): BlockDefinition<TInput, TOutput, TConfig> {
+    return freezeDefinition(definition);
 }
 
-export function defineInputBlock<
-    const TInput extends ValueType<unknown>,
-    const TOutput extends ValueType<unknown>,
-    const TConfig extends ConfigDefinition = Record<never, never>,
-    const TResources extends ResourceRequirements = Record<never, never>,
->(definition: DefinitionOptions<TInput, TOutput, TConfig, TResources>): InputBlockDefinition<TInput, TOutput, TConfig, TResources> {
-    return freezeDefinition("input", definition);
-}
-
-export function defineTransformBlock<
-    const TInput extends ValueType<unknown>,
-    const TOutput extends ValueType<unknown>,
-    const TConfig extends ConfigDefinition = Record<never, never>,
-    const TResources extends ResourceRequirements = Record<never, never>,
->(definition: DefinitionOptions<TInput, TOutput, TConfig, TResources>): TransformBlockDefinition<TInput, TOutput, TConfig, TResources> {
-    return freezeDefinition("transform", definition);
-}
-
-export function defineOutputBlock<
-    const TInput extends ValueType<unknown>,
-    const TOutput extends ValueType<unknown>,
-    const TConfig extends ConfigDefinition = Record<never, never>,
-    const TResources extends ResourceRequirements = Record<never, never>,
->(definition: DefinitionOptions<TInput, TOutput, TConfig, TResources>): OutputBlockDefinition<TInput, TOutput, TConfig, TResources> {
-    return freezeDefinition("output", definition);
-}
-
-export function defineRoutedOutputBlock<
-    const TInput extends ValueType<unknown>,
-    const TOutput extends ValueType<unknown>,
-    const TConfig extends ConfigDefinition = Record<never, never>,
->(definition: RoutedOutputDefinitionOptions<TInput, TOutput, TConfig>): RoutedOutputBlockDefinition<TInput, TOutput, TConfig> {
+function freezeDefinition<const TInput extends ConnectionPointType<unknown>, const TOutput extends ConnectionPointType<unknown>, const TConfig extends ConfigDefinition>(
+    definition: DefinitionOptions<TInput, TOutput, TConfig>
+): BlockDefinition<TInput, TOutput, TConfig> {
     const config = Object.freeze({ ...(definition.config ?? {}) }) as TConfig;
-    return Object.freeze({ ...definition, config, resources: Object.freeze({}), kind: "output", version: 1 });
-}
-
-function freezeDefinition<
-    const TKind extends "input" | "transform" | "output",
-    const TInput extends ValueType<unknown>,
-    const TOutput extends ValueType<unknown>,
-    const TConfig extends ConfigDefinition,
-    const TResources extends ResourceRequirements,
->(kind: TKind, definition: DefinitionOptions<TInput, TOutput, TConfig, TResources>): Definition<TKind, TInput, TOutput, TConfig, TResources> {
-    const config = Object.freeze({ ...(definition.config ?? {}) }) as TConfig;
-    const resources = Object.freeze({ ...(definition.resources ?? {}) }) as TResources;
-    return Object.freeze({ ...definition, config, resources, kind, version: 1 });
+    return Object.freeze({ ...definition, config, version: 1 });
 }

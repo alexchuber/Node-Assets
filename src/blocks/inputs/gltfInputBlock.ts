@@ -1,34 +1,37 @@
-import { InputBlock, type InputBlockOptions } from "../block";
-import { defineInputBlock } from "../blockDefinition";
-import { GltfArtifactType, GltfBytesType } from "../../gltfValues";
-import { PayloadKind, RepresentationKind, type GltfArtifact } from "../../connectionValues";
+import type { Scene as BabylonSceneObject } from "@babylonjs/core/scene";
 
-const GltfInputBlockDefinition = defineInputBlock({
+import { Block, type BlockOptions } from "../block";
+import { defineBlock } from "../blockDefinition";
+import { BabylonSceneType } from "../../connectionTypes/babylon";
+import { GlbType, GltfSourceType } from "../../connectionTypes/gltf";
+
+const GltfInputBlockDefinition = defineBlock({
     type: "gltf.input",
-    input: GltfBytesType,
-    output: GltfArtifactType,
-    run: (data) => createArtifact(data),
+    input: GltfSourceType,
+    output: BabylonSceneType,
+    runAsync: loadGltfAsync,
 });
 
-export class GltfInputBlock extends InputBlock<typeof GltfInputBlockDefinition> {
-    public constructor(options?: InputBlockOptions<typeof GltfInputBlockDefinition>) {
+export class GltfInputBlock extends Block<typeof GltfInputBlockDefinition> {
+    public constructor(options?: BlockOptions<typeof GltfInputBlockDefinition>) {
         super(GltfInputBlockDefinition, options);
     }
 }
 
-function createArtifact(data: Uint8Array): GltfArtifact {
-    const container = isGlb(data) ? "glb" : "gltf";
-    const fileName = `scene.${container}`;
-    return {
-        payloadKind: PayloadKind.Artifact,
-        representationKind: RepresentationKind.GLTF,
-        container,
-        data,
-        fileName,
-        files: Object.freeze({ [fileName]: data }),
-    };
-}
-
-function isGlb(data: Uint8Array): boolean {
-    return data.length >= 4 && data[0] === 0x67 && data[1] === 0x6c && data[2] === 0x54 && data[3] === 0x46;
+async function loadGltfAsync(data: Uint8Array): Promise<BabylonSceneObject> {
+    await import("@babylonjs/loaders/glTF");
+    const [{ LoadSceneAsync }, { NullEngine }] = await Promise.all([import("@babylonjs/core/Loading/sceneLoader"), import("@babylonjs/core/Engines/nullEngine")]);
+    const engine = new NullEngine();
+    try {
+        const binary = GlbType.is(data);
+        const source = binary ? data : `data:${new TextDecoder().decode(data)}`;
+        const scene = await LoadSceneAsync(source, engine, {
+            name: binary ? "scene.glb" : "scene.gltf",
+            pluginExtension: binary ? ".glb" : ".gltf",
+        });
+        return scene;
+    } catch (error) {
+        engine.dispose();
+        throw error;
+    }
 }

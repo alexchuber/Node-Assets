@@ -1,6 +1,5 @@
-export { GltfToBabylonSceneBlock } from "./blocks/parsers/gltfToBabylonScene";
-export { SerializeBabylonToGltfBlock } from "./blocks/serializers/babylonSceneToGltfBlock";
-export { GlbOutputBlock } from "./blocks/outputs/glbOutputBlock";
 export { GltfInputBlock } from "./blocks/inputs/gltfInputBlock";
-export { NodeAsset, NodeAssetContext } from "./nodeAsset";
-export { NodeAssetCoordinator } from "./nodeAssetCoordinator";
+export { GLBOutputBlock } from "./blocks/outputs/glbOutputBlock";
+export { NodeAsset } from "./nodeAsset";
+export { NodeAssetContext } from "./nodeAssetContext";
+export { NodeAssetResult } from "./nodeAssetResult";

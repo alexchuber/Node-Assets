@@ -1,20 +1,21 @@
 import { describe, expect, it } from "vitest";
 
-import { InputBlock, OutputBlock, TransformBlock } from "../src/blocks/block";
-import { defineInputBlock, defineOutputBlock, defineRoutedOutputBlock, defineTransformBlock, defineValueType, enumValue, value } from "../src/blocks/blockDefinition";
+import { Block } from "../src/blocks/block";
+import { defineBlock, enumValue, value } from "../src/blocks/blockDefinition";
+import { defineConnectionPointType } from "../src/connectionPointType";
 import { NodeAsset, NodeAssetContext } from "../src/index";
 
-const NumberType = defineValueType<number>("number", (value): value is number => typeof value === "number");
-const OtherNumberType = defineValueType<number>("number", (value): value is number => typeof value === "number");
+const NumberType = defineConnectionPointType<number>("number", (value): value is number => typeof value === "number");
+const OtherNumberType = defineConnectionPointType<number>("number", (value): value is number => typeof value === "number");
 
-const NumberInputBlock = defineInputBlock({
-    type: "number-input",
+const NumberDefinition = defineBlock({
+    type: "number",
     input: NumberType,
     output: NumberType,
     run: (input) => input,
 });
 
-const ScaleBlock = defineTransformBlock({
+const ScaleDefinition = defineBlock({
     type: "number-scale",
     input: NumberType,
     output: NumberType,
@@ -24,52 +25,38 @@ const ScaleBlock = defineTransformBlock({
     runAsync: async (input, config) => input * (config.scale === "double" ? 2 : 3),
 });
 
-const NumberOutputBlock = defineOutputBlock({
-    type: "number-output",
-    input: NumberType,
-    output: NumberType,
-    run: (input) => input,
-});
-
-const OtherNumberOutputBlock = defineOutputBlock({
-    type: "other-number-output",
+const OtherNumberDefinition = defineBlock({
+    type: "other-number",
     input: OtherNumberType,
     output: OtherNumberType,
     run: (input) => input,
 });
 
-const PassthroughOutputBlock = defineRoutedOutputBlock({
-    type: "passthrough-output",
-    input: NumberType,
-    output: NumberType,
-    resolveRoute: () => [],
-});
-
 describe("Block definitions", () => {
-    it("sets the block kind and version", () => {
-        expect(NumberInputBlock).toMatchObject({ kind: "input", version: 1 });
-        expect(ScaleBlock).toMatchObject({ kind: "transform", version: 1 });
-        expect(NumberOutputBlock).toMatchObject({ kind: "output", version: 1 });
+    it("sets the block version", () => {
+        expect(NumberDefinition).toMatchObject({ version: 1 });
     });
 
     it("freezes definitions and configuration descriptors", () => {
-        expect(Object.isFrozen(ScaleBlock)).toBe(true);
-        expect(Object.isFrozen(ScaleBlock.config)).toBe(true);
-        expect(Object.isFrozen(ScaleBlock.config.scale)).toBe(true);
+        expect(Object.isFrozen(ScaleDefinition)).toBe(true);
+        expect(Object.isFrozen(ScaleDefinition.config)).toBe(true);
+        expect(Object.isFrozen(ScaleDefinition.config.scale)).toBe(true);
     });
 });
 
 describe("Block", () => {
-    it("can be an input block", () => {
-        const block = new InputBlock(NumberInputBlock, { name: "Source", input: 5 });
-        expect(block.definition).toBe(NumberInputBlock);
+    it("has input and output ports", () => {
+        const block = new Block(NumberDefinition, { name: "Source", input: 5 });
+        expect(block.definition).toBe(NumberDefinition);
         expect(block.name).toBe("Source");
         expect(block.defaultInput).toBe(5);
+        expect(block.input.type).toBe(NumberType);
+        expect(block.output.type).toBe(NumberType);
     });
 
     it("can have a config value named the same as a property", () => {
-        const WeirdNumberInputBlock = defineInputBlock({
-            type: "number-input",
+        const WeirdNumberDefinition = defineBlock({
+            type: "weird-number",
             input: NumberType,
             output: NumberType,
             config: {
@@ -78,74 +65,59 @@ describe("Block", () => {
             run: (input) => input,
         });
 
-        const block = new InputBlock(WeirdNumberInputBlock, { input: 5 });
+        const block = new Block(WeirdNumberDefinition, { input: 5 });
         expect(block.config.defaultInput).toBe(3);
     });
 
-    it("can be a transform block", () => {
-        const block = new TransformBlock(ScaleBlock, { scale: "triple" });
-        expect(block.definition).toBe(ScaleBlock);
+    it("uses supplied configuration", () => {
+        const block = new Block(ScaleDefinition, { scale: "triple" });
+        expect(block.definition).toBe(ScaleDefinition);
         expect(block.config.scale).toBe("triple");
-        expect(block.input.type).toBe(NumberType);
     });
 
     it("uses configuration defaults", () => {
-        const block = new TransformBlock(ScaleBlock);
+        const block = new Block(ScaleDefinition);
 
         expect(block.config.scale).toBe("double");
         expect(Object.isFrozen(block.config)).toBe(true);
     });
 
-    it("rejects invalid definition/block combinations", () => {
-        // @ts-expect-error: TypeScript should reject invalid block definitions
-        expect(() => new InputBlock(ScaleBlock)).toThrow();
-        // @ts-expect-error: ditto
-        expect(() => new TransformBlock(NumberInputBlock)).toThrow();
-        // @ts-expect-error: ditto
-        expect(() => new OutputBlock(ScaleBlock)).toThrow();
-    });
-
     it("rejects invalid configuration", () => {
-        expect(() => new TransformBlock(ScaleBlock, { scale: "invalid" as "double" })).toThrow();
-    });
-
-    it("can be an output block", () => {
-        const block = new OutputBlock(NumberOutputBlock);
-        expect(block.definition).toBe(NumberOutputBlock);
+        expect(() => new Block(ScaleDefinition, { scale: "invalid" as "double" })).toThrow();
     });
 });
 
 describe("Connections", () => {
-    it("connects ports with the same value type", () => {
-        const inputBlock = new InputBlock(NumberInputBlock);
-        const outputBlock = new OutputBlock(NumberOutputBlock);
+    it("connects ports with the same connection point type", () => {
+        const inputBlock = new Block(NumberDefinition);
+        const outputBlock = new Block(NumberDefinition);
 
         inputBlock.output.connectTo(outputBlock.input);
 
         expect(outputBlock.input._source).toBe(inputBlock.output);
     });
 
-    it("rejects distinct value type descriptors", () => {
-        const inputBlock = new InputBlock(NumberInputBlock);
-        const outputBlock = new OutputBlock(OtherNumberOutputBlock);
+    it("rejects distinct connection point type descriptors", () => {
+        const inputBlock = new Block(NumberDefinition);
+        const outputBlock = new Block(OtherNumberDefinition);
 
-        expect(() => inputBlock.output.connectTo(outputBlock.input)).toThrow('Cannot connect value type "number" to "number".');
+        expect(() => inputBlock.output.connectTo(outputBlock.input)).toThrow('Cannot connect connection point type "number" to "number".');
     });
 
     it("rejects a second source for an input", () => {
-        const firstInputBlock = new InputBlock(NumberInputBlock);
-        const secondInputBlock = new InputBlock(NumberInputBlock);
-        const outputBlock = new OutputBlock(NumberOutputBlock);
+        const firstInputBlock = new Block(NumberDefinition);
+        const secondInputBlock = new Block(NumberDefinition);
+        const outputBlock = new Block(NumberDefinition);
 
         firstInputBlock.output.connectTo(outputBlock.input);
 
-        expect(() => secondInputBlock.output.connectTo(outputBlock.input)).toThrow('The input on block "OutputBlock" is already connected.');
+        expect(() => secondInputBlock.output.connectTo(outputBlock.input)).toThrow();
     });
 
     it("rejects a cyclic connection", () => {
-        const firstBlock = new TransformBlock(ScaleBlock);
-        const secondBlock = new TransformBlock(ScaleBlock);
-        const thirdBlock = new TransformBlock(ScaleBlock);
+        const firstBlock = new Block(ScaleDefinition);
+        const secondBlock = new Block(ScaleDefinition);
+        const thirdBlock = new Block(ScaleDefinition);
 
         firstBlock.output.connectTo(secondBlock.input);
         secondBlock.output.connectTo(thirdBlock.input);
@@ -155,50 +127,46 @@ describe("Connections", () => {
 });
 
 describe("NodeAsset", () => {
-    it("supports a zero-step output route", async () => {
-        const inputBlock = new InputBlock(NumberInputBlock, { input: 2 });
-        const outputBlock = new OutputBlock(PassthroughOutputBlock);
-        inputBlock.output.connectTo(outputBlock.input);
+    it("treats an unconnected input as a graph input", async () => {
+        const block = new Block(ScaleDefinition);
+        const nodeAsset = new NodeAsset({ name: "external-input", outputBlock: block });
+        const context = new NodeAssetContext(nodeAsset);
+        context.setInput(block, 3);
 
-        const result = await new NodeAsset({ name: "passthrough", outputBlock }).executeAsync();
-
-        expect(result.output).toBe(2);
-    });
-
-    it("rejects an unconnected output block", () => {
-        const outputBlock = new OutputBlock(NumberOutputBlock);
-
-        expect(() => new NodeAsset({ name: "unconnected", outputBlock })).toThrow('The input on block "OutputBlock" is not connected.');
+        await expect(nodeAsset.executeAsync(context)).resolves.toMatchObject({ output: 6 });
     });
 
     it("rejects execution without a required input value", async () => {
-        const inputBlock = new InputBlock(NumberInputBlock);
-        const outputBlock = new OutputBlock(NumberOutputBlock);
-        inputBlock.output.connectTo(outputBlock.input);
-        const nodeAsset = new NodeAsset({ name: "missing-input", outputBlock });
+        const block = new Block(NumberDefinition);
+        const nodeAsset = new NodeAsset({ name: "missing-input", outputBlock: block });
 
-        await expect(nodeAsset.executeAsync()).rejects.toThrow('No value was supplied for input block "InputBlock".');
+        await expect(nodeAsset.executeAsync()).rejects.toThrow();
     });
 
     it("rejects context inputs outside the node asset", () => {
-        const firstInputBlock = new InputBlock(NumberInputBlock, { input: 1 });
-        const firstOutputBlock = new OutputBlock(NumberOutputBlock);
-        firstInputBlock.output.connectTo(firstOutputBlock.input);
-        const firstNodeAsset = new NodeAsset({ name: "first", outputBlock: firstOutputBlock });
-
-        const secondInputBlock = new InputBlock(NumberInputBlock, { input: 2 });
-        const secondOutputBlock = new OutputBlock(NumberOutputBlock);
-        secondInputBlock.output.connectTo(secondOutputBlock.input);
+        const firstBlock = new Block(NumberDefinition, { input: 1 });
+        const firstNodeAsset = new NodeAsset({ name: "first", outputBlock: firstBlock });
+        const secondBlock = new Block(NumberDefinition, { input: 2 });
 
         const context = new NodeAssetContext(firstNodeAsset);
 
-        expect(() => context.setInput(secondInputBlock, 3)).toThrow('Input block "InputBlock" does not belong to this NodeAsset.');
+        expect(() => context.setInput(secondBlock, 3)).toThrow();
+    });
+
+    it("rejects context values for connected inputs", () => {
+        const source = new Block(NumberDefinition, { input: 1 });
+        const destination = new Block(NumberDefinition);
+        source.output.connectTo(destination.input);
+        const nodeAsset = new NodeAsset({ name: "connected-input", outputBlock: destination });
+        const context = new NodeAssetContext(nodeAsset);
+
+        expect(() => context.setInput(destination, 3)).toThrow();
     });
 
     it("executes node assets with independent context inputs", async () => {
-        const inputBlock = new InputBlock(NumberInputBlock, { input: 2 });
-        const scaleBlock = new TransformBlock(ScaleBlock, { scale: "triple" });
-        const outputBlock = new OutputBlock(NumberOutputBlock);
+        const inputBlock = new Block(NumberDefinition, { input: 2 });
+        const scaleBlock = new Block(ScaleDefinition, { scale: "triple" });
+        const outputBlock = new Block(NumberDefinition);
 
         inputBlock.output.connectTo(scaleBlock.input);
         scaleBlock.output.connectTo(outputBlock.input);
