@@ -27,7 +27,9 @@ interface NodeRecord {
 /** An executable asset pipeline, captured from a terminal output block. */
 export class NodeAsset<TOutput extends AnyBlock> {
     readonly #blocks: ReadonlySet<AnyBlock>;
+    readonly #consumerCounts: ReadonlyMap<AnyBlock, number>;
     readonly #nodes: readonly NodeRecord[];
+    #isDisposed = false;
 
     public readonly name: string;
     public readonly outputBlock: TOutput;
@@ -37,12 +39,28 @@ export class NodeAsset<TOutput extends AnyBlock> {
         this.outputBlock = options.outputBlock;
         this.#nodes = captureTopology(options.outputBlock);
         this.#blocks = new Set(this.#nodes.map(({ block }) => block));
+        this.#consumerCounts = countConsumers(this.#nodes);
     }
 
     /** Executes the captured graph with optional per-execution inputs. */
     public executeAsync(context?: NodeAssetContext<this>): Promise<NodeAssetResult<TOutput>> {
+        if (this.#isDisposed) {
+            return Promise.reject(new Error(`NodeAsset "${this.name}" is disposed.`));
+        }
         const inputs = context?._snapshot() ?? new Map<AnyBlock, unknown>();
-        return executeAsync(this.#nodes, this.outputBlock, inputs);
+        return executeAsync(this.#nodes, this.#consumerCounts, this.outputBlock, inputs);
+    }
+
+    /** Releases the connections captured by this node asset. */
+    public dispose(): void {
+        if (this.#isDisposed) {
+            return;
+        }
+        this.#isDisposed = true;
+
+        for (const { block, source } of this.#nodes) {
+            source?.output.disconnectFrom(block.input);
+        }
     }
 
     /** @internal */
@@ -78,12 +96,24 @@ function captureTopology(outputBlock: AnyBlock): readonly NodeRecord[] {
     return Object.freeze(records);
 }
 
+function countConsumers(nodes: readonly NodeRecord[]): ReadonlyMap<AnyBlock, number> {
+    const consumerCounts = new Map<AnyBlock, number>();
+    for (const { source } of nodes) {
+        if (source !== undefined) {
+            consumerCounts.set(source, (consumerCounts.get(source) ?? 0) + 1);
+        }
+    }
+    return consumerCounts;
+}
+
 async function executeAsync<TOutput extends AnyBlock>(
     nodes: readonly NodeRecord[],
+    consumerCounts: ReadonlyMap<AnyBlock, number>,
     outputBlock: TOutput,
     contextInputs: ReadonlyMap<AnyBlock, unknown>
 ): Promise<NodeAssetResult<TOutput>> {
     const resourceScope = new ResourceScope();
+    const remainingConsumers = new Map(consumerCounts);
     const values = new Map<AnyBlock, unknown>();
 
     try {
@@ -108,10 +138,23 @@ async function executeAsync<TOutput extends AnyBlock>(
                 throw new Error(`Block "${block.name}" produced an invalid output value.`);
             }
             values.set(block, output);
+
+            if (source !== undefined) {
+                const remaining = remainingConsumers.get(source);
+                if (remaining === undefined) {
+                    throw new Error(`Missing consumer count for block "${source.name}".`);
+                }
+                if (remaining === 1) {
+                    values.delete(source);
+                } else {
+                    remainingConsumers.set(source, remaining - 1);
+                }
+            }
         }
 
         return new NodeAssetResult(outputBlock, values.get(outputBlock) as ConnectionPointValue<TOutput["_definition"]["output"]>);
     } finally {
+        values.clear();
         await resourceScope.disposeAsync();
     }
 }

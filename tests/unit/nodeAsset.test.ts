@@ -63,6 +63,73 @@ describe("NodeAsset", () => {
         expect(contextResult.outputBlock).toBe(nodeAsset.outputBlock);
     });
 
+    it("releases intermediate outputs after their final consumer", async () => {
+        const source = new Block(NumberDefinition, { input: 2 });
+        const scale = new Block(ScaleDefinition);
+        const deleteSpy = vi.spyOn(Map.prototype, "delete");
+        const outputDefinition = defineBlock({
+            type: "release-observer",
+            input: NumberDefinition.input,
+            output: NumberDefinition.output,
+            run: (input) => {
+                expect(deleteSpy.mock.calls.some(([key]) => key === source)).toBe(true);
+                return input;
+            },
+        });
+        const output = new Block(outputDefinition);
+        source.output.connectTo(scale.input);
+        scale.output.connectTo(output.input);
+        const nodeAsset = new NodeAsset({ name: "bounded-values", outputBlock: output });
+
+        try {
+            await expect(nodeAsset.executeAsync()).resolves.toMatchObject({ output: 4 });
+            const releasedBlocks = deleteSpy.mock.calls.map(([key]) => key).filter((key) => key === source || key === scale || key === output);
+            expect(releasedBlocks).toEqual([source, scale]);
+        } finally {
+            deleteSpy.mockRestore();
+        }
+    });
+
+    it("disposes only the connections captured by the node asset", () => {
+        const source = new Block(NumberDefinition, { input: 2 });
+        const output = new Block(NumberDefinition);
+        const unrelated = new Block(NumberDefinition);
+        source.output.connectTo(output.input);
+        source.output.connectTo(unrelated.input);
+        const nodeAsset = new NodeAsset({ name: "disposable", outputBlock: output });
+
+        nodeAsset.dispose();
+        nodeAsset.dispose();
+
+        expect(output.input._source).toBeUndefined();
+        expect(unrelated.input._source).toBe(source.output);
+        expect(source.output._endpoints).toEqual(new Set([unrelated.input]));
+    });
+
+    it("preserves connections that replaced a captured edge", () => {
+        const capturedSource = new Block(NumberDefinition);
+        const replacementSource = new Block(NumberDefinition);
+        const output = new Block(NumberDefinition);
+        capturedSource.output.connectTo(output.input);
+        const nodeAsset = new NodeAsset({ name: "reconnected", outputBlock: output });
+        capturedSource.output.disconnectFrom(output.input);
+        replacementSource.output.connectTo(output.input);
+
+        nodeAsset.dispose();
+
+        expect(output.input._source).toBe(replacementSource.output);
+        expect(replacementSource.output._endpoints).toContain(output.input);
+    });
+
+    it("rejects execution after disposal", async () => {
+        const block = new Block(NumberDefinition, { input: 1 });
+        const nodeAsset = new NodeAsset({ name: "disposed-execution", outputBlock: block });
+
+        nodeAsset.dispose();
+
+        await expect(nodeAsset.executeAsync()).rejects.toThrow('NodeAsset "disposed-execution" is disposed.');
+    });
+
     it("resolves shared resource dependencies once and disposes dependents first", async () => {
         const events: string[] = [];
         const multiplierResource = {

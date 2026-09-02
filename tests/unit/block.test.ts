@@ -85,6 +85,30 @@ describe("Block connections", () => {
         expect(() => secondInputBlock.output.connectTo(outputBlock.input)).toThrow();
     });
 
+    it("disconnects both ports and allows the input to be reconnected", () => {
+        const firstSource = new Block(NumberDefinition);
+        const secondSource = new Block(NumberDefinition);
+        const destination = new Block(NumberDefinition);
+
+        firstSource.output.connectTo(destination.input);
+        firstSource.output.disconnectFrom(destination.input);
+        firstSource.output.disconnectFrom(destination.input);
+        secondSource.output.connectTo(destination.input);
+
+        expect(destination.input._source).toBe(secondSource.output);
+        expect(firstSource.output._endpoints).not.toContain(destination.input);
+    });
+
+    it("excludes disconnected edges from cycle detection", () => {
+        const firstBlock = new Block(ScaleDefinition);
+        const secondBlock = new Block(ScaleDefinition);
+
+        firstBlock.output.connectTo(secondBlock.input);
+        firstBlock.output.disconnectFrom(secondBlock.input);
+
+        expect(() => secondBlock.output.connectTo(firstBlock.input)).not.toThrow();
+    });
+
     it("rejects a cyclic connection", () => {
         const firstBlock = new Block(ScaleDefinition);
         const secondBlock = new Block(ScaleDefinition);

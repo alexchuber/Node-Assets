@@ -67,6 +67,16 @@ export class OutputPort<TType extends ConnectionPointType<unknown>> {
         this.#endpoints.add(input);
     }
 
+    /** Disconnects this output from an input. */
+    public disconnectFrom(input: InputPort<NoInfer<TType>>): void {
+        if (!this.#endpoints.delete(input)) {
+            return;
+        }
+        if (input._source === this) {
+            input._source = undefined;
+        }
+    }
+
     /** @internal */
     public get _endpoints(): ReadonlySet<InputPort<TType>> {
         return this.#endpoints;
