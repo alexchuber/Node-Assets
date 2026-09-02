@@ -1,5 +1,5 @@
-import { defineBlock, enumValue } from "../../src/blocks/blockDefinition";
-import { defineConnectionPointType } from "../../src/connectionPointType";
+import { defineBlock, enumValue } from "../../src/block/blockDefinition";
+import { defineConnectionPointType } from "../../src/block/connectionPointType";
 
 export const NumberType = defineConnectionPointType<number>("number", (value): value is number => typeof value === "number");
 export const OtherNumberType = defineConnectionPointType<number>("number", (value): value is number => typeof value === "number");

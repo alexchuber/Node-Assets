@@ -1,4 +1,5 @@
-import type { ConnectionPointType, ConnectionPointValue } from "../connectionPointType";
+import type { ConnectionPointType, ConnectionPointValue } from "./connectionPointType";
+import type { ResourceDependencies, ResourceValues } from "../resources/resource";
 
 declare const configType: unique symbol;
 
@@ -31,50 +32,64 @@ export interface _AnyBlockDefinition {
     readonly input: ConnectionPointType<unknown>;
     readonly output: ConnectionPointType<unknown>;
     readonly config: ConfigDefinition;
+    readonly resources: ResourceDependencies;
     readonly run?: unknown;
     readonly runAsync?: unknown;
 }
 
-type Runner<TInput extends ConnectionPointType<unknown>, TOutput extends ConnectionPointType<unknown>, TConfig extends ConfigDefinition> =
+type Runner<TInput extends ConnectionPointType<unknown>, TOutput extends ConnectionPointType<unknown>, TConfig extends ConfigDefinition, TResources extends ResourceDependencies> =
     | {
-          readonly run: (input: ConnectionPointValue<TInput>, config: ConfigValues<TConfig>) => ConnectionPointValue<TOutput>;
+          readonly run: (input: ConnectionPointValue<TInput>, config: ConfigValues<TConfig>, resources: ResourceValues<TResources>) => ConnectionPointValue<TOutput>;
           readonly runAsync?: never;
       }
     | {
           readonly run?: never;
-          readonly runAsync: (input: ConnectionPointValue<TInput>, config: ConfigValues<TConfig>) => Promise<ConnectionPointValue<TOutput>>;
+          readonly runAsync: (input: ConnectionPointValue<TInput>, config: ConfigValues<TConfig>, resources: ResourceValues<TResources>) => Promise<ConnectionPointValue<TOutput>>;
       };
 
 export type BlockDefinition<
     TInput extends ConnectionPointType<unknown> = ConnectionPointType<unknown>,
     TOutput extends ConnectionPointType<unknown> = ConnectionPointType<unknown>,
     TConfig extends ConfigDefinition = ConfigDefinition,
+    TResources extends ResourceDependencies = ResourceDependencies,
 > = {
     readonly type: string;
     readonly version: 1;
     readonly input: TInput;
     readonly output: TOutput;
     readonly config: TConfig;
-} & Runner<TInput, TOutput, TConfig>;
+    readonly resources: TResources;
+} & Runner<TInput, TOutput, TConfig, TResources>;
 
-type DefinitionOptions<TInput extends ConnectionPointType<unknown>, TOutput extends ConnectionPointType<unknown>, TConfig extends ConfigDefinition> = {
+type DefinitionOptions<
+    TInput extends ConnectionPointType<unknown>,
+    TOutput extends ConnectionPointType<unknown>,
+    TConfig extends ConfigDefinition,
+    TResources extends ResourceDependencies,
+> = {
     readonly type: string;
     readonly input: TInput;
     readonly output: TOutput;
     readonly config?: TConfig;
-} & Runner<TInput, TOutput, TConfig>;
+    readonly resources?: TResources;
+} & Runner<TInput, TOutput, TConfig, TResources>;
 
 export function defineBlock<
     const TInput extends ConnectionPointType<unknown>,
     const TOutput extends ConnectionPointType<unknown>,
     const TConfig extends ConfigDefinition = Record<never, never>,
->(definition: DefinitionOptions<TInput, TOutput, TConfig>): BlockDefinition<TInput, TOutput, TConfig> {
+    const TResources extends ResourceDependencies = Record<never, never>,
+>(definition: DefinitionOptions<TInput, TOutput, TConfig, TResources>): BlockDefinition<TInput, TOutput, TConfig, TResources> {
     return freezeDefinition(definition);
 }
 
-function freezeDefinition<const TInput extends ConnectionPointType<unknown>, const TOutput extends ConnectionPointType<unknown>, const TConfig extends ConfigDefinition>(
-    definition: DefinitionOptions<TInput, TOutput, TConfig>
-): BlockDefinition<TInput, TOutput, TConfig> {
+function freezeDefinition<
+    const TInput extends ConnectionPointType<unknown>,
+    const TOutput extends ConnectionPointType<unknown>,
+    const TConfig extends ConfigDefinition,
+    const TResources extends ResourceDependencies,
+>(definition: DefinitionOptions<TInput, TOutput, TConfig, TResources>): BlockDefinition<TInput, TOutput, TConfig, TResources> {
     const config = Object.freeze({ ...(definition.config ?? {}) }) as TConfig;
-    return Object.freeze({ ...definition, config, version: 1 });
+    const resources = Object.freeze({ ...(definition.resources ?? {}) }) as TResources;
+    return Object.freeze({ ...definition, config, resources, version: 1 });
 }

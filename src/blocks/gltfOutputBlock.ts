@@ -1,8 +1,8 @@
 import type { Scene as BabylonScene } from "@babylonjs/core/scene";
 
-import { Block, type BlockOptions } from "../block";
-import { defineBlock } from "../blockDefinition";
-import { BabylonSceneType, FileType } from "../../connectionPointType";
+import { Block, type BlockOptions } from "../block/block";
+import { defineBlock } from "../block/blockDefinition";
+import { BabylonSceneType, FileType } from "../block/connectionPointType";
 
 const GltfOutputBlockDefinition = defineBlock({
     type: "output.gltf",

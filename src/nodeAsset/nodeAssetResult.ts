@@ -1,6 +1,6 @@
-import type { Block } from "./blocks/block";
-import type { _AnyBlockDefinition } from "./blocks/blockDefinition";
-import type { ConnectionPointValue } from "./connectionPointType";
+import type { Block } from "../block/block";
+import type { _AnyBlockDefinition } from "../block/blockDefinition";
+import type { ConnectionPointValue } from "../block/connectionPointType";
 
 type AnyBlock = Block<_AnyBlockDefinition>;
 

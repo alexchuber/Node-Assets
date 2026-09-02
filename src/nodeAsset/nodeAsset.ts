@@ -1,14 +1,15 @@
-import type { Block } from "./blocks/block";
-import type { _AnyBlockDefinition } from "./blocks/blockDefinition";
-import type { ConnectionPointValue } from "./connectionPointType";
+import type { Block } from "../block/block";
+import type { _AnyBlockDefinition } from "../block/blockDefinition";
+import type { ConnectionPointValue } from "../block/connectionPointType";
 import type { NodeAssetContext } from "./nodeAssetContext";
 import { NodeAssetResult } from "./nodeAssetResult";
+import { ResourceScope } from "../resources/resourceScope";
 
 type AnyBlock = Block<_AnyBlockDefinition>;
 
 interface ErasedRunner {
-    readonly run?: (input: unknown, config: unknown) => unknown;
-    readonly runAsync?: (input: unknown, config: unknown) => Promise<unknown>;
+    readonly run?: (input: unknown, config: unknown, resources: Readonly<Record<string, unknown>>) => unknown;
+    readonly runAsync?: (input: unknown, config: unknown, resources: Readonly<Record<string, unknown>>) => Promise<unknown>;
 }
 
 interface NodeAssetOptions<TOutput extends AnyBlock> {
@@ -82,29 +83,35 @@ async function executeAsync<TOutput extends AnyBlock>(
     outputBlock: TOutput,
     contextInputs: ReadonlyMap<AnyBlock, unknown>
 ): Promise<NodeAssetResult<TOutput>> {
+    const resourceScope = new ResourceScope();
     const values = new Map<AnyBlock, unknown>();
 
-    for (const { block, source } of nodes) {
-        let input: unknown;
-        if (source === undefined) {
-            input = contextInputs.has(block) ? contextInputs.get(block) : block.input.defaultValue;
-            if (input === undefined) {
-                throw new Error(`No value was supplied for block "${block.name}".`);
+    try {
+        for (const { block, source } of nodes) {
+            let input: unknown;
+            if (source === undefined) {
+                input = contextInputs.has(block) ? contextInputs.get(block) : block.input.defaultValue;
+                if (input === undefined) {
+                    throw new Error(`No value was supplied for block "${block.name}".`);
+                }
+            } else {
+                input = values.get(source);
             }
-        } else {
-            input = values.get(source);
+
+            if (!block._definition.input.is(input)) {
+                throw new Error(`Block "${block.name}" received an invalid input value.`);
+            }
+            const runner = block._definition as unknown as ErasedRunner;
+            const resources = await resourceScope.resolveAllAsync(block._definition.resources);
+            const output = runner.run === undefined ? await runner.runAsync?.(input, block._config, resources) : runner.run(input, block._config, resources);
+            if (!block._definition.output.is(output)) {
+                throw new Error(`Block "${block.name}" produced an invalid output value.`);
+            }
+            values.set(block, output);
         }
 
-        if (!block._definition.input.is(input)) {
-            throw new Error(`Block "${block.name}" received an invalid input value.`);
-        }
-        const runner = block._definition as unknown as ErasedRunner;
-        const output = runner.run === undefined ? await runner.runAsync?.(input, block._config) : runner.run(input, block._config);
-        if (!block._definition.output.is(output)) {
-            throw new Error(`Block "${block.name}" produced an invalid output value.`);
-        }
-        values.set(block, output);
+        return new NodeAssetResult(outputBlock, values.get(outputBlock) as ConnectionPointValue<TOutput["_definition"]["output"]>);
+    } finally {
+        await resourceScope.disposeAsync();
     }
-
-    return new NodeAssetResult(outputBlock, values.get(outputBlock) as ConnectionPointValue<TOutput["_definition"]["output"]>);
 }

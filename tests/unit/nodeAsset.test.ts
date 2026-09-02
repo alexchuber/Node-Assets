@@ -1,7 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it, vi } from "vitest";
 
-import { Block } from "../../src/blocks/block";
+import { Block } from "../../src/block/block";
+import { defineBlock } from "../../src/block/blockDefinition";
 import { NodeAsset, NodeAssetContext } from "../../src/index";
+import type { Resource } from "../../src/resources/resource";
 import { ScaleDefinition, NumberDefinition } from "../fixtures/numberBlocks";
 
 describe("NodeAsset", () => {
@@ -59,5 +61,170 @@ describe("NodeAsset", () => {
         expect(defaultResult.output).toBe(6);
         expect(contextResult.output).toBe(12);
         expect(contextResult.outputBlock).toBe(nodeAsset.outputBlock);
+    });
+
+    it("resolves shared resource dependencies once and disposes dependents first", async () => {
+        const events: string[] = [];
+        const multiplierResource = {
+            name: "multiplier",
+            create: () => {
+                events.push("create multiplier");
+                return 2;
+            },
+            dispose: () => {
+                events.push("dispose multiplier");
+            },
+        } satisfies Resource<number>;
+        const calculatorResource = {
+            name: "calculator",
+            dependencies: { multiplier: multiplierResource },
+            create: ({ multiplier }) => {
+                expectTypeOf(multiplier).toEqualTypeOf<number>();
+                events.push("create calculator");
+                return (value: number) => value * multiplier;
+            },
+            dispose: () => {
+                events.push("dispose calculator");
+            },
+        } satisfies Resource<(value: number) => number, { readonly multiplier: typeof multiplierResource }>;
+        const definition = defineBlock({
+            type: "resource-consumer",
+            input: NumberDefinition.input,
+            output: NumberDefinition.output,
+            resources: {
+                calculator: calculatorResource,
+                sameCalculator: calculatorResource,
+            },
+            run: (input, _config, { calculator, sameCalculator }) => {
+                expectTypeOf(calculator).toEqualTypeOf<(value: number) => number>();
+                expect(calculator).toBe(sameCalculator);
+                events.push("run");
+                return calculator(input);
+            },
+        });
+        const block = new Block(definition, { input: 3 });
+        const nodeAsset = new NodeAsset({ name: "resources", outputBlock: block });
+
+        await expect(nodeAsset.executeAsync()).resolves.toMatchObject({ output: 6 });
+        expect(events).toEqual(["create multiplier", "create calculator", "run", "dispose calculator", "dispose multiplier"]);
+    });
+
+    it("isolates resources between concurrent executions", async () => {
+        let nextId = 0;
+        const disposedIds: number[] = [];
+        const resource = {
+            name: "execution-resource",
+            create: () => ({ id: ++nextId }),
+            dispose: ({ id }) => {
+                disposedIds.push(id);
+            },
+        } satisfies Resource<{ id: number }>;
+        const definition = defineBlock({
+            type: "execution-resource-consumer",
+            input: NumberDefinition.input,
+            output: NumberDefinition.output,
+            resources: { resource },
+            run: (_input, _config, { resource: { id } }) => id,
+        });
+        const block = new Block(definition, { input: 1 });
+        const nodeAsset = new NodeAsset({ name: "isolated-resources", outputBlock: block });
+
+        expect(nextId).toBe(0);
+        const results = await Promise.all([nodeAsset.executeAsync(), nodeAsset.executeAsync()]);
+
+        expect(results.map(({ output }) => output).sort()).toEqual([1, 2]);
+        expect(disposedIds.sort()).toEqual([1, 2]);
+    });
+
+    it("disposes acquired dependencies when resource creation fails", async () => {
+        const disposeDependency = vi.fn();
+        const disposeFailedResource = vi.fn();
+        const dependency = {
+            name: "acquired-dependency",
+            create: () => ({}),
+            dispose: disposeDependency,
+        } satisfies Resource<object>;
+        const failingResource = {
+            name: "failing-resource",
+            dependencies: { dependency },
+            create: () => {
+                throw new Error("resource creation failed");
+            },
+            dispose: disposeFailedResource,
+        } satisfies Resource<object, { readonly dependency: typeof dependency }>;
+        const definition = defineBlock({
+            type: "failing-resource-consumer",
+            input: NumberDefinition.input,
+            output: NumberDefinition.output,
+            resources: { failingResource },
+            run: (input) => input,
+        });
+        const block = new Block(definition, { input: 1 });
+        const nodeAsset = new NodeAsset({ name: "resource-creation-failure", outputBlock: block });
+
+        await expect(nodeAsset.executeAsync()).rejects.toThrow();
+        expect(disposeDependency).toHaveBeenCalledOnce();
+        expect(disposeFailedResource).not.toHaveBeenCalled();
+    });
+
+    it("attempts every resource disposal when cleanup fails", async () => {
+        const disposeFirst = vi.fn();
+        const disposeSecond = vi.fn(() => {
+            throw new Error("resource cleanup failed");
+        });
+        const firstResource = {
+            name: "first-resource",
+            create: () => ({}),
+            dispose: disposeFirst,
+        } satisfies Resource<object>;
+        const secondResource = {
+            name: "second-resource",
+            create: () => ({}),
+            dispose: disposeSecond,
+        } satisfies Resource<object>;
+        const definition = defineBlock({
+            type: "cleanup-failure-consumer",
+            input: NumberDefinition.input,
+            output: NumberDefinition.output,
+            resources: { firstResource, secondResource },
+            run: (input) => input,
+        });
+        const block = new Block(definition, { input: 1 });
+        const nodeAsset = new NodeAsset({ name: "resource-cleanup-failure", outputBlock: block });
+
+        await expect(nodeAsset.executeAsync()).rejects.toThrow();
+        expect(disposeFirst).toHaveBeenCalledOnce();
+        expect(disposeSecond).toHaveBeenCalledOnce();
+    });
+
+    it("rejects cyclic resource dependencies", async () => {
+        interface CyclicDependencies {
+            readonly [name: string]: Resource<object, CyclicDependencies>;
+        }
+
+        const firstResource = {
+            name: "first-cyclic-resource",
+            dependencies: {} as CyclicDependencies,
+            create: () => ({}),
+            dispose: () => undefined,
+        } satisfies Resource<object, CyclicDependencies>;
+        const secondResource = {
+            name: "second-cyclic-resource",
+            dependencies: { firstResource },
+            create: () => ({}),
+            dispose: () => undefined,
+        } satisfies Resource<object, { readonly firstResource: typeof firstResource }>;
+        firstResource.dependencies = { secondResource } as CyclicDependencies;
+        const definition = defineBlock({
+            type: "cyclic-resource-consumer",
+            input: NumberDefinition.input,
+            output: NumberDefinition.output,
+            resources: { firstResource },
+            run: (input) => input,
+        });
+        const block = new Block(definition, { input: 1 });
+        const nodeAsset = new NodeAsset({ name: "cyclic-resources", outputBlock: block });
+
+        await expect(nodeAsset.executeAsync()).rejects.toThrow();
     });
 });
