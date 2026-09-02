@@ -1,4 +1,4 @@
-import type { ConnectionPointType, RuntimeData } from "../connectionPointType";
+import type { ConnectionPointType, ConnectionPointValue } from "../connectionPointType";
 
 declare const configType: unique symbol;
 
@@ -38,12 +38,12 @@ export interface _AnyBlockDefinition {
 
 type Runner<TInput extends ConnectionPointType<unknown>, TOutput extends ConnectionPointType<unknown>, TConfig extends ConfigDefinition> =
     | {
-          readonly run: (input: RuntimeData<TInput>, config: ConfigValues<TConfig>) => RuntimeData<TOutput>;
+          readonly run: (input: ConnectionPointValue<TInput>, config: ConfigValues<TConfig>) => ConnectionPointValue<TOutput>;
           readonly runAsync?: never;
       }
     | {
           readonly run?: never;
-          readonly runAsync: (input: RuntimeData<TInput>, config: ConfigValues<TConfig>) => Promise<RuntimeData<TOutput>>;
+          readonly runAsync: (input: ConnectionPointValue<TInput>, config: ConfigValues<TConfig>) => Promise<ConnectionPointValue<TOutput>>;
       };
 
 export type BlockDefinition<

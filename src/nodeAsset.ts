@@ -1,6 +1,6 @@
 import type { Block } from "./blocks/block";
 import type { _AnyBlockDefinition } from "./blocks/blockDefinition";
-import type { RuntimeData } from "./connectionPointType";
+import type { ConnectionPointValue } from "./connectionPointType";
 import type { NodeAssetContext } from "./nodeAssetContext";
 import { NodeAssetResult } from "./nodeAssetResult";
 
@@ -83,7 +83,7 @@ async function executeAsync<TOutput extends AnyBlock>(
     for (const { block, source } of nodes) {
         let input: unknown;
         if (source === undefined) {
-            input = contextInputs.has(block) ? contextInputs.get(block) : block.defaultInput;
+            input = contextInputs.has(block) ? contextInputs.get(block) : block.input.defaultValue;
             if (input === undefined) {
                 throw new Error(`No value was supplied for block "${block.name}".`);
             }
@@ -91,16 +91,16 @@ async function executeAsync<TOutput extends AnyBlock>(
             input = values.get(source);
         }
 
-        if (!block.definition.input.is(input)) {
+        if (!block._definition.input.is(input)) {
             throw new Error(`Block "${block.name}" received an invalid input value.`);
         }
-        const runner = block.definition as unknown as ErasedRunner;
-        const output = runner.run === undefined ? await runner.runAsync?.(input, block.config) : runner.run(input, block.config);
-        if (!block.definition.output.is(output)) {
+        const runner = block._definition as unknown as ErasedRunner;
+        const output = runner.run === undefined ? await runner.runAsync?.(input, block._config) : runner.run(input, block._config);
+        if (!block._definition.output.is(output)) {
             throw new Error(`Block "${block.name}" produced an invalid output value.`);
         }
         values.set(block, output);
     }
 
-    return new NodeAssetResult(outputBlock, values.get(outputBlock) as RuntimeData<TOutput["definition"]["output"]>);
+    return new NodeAssetResult(outputBlock, values.get(outputBlock) as ConnectionPointValue<TOutput["_definition"]["output"]>);
 }

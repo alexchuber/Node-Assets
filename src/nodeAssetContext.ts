@@ -1,6 +1,6 @@
 import type { Block } from "./blocks/block";
 import type { _AnyBlockDefinition } from "./blocks/blockDefinition";
-import type { RuntimeData } from "./connectionPointType";
+import type { ConnectionPointValue } from "./connectionPointType";
 import type { NodeAsset } from "./nodeAsset";
 
 type AnyBlock = Block<_AnyBlockDefinition>;
@@ -13,15 +13,15 @@ export class NodeAssetContext<TAsset extends NodeAsset<AnyBlock>> {
         this.#asset = asset;
     }
 
-    public setInput<TDefinition extends _AnyBlockDefinition>(block: Block<TDefinition>, value: RuntimeData<TDefinition["input"]>): void {
+    public setInput<TDefinition extends _AnyBlockDefinition>(block: Block<TDefinition>, value: ConnectionPointValue<TDefinition["input"]>): void {
         if (!this.#asset._hasBlock(block)) {
             throw new Error(`Block "${block.name}" does not belong to this NodeAsset.`);
         }
         if (block.input._source !== undefined) {
             throw new Error(`Block "${block.name}" has a connected input.`);
         }
-        if (!block.definition.input.is(value)) {
-            throw new Error(`Block "${block.name}" expected value type "${block.definition.input.id}".`);
+        if (!block._definition.input.is(value)) {
+            throw new Error(`Block "${block.name}" expected value type "${block._definition.input.id}".`);
         }
         this.#inputs.set(block, value);
     }

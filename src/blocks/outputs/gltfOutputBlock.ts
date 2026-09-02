@@ -2,23 +2,24 @@ import type { Scene as BabylonScene } from "@babylonjs/core/scene";
 
 import { Block, type BlockOptions } from "../block";
 import { defineBlock } from "../blockDefinition";
-import { BabylonSceneType } from "../../connectionTypes/babylon";
-import { GlbType } from "../../connectionTypes/gltf";
+import { BabylonSceneType, FileType } from "../../connectionPointType";
 
-const GLBOutputBlockDefinition = defineBlock({
-    type: "gltf.output-glb",
+const GltfOutputBlockDefinition = defineBlock({
+    type: "output.gltf",
     input: BabylonSceneType,
-    output: GlbType,
+    output: FileType,
     runAsync: serializeGlbAsync,
 });
 
-export class GLBOutputBlock extends Block<typeof GLBOutputBlockDefinition> {
-    public constructor(options?: BlockOptions<typeof GLBOutputBlockDefinition>) {
-        super(GLBOutputBlockDefinition, options);
+export type GltfOutputBlockOptions = BlockOptions<typeof GltfOutputBlockDefinition>;
+
+export class GltfOutputBlock extends Block<typeof GltfOutputBlockDefinition> {
+    public constructor(options?: GltfOutputBlockOptions) {
+        super(GltfOutputBlockDefinition, options);
     }
 }
 
-async function serializeGlbAsync(scene: BabylonScene): Promise<Uint8Array> {
+async function serializeGlbAsync(scene: BabylonScene): Promise<File> {
     const { GLTF2Export } = await import("@babylonjs/serializers/glTF/2.0/glTFSerializer");
     const fileName = "scene.glb";
     const result = await GLTF2Export.GLBAsync(scene, fileName);
@@ -26,5 +27,5 @@ async function serializeGlbAsync(scene: BabylonScene): Promise<Uint8Array> {
     if (!(root instanceof Blob)) {
         throw new Error(`The Babylon glTF serializer did not produce "${fileName}".`);
     }
-    return new Uint8Array(await root.arrayBuffer());
+    return new File([root], fileName, { type: "model/gltf-binary", lastModified: 0 });
 }

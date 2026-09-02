@@ -1,25 +1,26 @@
-import type { ConnectionPointType, RuntimeData } from "../connectionPointType";
+import type { ConnectionPointType, ConnectionPointValue } from "../connectionPointType";
 import type { _AnyBlockDefinition, ConfigDefinition, ConfigValues } from "./blockDefinition";
 
 export type BlockOptions<TDefinition extends _AnyBlockDefinition> = Partial<ConfigValues<TDefinition["config"]>> & {
-    readonly input?: RuntimeData<TDefinition["input"]>;
+    readonly input?: ConnectionPointValue<TDefinition["input"]>;
     readonly name?: string;
 };
 
 export class Block<TDefinition extends _AnyBlockDefinition> {
-    public readonly config: ConfigValues<TDefinition["config"]>;
-    public readonly defaultInput: RuntimeData<TDefinition["input"]> | undefined;
-    public readonly definition: TDefinition;
-    public readonly input: InputPort<TDefinition["input"]>;
     public readonly name: string;
+    public readonly input: InputPort<TDefinition["input"]>;
     public readonly output: OutputPort<TDefinition["output"]>;
 
+    /** @internal */
+    public readonly _config: ConfigValues<TDefinition["config"]>;
+    /** @internal */
+    public readonly _definition: TDefinition;
+
     public constructor(definition: TDefinition, options?: BlockOptions<TDefinition>) {
-        this.definition = definition;
+        this._definition = definition;
         this.name = options?.name ?? new.target.name;
-        this.config = resolveConfig(definition.config, options);
-        this.defaultInput = options?.input;
-        this.input = new InputPort(this, definition.input);
+        this._config = resolveConfig(definition.config, options);
+        this.input = new InputPort(this, definition.input, options?.input);
         this.output = new OutputPort(this, definition.output);
     }
 }
@@ -31,7 +32,8 @@ export class InputPort<TType extends ConnectionPointType<unknown>> {
     public constructor(
         /** @internal */
         public readonly _block: Block<_AnyBlockDefinition>,
-        public readonly type: TType
+        public readonly type: TType,
+        public readonly defaultValue: ConnectionPointValue<TType> | undefined
     ) {}
 }
 

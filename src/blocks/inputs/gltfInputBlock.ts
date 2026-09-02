@@ -2,12 +2,11 @@ import type { Scene as BabylonSceneObject } from "@babylonjs/core/scene";
 
 import { Block, type BlockOptions } from "../block";
 import { defineBlock } from "../blockDefinition";
-import { BabylonSceneType } from "../../connectionTypes/babylon";
-import { GlbType, GltfSourceType } from "../../connectionTypes/gltf";
+import { BabylonSceneType, UrlType } from "../../connectionPointType";
 
 const GltfInputBlockDefinition = defineBlock({
-    type: "gltf.input",
-    input: GltfSourceType,
+    type: "input.gltf",
+    input: UrlType,
     output: BabylonSceneType,
     runAsync: loadGltfAsync,
 });
@@ -18,17 +17,12 @@ export class GltfInputBlock extends Block<typeof GltfInputBlockDefinition> {
     }
 }
 
-async function loadGltfAsync(data: Uint8Array): Promise<BabylonSceneObject> {
+async function loadGltfAsync(url: string): Promise<BabylonSceneObject> {
     await import("@babylonjs/loaders/glTF");
     const [{ LoadSceneAsync }, { NullEngine }] = await Promise.all([import("@babylonjs/core/Loading/sceneLoader"), import("@babylonjs/core/Engines/nullEngine")]);
     const engine = new NullEngine();
     try {
-        const binary = GlbType.is(data);
-        const source = binary ? data : `data:${new TextDecoder().decode(data)}`;
-        const scene = await LoadSceneAsync(source, engine, {
-            name: binary ? "scene.glb" : "scene.gltf",
-            pluginExtension: binary ? ".glb" : ".gltf",
-        });
+        const scene = await LoadSceneAsync(url, engine);
         return scene;
     } catch (error) {
         engine.dispose();
