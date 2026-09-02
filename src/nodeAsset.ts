@@ -12,7 +12,9 @@ interface ErasedRunner {
 }
 
 interface NodeAssetOptions<TOutput extends AnyBlock> {
+    /** The name used to identify the asset. */
     readonly name: string;
+    /** The terminal block whose output becomes the execution result. */
     readonly outputBlock: TOutput;
 }
 
@@ -21,6 +23,7 @@ interface NodeRecord {
     readonly source: AnyBlock | undefined;
 }
 
+/** An executable asset pipeline, captured from a terminal output block. */
 export class NodeAsset<TOutput extends AnyBlock> {
     readonly #blocks: ReadonlySet<AnyBlock>;
     readonly #nodes: readonly NodeRecord[];
@@ -35,6 +38,7 @@ export class NodeAsset<TOutput extends AnyBlock> {
         this.#blocks = new Set(this.#nodes.map(({ block }) => block));
     }
 
+    /** Executes the captured graph with optional per-execution inputs. */
     public executeAsync(context?: NodeAssetContext<this>): Promise<NodeAssetResult<TOutput>> {
         const inputs = context?._snapshot() ?? new Map<AnyBlock, unknown>();
         return executeAsync(this.#nodes, this.outputBlock, inputs);

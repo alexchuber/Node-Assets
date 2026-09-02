@@ -1,11 +1,15 @@
 import type { ConnectionPointType, ConnectionPointValue } from "../connectionPointType";
 import type { _AnyBlockDefinition, ConfigDefinition, ConfigValues } from "./blockDefinition";
 
+/** Options shared by all block instances. */
 export type BlockOptions<TDefinition extends _AnyBlockDefinition> = Partial<ConfigValues<TDefinition["config"]>> & {
+    /** The value to use when an execution context does not supply one. */
     readonly input?: ConnectionPointValue<TDefinition["input"]>;
+    /** The name used to identify the block. */
     readonly name?: string;
 };
 
+/** A typed processing step in a node asset graph. */
 export class Block<TDefinition extends _AnyBlockDefinition> {
     public readonly name: string;
     public readonly input: InputPort<TDefinition["input"]>;
@@ -13,7 +17,6 @@ export class Block<TDefinition extends _AnyBlockDefinition> {
 
     /** @internal */
     public readonly _config: ConfigValues<TDefinition["config"]>;
-    /** @internal */
     public readonly _definition: TDefinition;
 
     public constructor(definition: TDefinition, options?: BlockOptions<TDefinition>) {
@@ -25,6 +28,7 @@ export class Block<TDefinition extends _AnyBlockDefinition> {
     }
 }
 
+/** A typed block input that accepts an initial, contextual, or connected value. */
 export class InputPort<TType extends ConnectionPointType<unknown>> {
     /** @internal */
     public _source: OutputPort<TType> | undefined;
@@ -37,6 +41,7 @@ export class InputPort<TType extends ConnectionPointType<unknown>> {
     ) {}
 }
 
+/** A typed block output that can connect to compatible input ports. */
 export class OutputPort<TType extends ConnectionPointType<unknown>> {
     readonly #endpoints = new Set<InputPort<TType>>();
 
@@ -46,6 +51,7 @@ export class OutputPort<TType extends ConnectionPointType<unknown>> {
         public readonly type: TType
     ) {}
 
+    /** Connects this output to an unconnected input with the same type descriptor. */
     public connectTo(input: InputPort<NoInfer<TType>>): void {
         if (this.type !== input.type) {
             throw new Error(`Cannot connect connection point type "${this.type.id}" to "${input.type.id}".`);

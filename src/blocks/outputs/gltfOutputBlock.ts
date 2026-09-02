@@ -11,8 +11,10 @@ const GltfOutputBlockDefinition = defineBlock({
     runAsync: serializeGlbAsync,
 });
 
+/** Options for naming the block or supplying its initial scene input. */
 export type GltfOutputBlockOptions = BlockOptions<typeof GltfOutputBlockDefinition>;
 
+/** Serializes a Babylon.js scene to a binary glTF file. */
 export class GltfOutputBlock extends Block<typeof GltfOutputBlockDefinition> {
     public constructor(options?: GltfOutputBlockOptions) {
         super(GltfOutputBlockDefinition, options);

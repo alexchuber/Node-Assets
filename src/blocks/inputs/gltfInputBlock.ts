@@ -11,6 +11,7 @@ const GltfInputBlockDefinition = defineBlock({
     runAsync: loadGltfAsync,
 });
 
+/** Loads a glTF or GLB URL into a Babylon.js scene. */
 export class GltfInputBlock extends Block<typeof GltfInputBlockDefinition> {
     public constructor(options?: BlockOptions<typeof GltfInputBlockDefinition>) {
         super(GltfInputBlockDefinition, options);

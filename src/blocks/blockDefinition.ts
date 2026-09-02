@@ -25,7 +25,6 @@ export function enumValue<const TValues extends readonly [string, ...string[]]>(
     }) as ConfigValue<TValues[number]>;
 }
 
-/** @internal */
 export interface _AnyBlockDefinition {
     readonly type: string;
     readonly version: 1;

@@ -5,6 +5,7 @@ import type { NodeAsset } from "./nodeAsset";
 
 type AnyBlock = Block<_AnyBlockDefinition>;
 
+/** Supplies per-execution values for a node asset's unconnected inputs. */
 export class NodeAssetContext<TAsset extends NodeAsset<AnyBlock>> {
     readonly #asset: TAsset;
     readonly #inputs = new Map<AnyBlock, unknown>();
@@ -13,6 +14,7 @@ export class NodeAssetContext<TAsset extends NodeAsset<AnyBlock>> {
         this.#asset = asset;
     }
 
+    /** Sets a block input for executions that use this context. */
     public setInput<TDefinition extends _AnyBlockDefinition>(block: Block<TDefinition>, value: ConnectionPointValue<TDefinition["input"]>): void {
         if (!this.#asset._hasBlock(block)) {
             throw new Error(`Block "${block.name}" does not belong to this NodeAsset.`);
