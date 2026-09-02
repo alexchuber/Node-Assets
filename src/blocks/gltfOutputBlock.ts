@@ -1,4 +1,4 @@
-import type { Scene as BabylonScene } from "@babylonjs/core/scene";
+import type { Scene as BabylonScene } from "@babylonjs/core/scene.js";
 
 import { Block, type BlockOptions } from "../block/block";
 import { defineBlock } from "../block/blockDefinition";
@@ -22,7 +22,7 @@ export class GltfOutputBlock extends Block<typeof GltfOutputBlockDefinition> {
 }
 
 async function serializeGlbAsync(scene: BabylonScene): Promise<File> {
-    const { GLTF2Export } = await import("@babylonjs/serializers/glTF/2.0/glTFSerializer");
+    const { GLTF2Export } = await import("@babylonjs/serializers/glTF/2.0/glTFSerializer.js");
     const fileName = "scene.glb";
     const result = await GLTF2Export.GLBAsync(scene, fileName);
     const root = result.files[fileName];

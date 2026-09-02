@@ -1,4 +1,4 @@
-import type { Scene as BabylonScene } from "@babylonjs/core/scene";
+import type { Scene as BabylonScene } from "@babylonjs/core/scene.js";
 
 declare const connectionPointData: unique symbol;
 

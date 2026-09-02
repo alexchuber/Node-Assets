@@ -19,19 +19,6 @@ describe("glTF pipeline", () => {
         sourceBlock.output.connectTo(destination.input);
 
         const asset = new NodeAsset({ name: `roundtrip-${formatIn}`, outputBlock: destination });
-        await expect(asset.executeAsync()).resolves.not.toThrow();
-        const result = await asset.executeAsync();
-
-        expectTypeOf(result.output).toEqualTypeOf<File>();
-        await expectGlbFile(result.output);
-    });
-
-    it("accepts GLTF and GLB input", async () => {
-        const source = new GltfInputBlock({ input: generateGltfDataUri() });
-        const destination = new GltfOutputBlock();
-        source.output.connectTo(destination.input);
-
-        const asset = new NodeAsset({ name: "gltf-to-glb", outputBlock: destination });
         const result = await asset.executeAsync();
 
         expectTypeOf(result.output).toEqualTypeOf<File>();
@@ -49,15 +36,6 @@ describe("glTF pipeline", () => {
         context.setInput(source, generateGltfDataUri());
 
         const result = await asset.executeAsync(context);
-
-        await expectGlbFile(result.output);
-    });
-
-    it("accepts a GLB URL", async () => {
-        const source = new GltfInputBlock({ input: generateGlbDataUri() });
-        const destination = new GltfOutputBlock();
-        source.output.connectTo(destination.input);
-        const result = await new NodeAsset({ name: "roundtrip-glb", outputBlock: destination }).executeAsync();
 
         await expectGlbFile(result.output);
     });
