@@ -16,6 +16,8 @@ pnpm install
 pnpm build
 ```
 
+See the [API guides](docs/README.md) for usage and planned behavior.
+
 ## Scripts
 
 | Command         | Description                                         |
