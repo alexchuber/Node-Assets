@@ -1,7 +1,5 @@
 node_modules/
 
-# pnpm is the package manager for this repository (see `packageManager` in package.json).
-# npm and Yarn lockfiles diverge from pnpm-lock.yaml and are not committed.
 package-lock.json
 yarn.lock
 
@@ -14,5 +12,4 @@ test-results/
 .env.local
 .DS_Store
 
-# Scratch space; see AGENTS.md.
-_/
+.obsidian/
