@@ -1,0 +1,149 @@
+import type { Scene } from "@babylonjs/core/scene.js";
+import type { PBRMaterial } from "@babylonjs/core/Materials/PBR/pbrMaterial.js";
+import type { Texture } from "@babylonjs/core/Materials/Textures/texture.js";
+
+import { describe, expect, it } from "vitest";
+
+import { Block } from "../../src/block/block";
+import { defineBlock } from "../../src/block/blockDefinition";
+import { BabylonSceneType } from "../../src/block/connectionPointType";
+import { CompressTexturesBlock } from "../../src/blocks/compressTexturesBlock";
+import { GltfInputBlock } from "../../src/blocks/gltfInputBlock";
+import { GltfOutputBlock } from "../../src/blocks/gltfOutputBlock";
+import { NodeAsset } from "../../src/nodeAsset/nodeAsset";
+
+describe("CompressTexturesBlock", () => {
+    it("replaces glTF textures with embedded KTX2 images without replacing the scene", async () => {
+        let sceneBeforeCompression: Scene | undefined;
+        let sceneAfterCompression: Scene | undefined;
+        let sourceTexture: Texture | null | undefined;
+        let compressedTexture: Texture | null | undefined;
+        let sharedTextureIdentityWasPreserved = false;
+        let sourceTextureWasDisposed = false;
+        const captureBefore = createSceneCaptureBlock((scene) => {
+            sceneBeforeCompression = scene;
+            const material = scene.materials[0] as PBRMaterial;
+            sourceTexture = material.albedoTexture as Texture | null;
+            if (sourceTexture !== null) {
+                sourceTexture.name = "";
+                sourceTexture.uOffset = 0.25;
+                sourceTexture.vScale = 0.5;
+                material.emissiveTexture = sourceTexture;
+            }
+        });
+        const compressTextures = new CompressTexturesBlock();
+        const captureAfter = createSceneCaptureBlock((scene) => {
+            sceneAfterCompression = scene;
+            const material = scene.materials[0] as PBRMaterial;
+            compressedTexture = material.albedoTexture as Texture | null;
+            sharedTextureIdentityWasPreserved = material.albedoTexture === material.emissiveTexture;
+            sourceTextureWasDisposed = sourceTexture !== undefined && sourceTexture !== null && !scene.textures.includes(sourceTexture);
+        });
+        const source = new GltfInputBlock({ input: generateTexturedGltfDataUri() });
+        const destination = new GltfOutputBlock();
+
+        source.output.connectTo(captureBefore.input);
+        captureBefore.output.connectTo(compressTextures.input);
+        compressTextures.output.connectTo(captureAfter.input);
+        captureAfter.output.connectTo(destination.input);
+
+        const glb = await new NodeAsset({ name: "compress-textures", outputBlock: destination }).executeAsync();
+        const parsed = await parseGlbAsync(glb);
+
+        expect(sceneAfterCompression).toBe(sceneBeforeCompression);
+        expect(compressedTexture).not.toBe(sourceTexture);
+        expect(sharedTextureIdentityWasPreserved).toBe(true);
+        expect(sourceTextureWasDisposed).toBe(true);
+        expect(compressedTexture?.name).toBe("texture.ktx2");
+        expect(compressedTexture?.uOffset).toBe(0.25);
+        expect(compressedTexture?.vScale).toBe(0.5);
+        expect(parsed.json.extensionsUsed).toContain("KHR_texture_basisu");
+        expect(parsed.json.extensionsRequired).toContain("KHR_texture_basisu");
+        expect(parsed.json.images).toHaveLength(1);
+        expect(parsed.json.images?.[0]?.mimeType).toBe("image/ktx2");
+
+        const imageBufferViewIndex = parsed.json.images?.[0]?.bufferView;
+        expect(imageBufferViewIndex).toBeTypeOf("number");
+        const imageBufferView = parsed.json.bufferViews?.[imageBufferViewIndex as number];
+        expect(imageBufferView).toBeDefined();
+        const imageBytes = parsed.binary.subarray(imageBufferView?.byteOffset ?? 0, (imageBufferView?.byteOffset ?? 0) + (imageBufferView?.byteLength ?? 0));
+        expect(imageBytes.subarray(0, KTX2_MAGIC.byteLength)).toEqual(KTX2_MAGIC);
+    });
+});
+
+function createSceneCaptureBlock(capture: (scene: Scene) => void): Block<ReturnType<typeof createSceneCaptureDefinition>> {
+    return new Block(createSceneCaptureDefinition(capture));
+}
+
+function createSceneCaptureDefinition(capture: (scene: Scene) => void) {
+    return defineBlock({
+        type: "capture-scene",
+        input: BabylonSceneType,
+        output: BabylonSceneType,
+        run: (scene) => {
+            capture(scene);
+            return scene;
+        },
+    });
+}
+
+interface ParsedGlb {
+    readonly json: {
+        readonly extensionsRequired?: readonly string[];
+        readonly extensionsUsed?: readonly string[];
+        readonly images?: readonly { readonly bufferView?: number; readonly mimeType?: string }[];
+        readonly bufferViews?: readonly { readonly byteLength: number; readonly byteOffset?: number }[];
+    };
+    readonly binary: Uint8Array;
+}
+
+async function parseGlbAsync(file: File): Promise<ParsedGlb> {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    expect(view.getUint32(0, true)).toBe(0x46546c67);
+
+    const jsonLength = view.getUint32(12, true);
+    const json = JSON.parse(new TextDecoder().decode(bytes.subarray(20, 20 + jsonLength))) as ParsedGlb["json"];
+    const binaryChunkOffset = 20 + jsonLength;
+    const binaryLength = view.getUint32(binaryChunkOffset, true);
+    const binary = bytes.subarray(binaryChunkOffset + 8, binaryChunkOffset + 8 + binaryLength);
+    return { json, binary };
+}
+
+function generateTexturedGltfDataUri(): string {
+    const png = "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAAEUlEQVQImWP4z8DwH4QZYAwAR8oH+Xm0fdIAAAAASUVORK5CYII=";
+    const binary = "AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAABAAIA";
+    return `data:${JSON.stringify({
+        asset: { version: "2.0" },
+        accessors: [
+            { bufferView: 0, componentType: 5126, count: 3, max: [1, 1, 0], min: [0, 0, 0], type: "VEC3" },
+            { bufferView: 1, componentType: 5126, count: 3, type: "VEC3" },
+            { bufferView: 2, componentType: 5126, count: 3, type: "VEC2" },
+            { bufferView: 3, componentType: 5123, count: 3, type: "SCALAR" },
+        ],
+        buffers: [{ byteLength: 102, uri: `data:application/octet-stream;base64,${binary}` }],
+        bufferViews: [
+            { buffer: 0, byteLength: 36, byteOffset: 0 },
+            { buffer: 0, byteLength: 36, byteOffset: 36 },
+            { buffer: 0, byteLength: 24, byteOffset: 72 },
+            { buffer: 0, byteLength: 6, byteOffset: 96 },
+        ],
+        images: [{ uri: `data:image/png;base64,${png}` }],
+        materials: [
+            {
+                emissiveTexture: { index: 0 },
+                pbrMetallicRoughness: {
+                    baseColorTexture: { index: 0 },
+                },
+            },
+        ],
+        meshes: [{ primitives: [{ attributes: { NORMAL: 1, POSITION: 0, TEXCOORD_0: 2 }, indices: 3, material: 0 }] }],
+        nodes: [{ mesh: 0 }],
+        samplers: [{}],
+        scene: 0,
+        scenes: [{ nodes: [0] }],
+        textures: [{ sampler: 0, source: 0 }],
+    })}`;
+}
+
+const KTX2_MAGIC = new Uint8Array([0xab, 0x4b, 0x54, 0x58, 0x20, 0x32, 0x30, 0xbb, 0x0d, 0x0a, 0x1a, 0x0a]);

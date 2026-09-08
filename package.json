@@ -55,7 +55,9 @@
     "dependencies": {
         "@babylonjs/core": "^9.21.2",
         "@babylonjs/loaders": "^9.21.2",
-        "@babylonjs/serializers": "^9.21.2"
+        "@babylonjs/serializers": "^9.21.2",
+        "babylonpress-ktx2-encoder": "0.6.0",
+        "sharp": "0.35.4"
     },
     "devDependencies": {
         "@eslint/js": "^10.0.1",
