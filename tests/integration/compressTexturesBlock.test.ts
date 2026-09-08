@@ -11,6 +11,7 @@ import { CompressTexturesBlock } from "../../src/blocks/compressTexturesBlock";
 import { GltfInputBlock } from "../../src/blocks/gltfInputBlock";
 import { GltfOutputBlock } from "../../src/blocks/gltfOutputBlock";
 import { NodeAsset } from "../../src/nodeAsset/nodeAsset";
+import { generateTexturedGltfDataUri } from "../fixtures/gltf";
 
 describe("CompressTexturesBlock", () => {
     it("replaces glTF textures with embedded KTX2 images without replacing the scene", async () => {
@@ -108,42 +109,6 @@ async function parseGlbAsync(file: File): Promise<ParsedGlb> {
     const binaryLength = view.getUint32(binaryChunkOffset, true);
     const binary = bytes.subarray(binaryChunkOffset + 8, binaryChunkOffset + 8 + binaryLength);
     return { json, binary };
-}
-
-function generateTexturedGltfDataUri(): string {
-    const png = "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAAEUlEQVQImWP4z8DwH4QZYAwAR8oH+Xm0fdIAAAAASUVORK5CYII=";
-    const binary = "AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAABAAIA";
-    return `data:${JSON.stringify({
-        asset: { version: "2.0" },
-        accessors: [
-            { bufferView: 0, componentType: 5126, count: 3, max: [1, 1, 0], min: [0, 0, 0], type: "VEC3" },
-            { bufferView: 1, componentType: 5126, count: 3, type: "VEC3" },
-            { bufferView: 2, componentType: 5126, count: 3, type: "VEC2" },
-            { bufferView: 3, componentType: 5123, count: 3, type: "SCALAR" },
-        ],
-        buffers: [{ byteLength: 102, uri: `data:application/octet-stream;base64,${binary}` }],
-        bufferViews: [
-            { buffer: 0, byteLength: 36, byteOffset: 0 },
-            { buffer: 0, byteLength: 36, byteOffset: 36 },
-            { buffer: 0, byteLength: 24, byteOffset: 72 },
-            { buffer: 0, byteLength: 6, byteOffset: 96 },
-        ],
-        images: [{ uri: `data:image/png;base64,${png}` }],
-        materials: [
-            {
-                emissiveTexture: { index: 0 },
-                pbrMetallicRoughness: {
-                    baseColorTexture: { index: 0 },
-                },
-            },
-        ],
-        meshes: [{ primitives: [{ attributes: { NORMAL: 1, POSITION: 0, TEXCOORD_0: 2 }, indices: 3, material: 0 }] }],
-        nodes: [{ mesh: 0 }],
-        samplers: [{}],
-        scene: 0,
-        scenes: [{ nodes: [0] }],
-        textures: [{ sampler: 0, source: 0 }],
-    })}`;
 }
 
 const KTX2_MAGIC = new Uint8Array([0xab, 0x4b, 0x54, 0x58, 0x20, 0x32, 0x30, 0xbb, 0x0d, 0x0a, 0x1a, 0x0a]);
