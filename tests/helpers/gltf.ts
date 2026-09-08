@@ -3,36 +3,6 @@ export function generateGltfDataUri(): string {
 }
 
 export function generateTexturedGltfDataUri(): string {
-    return generateTexturedGltfWithTextures([{ sampler: 0, source: 0 }], {
-        emissiveTexture: { index: 0 },
-        pbrMetallicRoughness: {
-            baseColorTexture: { index: 0 },
-        },
-    });
-}
-
-export function generateMultiSamplerTexturedGltfDataUri(): string {
-    return generateTexturedGltfWithTextures(
-        [
-            { sampler: 0, source: 0 },
-            { sampler: 1, source: 0 },
-        ],
-        {
-            emissiveTexture: { index: 1 },
-            pbrMetallicRoughness: {
-                baseColorTexture: { index: 0 },
-            },
-        }
-    );
-}
-
-function generateTexturedGltfWithTextures(
-    textures: ReadonlyArray<{ readonly sampler: number; readonly source: number }>,
-    material: {
-        readonly emissiveTexture: { readonly index: number };
-        readonly pbrMetallicRoughness: { readonly baseColorTexture: { readonly index: number } };
-    }
-): string {
     const png = "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAAEUlEQVQImWP4z8DwH4QZYAwAR8oH+Xm0fdIAAAAASUVORK5CYII=";
     const binary = "AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAABAAIA";
     return `data:${JSON.stringify({
@@ -51,13 +21,20 @@ function generateTexturedGltfWithTextures(
             { buffer: 0, byteLength: 6, byteOffset: 96 },
         ],
         images: [{ uri: `data:image/png;base64,${png}` }],
-        materials: [material],
+        materials: [
+            {
+                emissiveTexture: { index: 0 },
+                pbrMetallicRoughness: {
+                    baseColorTexture: { index: 0 },
+                },
+            },
+        ],
         meshes: [{ primitives: [{ attributes: { NORMAL: 1, POSITION: 0, TEXCOORD_0: 2 }, indices: 3, material: 0 }] }],
         nodes: [{ mesh: 0 }],
-        samplers: [{ magFilter: 9729 }, { magFilter: 9728 }],
+        samplers: [{ magFilter: 9729 }],
         scene: 0,
         scenes: [{ nodes: [0] }],
-        textures,
+        textures: [{ sampler: 0, source: 0 }],
     })}`;
 }
 
@@ -83,17 +60,15 @@ export function generateGlbDataUri(): string {
     const glb = new Uint8Array(totalLength);
     const header = new DataView(glb.buffer);
 
-    header.setUint32(0, 0x46546c67, true); // glTF
+    header.setUint32(0, 0x46546c67, true);
     header.setUint32(4, 2, true);
     header.setUint32(8, totalLength, true);
-
     header.setUint32(12, jsonLength, true);
-    header.setUint32(16, 0x4e4f534a, true); // JSON
+    header.setUint32(16, 0x4e4f534a, true);
     glb.set(json, 20);
     glb.fill(0x20, 20 + json.byteLength, binaryChunkOffset);
-
     header.setUint32(binaryChunkOffset, binaryLength, true);
-    header.setUint32(binaryChunkOffset + 4, 0x004e4942, true); // BIN
+    header.setUint32(binaryChunkOffset + 4, 0x004e4942, true);
     glb.set(binary, binaryChunkOffset + 8);
 
     return `data:model/gltf-binary;base64,${toBase64(glb)}`;
