@@ -36,21 +36,21 @@ describe("Block class", () => {
         const block = new Block(WeirdNumberDefinition, { input: 5 });
         const asset = new NodeAsset({ name: "weird-number", outputBlock: block });
 
-        await expect(asset.executeAsync()).resolves.toMatchObject({ output: 8 });
+        await expect(asset.executeAsync()).resolves.toBe(8);
     });
 
     it("uses supplied configuration", async () => {
         const block = new Block(ScaleDefinition, { input: 2, scale: "triple" });
         const asset = new NodeAsset({ name: "configured-scale", outputBlock: block });
 
-        await expect(asset.executeAsync()).resolves.toMatchObject({ output: 6 });
+        await expect(asset.executeAsync()).resolves.toBe(6);
     });
 
     it("uses configuration defaults", async () => {
         const block = new Block(ScaleDefinition, { input: 2 });
         const asset = new NodeAsset({ name: "default-scale", outputBlock: block });
 
-        await expect(asset.executeAsync()).resolves.toMatchObject({ output: 4 });
+        await expect(asset.executeAsync()).resolves.toBe(4);
     });
 
     it("rejects invalid configuration", () => {
@@ -63,7 +63,7 @@ describe("Block connections", () => {
         const inputBlock = new Block(NumberDefinition);
         const outputBlock = new Block(NumberDefinition);
 
-        inputBlock.output.connectTo(outputBlock.input);
+        outputBlock.input.connectTo(inputBlock.output);
 
         expect(outputBlock.input._source).toBe(inputBlock.output);
     });
@@ -73,6 +73,20 @@ describe("Block connections", () => {
         const outputBlock = new Block(OtherNumberDefinition);
 
         expect(() => inputBlock.output.connectTo(outputBlock.input)).toThrow('Cannot connect connection point type "number" to "number".');
+    });
+
+    it("validates auxiliary input connection point types", () => {
+        const definition = defineBlock({
+            type: "auxiliary-input",
+            input: NumberType,
+            auxiliaryInputs: { value: OtherNumberDefinition.input },
+            output: NumberType,
+            run: (input) => input,
+        });
+        const source = new Block(NumberDefinition);
+        const destination = new Block(definition);
+
+        expect(() => destination.auxiliaryInputs.value.connectTo(source.output)).toThrow('Cannot connect connection point type "number" to "number".');
     });
 
     it("rejects a second source for an input", () => {
@@ -99,13 +113,12 @@ describe("Block connections", () => {
         expect(firstSource.output._endpoints).not.toContain(destination.input);
     });
 
-    it("disconnects an input from any of the supplied outputs", () => {
+    it("disconnects an input from an output", () => {
         const connectedSource = new Block(NumberDefinition);
-        const otherSource = new Block(NumberDefinition);
         const destination = new Block(NumberDefinition);
 
         connectedSource.output.connectTo(destination.input);
-        destination.input.disconnectFrom([otherSource.output, connectedSource.output]);
+        destination.input.disconnectFrom(connectedSource.output);
 
         expect(destination.input._source).toBeUndefined();
         expect(connectedSource.output._endpoints).not.toContain(destination.input);
@@ -130,5 +143,21 @@ describe("Block connections", () => {
         secondBlock.output.connectTo(thirdBlock.input);
 
         expect(() => thirdBlock.output.connectTo(firstBlock.input)).toThrow();
+    });
+
+    it("includes auxiliary inputs in cycle detection", () => {
+        const definition = defineBlock({
+            type: "auxiliary-cycle",
+            input: NumberType,
+            auxiliaryInputs: { value: NumberType },
+            output: NumberType,
+            run: (input) => input,
+        });
+        const firstBlock = new Block(definition);
+        const secondBlock = new Block(definition);
+
+        firstBlock.output.connectTo(secondBlock.auxiliaryInputs.value);
+
+        expect(() => secondBlock.output.connectTo(firstBlock.input)).toThrow();
     });
 });

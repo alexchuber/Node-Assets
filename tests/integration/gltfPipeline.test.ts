@@ -21,8 +21,8 @@ describe("glTF pipeline", () => {
         const asset = new NodeAsset({ name: `roundtrip-${formatIn}`, outputBlock: destination });
         const result = await asset.executeAsync();
 
-        expectTypeOf(result.output).toEqualTypeOf<File>();
-        await expectGlbFile(result.output);
+        expectTypeOf(result).toEqualTypeOf<File>();
+        await expectGlbFile(result);
     });
 
     it("accepts input through an execution context", async () => {
@@ -37,7 +37,7 @@ describe("glTF pipeline", () => {
 
         const result = await asset.executeAsync(context);
 
-        await expectGlbFile(result.output);
+        await expectGlbFile(result);
     });
 
     it("disposes intermediate scenes and engines after conversion", async () => {
@@ -63,7 +63,7 @@ describe("glTF pipeline", () => {
             throw new Error("Expected the capture block to receive a scene.");
         }
 
-        await expectGlbFile(result.output);
+        await expectGlbFile(result);
         expect(scene.isDisposed).toBe(true);
         expect(scene.getEngine().isDisposed).toBe(true);
     });
@@ -121,7 +121,7 @@ describe("glTF pipeline", () => {
             expect(scene.getEngine().isDisposed).toBe(true);
         }
         for (const result of results) {
-            await expectGlbFile(result.output);
+            await expectGlbFile(result);
         }
     });
 });
