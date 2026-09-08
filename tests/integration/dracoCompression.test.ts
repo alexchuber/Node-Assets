@@ -1,7 +1,6 @@
-import type { IDracoCodecConfiguration } from "@babylonjs/core/Meshes/Compression/dracoCodec.js";
 import type { DracoEncoder as BabylonDracoEncoder } from "@babylonjs/core/Meshes/Compression/dracoEncoder.js";
 
-import { afterAll, beforeAll, describe, expect, expectTypeOf, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
 
 import { DracoEncoderBlock } from "../../src/blocks/dracoEncoderBlock";
 import { GltfInputBlock } from "../../src/blocks/gltfInputBlock";
@@ -10,30 +9,6 @@ import { NodeAsset } from "../../src/nodeAsset/nodeAsset";
 import { generateGltfDataUri } from "../fixtures/gltf";
 
 describe("Draco compression", () => {
-    let originalConfiguration: IDracoCodecConfiguration;
-
-    beforeAll(async () => {
-        const { DracoEncoder } = await import("@babylonjs/core/Meshes/Compression/dracoEncoder.js");
-        originalConfiguration = DracoEncoder.DefaultConfiguration;
-        DracoEncoder.DefaultConfiguration = await createNodeDracoConfigurationAsync();
-        DracoEncoder.ResetDefault();
-    });
-
-    afterAll(async () => {
-        const { DracoEncoder } = await import("@babylonjs/core/Meshes/Compression/dracoEncoder.js");
-        DracoEncoder.ResetDefault();
-        DracoEncoder.DefaultConfiguration = originalConfiguration;
-    });
-
-    it("provides Babylon's default Draco encoder", async () => {
-        const encoderBlock = new DracoEncoderBlock();
-        const result = await new NodeAsset({ name: "draco-encoder", outputBlock: encoderBlock }).executeAsync();
-        const { DracoEncoder } = await import("@babylonjs/core/Meshes/Compression/dracoEncoder.js");
-
-        expectTypeOf(result).toEqualTypeOf<BabylonDracoEncoder>();
-        expect(result).toBe(DracoEncoder.Default);
-    });
-
     it("leaves unconnected glTF output uncompressed", async () => {
         const source = new GltfInputBlock({ input: generateGltfDataUri() });
         const destination = new GltfOutputBlock();
@@ -60,6 +35,37 @@ describe("Draco compression", () => {
         expect(gltf.extensionsUsed).toContain("KHR_draco_mesh_compression");
         expect(gltf.meshes[0]?.primitives[0]?.extensions).toHaveProperty("KHR_draco_mesh_compression");
     });
+
+    it("provides Babylon's default Draco encoder", async () => {
+        const encoderBlock = new DracoEncoderBlock();
+        const result = await new NodeAsset({ name: "draco-encoder", outputBlock: encoderBlock }).executeAsync();
+        const { DracoEncoder } = await import("@babylonjs/core/Meshes/Compression/dracoEncoder.js");
+
+        expectTypeOf(result).toEqualTypeOf<BabylonDracoEncoder>();
+        expect(result).toBe(DracoEncoder.Default);
+    });
+
+    it("preserves a user-supplied Draco configuration", async () => {
+        const { DracoEncoder } = await import("@babylonjs/core/Meshes/Compression/dracoEncoder.js");
+        const nodeConfiguration = DracoEncoder.DefaultConfiguration;
+        const userConfiguration = {
+            jsModule: () => Promise.resolve({}),
+            numWorkers: 0,
+            wasmBinary: new ArrayBuffer(0),
+            wasmBinaryUrl: "file:///custom-draco-encoder.wasm",
+            wasmUrl: "file:///custom-draco-encoder.js",
+        };
+        DracoEncoder.ResetDefault();
+        DracoEncoder.DefaultConfiguration = userConfiguration;
+
+        try {
+            await new NodeAsset({ name: "custom-draco-encoder", outputBlock: new DracoEncoderBlock() }).executeAsync();
+            expect(DracoEncoder.DefaultConfiguration).toBe(userConfiguration);
+        } finally {
+            DracoEncoder.ResetDefault();
+            DracoEncoder.DefaultConfiguration = nodeConfiguration;
+        }
+    });
 });
 
 interface GltfJson {
@@ -79,24 +85,4 @@ async function readGlbJsonAsync(file: File): Promise<GltfJson> {
     expect(view.getUint32(16, true)).toBe(0x4e4f534a);
     const jsonLength = view.getUint32(12, true);
     return JSON.parse(new TextDecoder().decode(new Uint8Array(data, 20, jsonLength)).trim()) as GltfJson;
-}
-
-async function createNodeDracoConfigurationAsync(): Promise<IDracoCodecConfiguration> {
-    const [wrapperResponse, wasmResponse] = await Promise.all([
-        fetch("https://cdn.babylonjs.com/draco_encoder_wasm_wrapper.js"),
-        fetch("https://cdn.babylonjs.com/draco_encoder.wasm"),
-    ]);
-    if (!wrapperResponse.ok || !wasmResponse.ok) {
-        throw new Error("Failed to load the Babylon.js Draco encoder.");
-    }
-
-    const wrapper = await wrapperResponse.text();
-    const jsModule = new Function(`const process = undefined; const __dirname = "";\n${wrapper}\nreturn DracoEncoderModule;`)() as IDracoCodecConfiguration["jsModule"];
-    return {
-        jsModule,
-        numWorkers: 0,
-        wasmBinary: await wasmResponse.arrayBuffer(),
-        wasmBinaryUrl: "injected",
-        wasmUrl: "injected",
-    };
 }
