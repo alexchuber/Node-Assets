@@ -123,6 +123,9 @@ async function executeAsync<TOutput extends AnyBlock>(
     const remainingConsumers = new Map(consumerCounts);
     const values = new Map<AnyBlock, unknown>();
 
+    let result: ConnectionPointValue<TOutput["_definition"]["output"]> | undefined;
+    let executionError: unknown;
+    let executionFailed = false;
     try {
         for (const { block, source, auxiliarySources } of nodes) {
             let input: unknown;
@@ -172,11 +175,33 @@ async function executeAsync<TOutput extends AnyBlock>(
             }
         }
 
-        return values.get(outputBlock) as ConnectionPointValue<TOutput["_definition"]["output"]>;
-    } finally {
-        values.clear();
-        await resourceScope.disposeAsync();
+        result = values.get(outputBlock) as ConnectionPointValue<TOutput["_definition"]["output"]>;
+    } catch (error) {
+        executionError = error;
+        executionFailed = true;
     }
+
+    values.clear();
+    let disposalError: unknown;
+    let disposalFailed = false;
+    try {
+        await resourceScope.disposeAsync();
+    } catch (error) {
+        disposalError = error;
+        disposalFailed = true;
+    }
+
+    if (executionFailed && disposalFailed) {
+        const disposalErrors = disposalError instanceof AggregateError ? disposalError.errors : [disposalError];
+        throw new AggregateError([executionError, ...disposalErrors], "Execution and resource disposal failed.", { cause: executionError });
+    }
+    if (executionFailed) {
+        throw executionError;
+    }
+    if (disposalFailed) {
+        throw disposalError;
+    }
+    return result as ConnectionPointValue<TOutput["_definition"]["output"]>;
 }
 
 function releaseConsumedValue(source: AnyBlock, remainingConsumers: Map<AnyBlock, number>, values: Map<AnyBlock, unknown>): void {

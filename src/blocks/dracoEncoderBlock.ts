@@ -5,7 +5,7 @@ import { Block, type BlockOptions } from "../block/block";
 import { defineSourceBlock } from "../block/blockDefinition";
 import { DracoEncoderType } from "../block/connectionPointType";
 
-const DracoEncoderBlockDefinition = defineSourceBlock({
+const DracoEncoderBlockDefinition = /* @__PURE__ */ defineSourceBlock({
     type: "input.draco-encoder",
     output: DracoEncoderType,
     runAsync: async () => {
@@ -75,7 +75,7 @@ async function initializeDefaultEncoderForNodeAsync(DracoEncoder: DracoEncoderCo
 
     const wasmBinary = Uint8Array.from(wasmFile).buffer;
     const module = await createNodeEncoderModuleAsync(moduleFactory, wasmBinary, dirname(wrapperPath));
-    DracoEncoder.ResetDefault();
+    DracoEncoder.ResetDefault(true);
     DracoEncoder.DefaultConfiguration = {
         jsModule: () => Promise.resolve(module),
         numWorkers: 0,

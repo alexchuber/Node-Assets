@@ -3,7 +3,7 @@ import { defineBlock } from "../block/blockDefinition";
 import { BabylonSceneType, UrlType } from "../block/connectionPointType";
 import { NullEngineResource } from "../resources/nullEngineResource";
 
-const GltfInputBlockDefinition = defineBlock({
+const GltfInputBlockDefinition = /* @__PURE__ */ defineBlock({
     type: "input.gltf",
     input: UrlType,
     output: BabylonSceneType,
@@ -17,21 +17,26 @@ const GltfInputBlockDefinition = defineBlock({
             return LoadSceneAsync(url, engine);
         }
 
-        const response = await fetchOrThrowAsync(url);
-        const resolvedUrl = response.url || url;
-        const extension = getGltfExtension(resolvedUrl);
-        const source = extension === ".glb" ? new Uint8Array(await response.arrayBuffer()) : `data:${await response.text()}`;
+        const abortController = new AbortController();
+        try {
+            const response = await fetchOrThrowAsync(url, abortController.signal);
+            const resolvedUrl = response.url || url;
+            const extension = getGltfExtension(resolvedUrl);
+            const source = extension === ".glb" ? new Uint8Array(await response.arrayBuffer()) : `data:${await response.text()}`;
 
-        return LoadSceneAsync(source, engine, {
-            rootUrl: new URL(".", resolvedUrl).href,
-            pluginExtension: extension,
-            name: new URL(resolvedUrl).pathname.split("/").pop() ?? "",
-            pluginOptions: {
-                gltf: {
-                    preprocessUrlAsync: fetchAsDataUriAsync,
+            return await LoadSceneAsync(source, engine, {
+                rootUrl: new URL(".", resolvedUrl).href,
+                pluginExtension: extension,
+                name: new URL(resolvedUrl).pathname.split("/").pop() ?? "",
+                pluginOptions: {
+                    gltf: {
+                        preprocessUrlAsync: (dependencyUrl) => fetchAsDataUriAsync(dependencyUrl, abortController.signal),
+                    },
                 },
-            },
-        });
+            });
+        } finally {
+            abortController.abort();
+        }
     },
 });
 
@@ -47,8 +52,8 @@ function isHttpUrl(url: string): boolean {
     return scheme.startsWith("http://") || scheme.startsWith("https://");
 }
 
-async function fetchOrThrowAsync(url: string): Promise<Response> {
-    const response = await fetch(url);
+async function fetchOrThrowAsync(url: string, signal: AbortSignal): Promise<Response> {
+    const response = await fetch(url, { signal });
     if (!response.ok) {
         throw new Error(`Failed to fetch "${url}": HTTP ${response.status} ${response.statusText}`.trim());
     }
@@ -66,18 +71,22 @@ function getGltfExtension(url: string): ".gltf" | ".glb" {
     throw new Error(`Unable to determine the glTF format from "${url}".`);
 }
 
-async function fetchAsDataUriAsync(url: string): Promise<string> {
+async function fetchAsDataUriAsync(url: string, signal: AbortSignal): Promise<string> {
     if (!isHttpUrl(url)) {
         return url;
     }
 
-    const response = await fetchOrThrowAsync(url);
+    const response = await fetchOrThrowAsync(url, signal);
     const contentType = response.headers.get("content-type")?.split(";", 1)[0] || "application/octet-stream";
     const data = new Uint8Array(await response.arrayBuffer());
     return `data:${contentType};base64,${toBase64(data)}`;
 }
 
 function toBase64(data: Uint8Array): string {
+    if (typeof Buffer === "function") {
+        return Buffer.from(data.buffer, data.byteOffset, data.byteLength).toString("base64");
+    }
+
     const chunkSize = 32_768;
     let binary = "";
     for (let offset = 0; offset < data.length; offset += chunkSize) {

@@ -40,6 +40,7 @@ describe("Draco compression", () => {
             const gltfs = await Promise.all(results.map(readGlbJsonAsync));
 
             expect(resetDefault).toHaveBeenCalledOnce();
+            expect(resetDefault).toHaveBeenCalledWith(true);
             for (const gltf of gltfs) {
                 expect(gltf.extensionsUsed).toContain("KHR_draco_mesh_compression");
                 expect(gltf.meshes[0]?.primitives[0]?.extensions).toHaveProperty("KHR_draco_mesh_compression");

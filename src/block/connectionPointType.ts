@@ -17,16 +17,16 @@ export function defineConnectionPointType<P>(id: string, isData: (value: unknown
 
 // Definitions
 
-export const UrlType = defineConnectionPointType<string>("url", (value): value is string => typeof value === "string");
+export const UrlType = /* @__PURE__ */ defineConnectionPointType<string>("url", (value): value is string => typeof value === "string");
 
-export const FileType = defineConnectionPointType<File>("file", (value): value is File => value instanceof File);
+export const FileType = /* @__PURE__ */ defineConnectionPointType<File>("file", (value): value is File => value instanceof File);
 
-export const DracoEncoderType = defineConnectionPointType<DracoEncoder>(
+export const DracoEncoderType = /* @__PURE__ */ defineConnectionPointType<DracoEncoder>(
     "draco-encoder",
     (value): value is DracoEncoder => typeof value === "object" && value !== null && "encodeMeshAsync" in value && typeof value.encodeMeshAsync === "function"
 );
 
-export const BabylonSceneType = defineConnectionPointType<BabylonScene>(
+export const BabylonSceneType = /* @__PURE__ */ defineConnectionPointType<BabylonScene>(
     "babylon-scene",
     (value): value is BabylonScene =>
         typeof value === "object" && value !== null && "getEngine" in value && typeof value.getEngine === "function" && "dispose" in value && typeof value.dispose === "function"

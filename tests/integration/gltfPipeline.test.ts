@@ -1,12 +1,14 @@
 import type { Scene } from "@babylonjs/core/scene";
+import type { PBRMaterial } from "@babylonjs/core/Materials/PBR/pbrMaterial.js";
+import type { Texture } from "@babylonjs/core/Materials/Textures/texture.js";
 
-import { describe, expect, expectTypeOf, it } from "vitest";
+import { describe, expect, expectTypeOf, it, vi } from "vitest";
 
 import { Block } from "../../src/block/block";
 import { defineBlock } from "../../src/block/blockDefinition";
 import { BabylonSceneType, FileType } from "../../src/block/connectionPointType";
 import { GltfInputBlock, GltfOutputBlock, NodeAsset, NodeAssetContext } from "../../src/index";
-import { generateGlbDataUri, generateGltfDataUri } from "../fixtures/gltf";
+import { generateGlbDataUri, generateGltfDataUri, generateTexturedGltfDataUri } from "../fixtures/gltf";
 
 describe("glTF pipeline", () => {
     it.each([
@@ -125,6 +127,90 @@ describe("glTF pipeline", () => {
             await expectGlbFile(result);
         }
     });
+
+    it("preserves texture transforms when exporting GLB", async () => {
+        const transformDefinition = defineBlock({
+            type: "transform-texture",
+            input: BabylonSceneType,
+            output: BabylonSceneType,
+            run: (scene) => {
+                const texture = (scene.materials[0] as PBRMaterial).albedoTexture as Texture;
+                texture.uOffset = 0.25;
+                texture.vOffset = 0.5;
+                texture.uScale = 0.75;
+                texture.vScale = 0.625;
+                texture.wAng = 0.125;
+                texture.uRotationCenter = 0;
+                texture.vRotationCenter = 0;
+                texture.coordinatesIndex = 1;
+                return scene;
+            },
+        });
+        const source = new GltfInputBlock({ input: generateTexturedGltfDataUri() });
+        const transform = new Block(transformDefinition);
+        const destination = new GltfOutputBlock();
+        source.output.connectTo(transform.input);
+        transform.output.connectTo(destination.input);
+
+        const result = await new NodeAsset({ name: "texture-transform", outputBlock: destination }).executeAsync();
+        const gltf = await readGlbJsonAsync(result);
+        const textureTransform = gltf.materials?.[0]?.pbrMetallicRoughness?.baseColorTexture?.extensions?.KHR_texture_transform;
+
+        expect(gltf.extensionsUsed).toContain("KHR_texture_transform");
+        expect(textureTransform).toEqual({
+            offset: [0.25, 0.5],
+            rotation: -0.125,
+            scale: [0.75, 0.625],
+            texCoord: 1,
+        });
+    });
+
+    it("aborts sibling HTTP dependency fetches after a dependency fails", async () => {
+        const rootUrl = "https://example.com/model.gltf";
+        const gltf = JSON.parse(generateGltfDataUri().slice("data:".length)) as {
+            buffers: Array<{ byteLength: number; uri: string }>;
+            bufferViews: Array<{ buffer: number; byteLength: number; byteOffset: number }>;
+        };
+        gltf.buffers = [
+            { byteLength: 72, uri: "slow.bin" },
+            { byteLength: 6, uri: "fail.bin" },
+        ];
+        gltf.bufferViews[2] = { buffer: 1, byteLength: 6, byteOffset: 0 };
+        let slowFetchWasAborted = false;
+        const fetchMock = vi.fn((input: string | URL | Request, init?: RequestInit) => {
+            const url = String(input);
+            if (url === rootUrl) {
+                return Promise.resolve(new Response(JSON.stringify(gltf), { headers: { "content-type": "model/gltf+json" } }));
+            }
+            if (url.endsWith("/fail.bin")) {
+                return Promise.resolve(new Response("", { status: 500, statusText: "Failed" }));
+            }
+            if (url.endsWith("/slow.bin")) {
+                return new Promise<Response>((_resolve, reject) => {
+                    const timeout = setTimeout(() => reject(new Error("slow dependency was not aborted")), 100);
+                    init?.signal?.addEventListener(
+                        "abort",
+                        () => {
+                            clearTimeout(timeout);
+                            slowFetchWasAborted = true;
+                            reject(init.signal?.reason);
+                        },
+                        { once: true }
+                    );
+                });
+            }
+            return Promise.reject(new Error(`Unexpected fetch: ${url}`));
+        });
+        vi.stubGlobal("fetch", fetchMock);
+
+        try {
+            const source = new GltfInputBlock({ input: rootUrl });
+            await expect(new NodeAsset({ name: "failed-http-gltf", outputBlock: source }).executeAsync()).rejects.toThrow();
+            expect(slowFetchWasAborted).toBe(true);
+        } finally {
+            vi.unstubAllGlobals();
+        }
+    });
 });
 
 async function expectGlbFile(file: File): Promise<void> {
@@ -135,4 +221,24 @@ async function expectGlbFile(file: File): Promise<void> {
 
     const magic = new Uint8Array(await file.slice(0, 4).arrayBuffer());
     expect(new TextDecoder().decode(magic)).toBe("glTF");
+}
+
+interface GltfJson {
+    readonly extensionsUsed?: readonly string[];
+    readonly materials?: ReadonlyArray<{
+        readonly pbrMetallicRoughness?: {
+            readonly baseColorTexture?: {
+                readonly extensions?: {
+                    readonly KHR_texture_transform?: unknown;
+                };
+            };
+        };
+    }>;
+}
+
+async function readGlbJsonAsync(file: File): Promise<GltfJson> {
+    const data = await file.arrayBuffer();
+    const view = new DataView(data);
+    const jsonLength = view.getUint32(12, true);
+    return JSON.parse(new TextDecoder().decode(new Uint8Array(data, 20, jsonLength)).trim()) as GltfJson;
 }
