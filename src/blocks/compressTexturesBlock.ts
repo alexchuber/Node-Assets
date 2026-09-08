@@ -271,10 +271,11 @@ function addReference(references: TextureReference[], get: () => BaseTexture | n
 
 /** @internal */
 export function _getTextureEncodingSemantics(gammaSpace: boolean, isNormalMap: boolean): TextureEncodingSemantics {
+    const isPerceptual = gammaSpace && !isNormalMap;
     return {
         isNormalMap,
-        isPerceptual: gammaSpace,
-        isSetKTX2SRGBTransferFunc: gammaSpace,
+        isPerceptual,
+        isSetKTX2SRGBTransferFunc: isPerceptual,
     };
 }
 

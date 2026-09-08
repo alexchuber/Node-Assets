@@ -31,7 +31,7 @@ describe("CompressTexturesBlock", () => {
                 sourceTexture.name = "";
                 sourceTexture.uOffset = 0.25;
                 sourceTexture.vScale = 0.5;
-                sourceTexture.gammaSpace = false;
+                sourceTexture.gammaSpace = true;
                 material.emissiveTexture = sourceTexture;
                 material.bumpTexture = sourceTexture;
                 material.clearCoat.texture = sourceTexture;
@@ -90,6 +90,11 @@ describe("CompressTexturesBlock", () => {
             isNormalMap: false,
             isPerceptual: true,
             isSetKTX2SRGBTransferFunc: true,
+        });
+        expect(_getTextureEncodingSemantics(true, true)).toEqual({
+            isNormalMap: true,
+            isPerceptual: false,
+            isSetKTX2SRGBTransferFunc: false,
         });
     });
 
