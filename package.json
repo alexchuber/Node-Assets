@@ -3,6 +3,7 @@
     "version": "0.1.0",
     "license": "Apache-2.0",
     "type": "module",
+    "sideEffects": false,
     "main": "./dist/index.js",
     "types": "./dist/index.d.ts",
     "exports": {
@@ -50,12 +51,14 @@
         "format:check": "prettier --check \"src/**/*.ts\" \"tests/**/*.ts\" \"*.config.ts\" \"*.config.mjs\"",
         "test": "vitest run",
         "test:watch": "vitest",
-        "docs": "typedoc"
+        "typedocs": "typedoc"
     },
     "dependencies": {
         "@babylonjs/core": "^9.21.2",
         "@babylonjs/loaders": "^9.21.2",
-        "@babylonjs/serializers": "^9.21.2"
+        "@babylonjs/serializers": "^9.21.2",
+        "babylonpress-ktx2-encoder": "0.6.0",
+        "sharp": "0.35.4"
     },
     "devDependencies": {
         "@eslint/js": "^10.0.1",

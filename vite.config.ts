@@ -11,8 +11,8 @@ export default defineConfig({
             fileName: () => "index.js",
         },
         rollupOptions: {
-            // Babylon packages are externalized and are not bundled.
-            external: [/^@babylonjs\//, /^node:/],
+            // Runtime and platform-specific dependencies are not bundled.
+            external: [/^@babylonjs\//, /^babylonpress-ktx2-encoder$/, /^node:/, /^sharp$/],
         },
     },
     plugins: [
