@@ -25,6 +25,7 @@ describe("CompressTexturesBlock", () => {
             const material = scene.materials[0] as PBRMaterial;
             sourceTexture = material.albedoTexture as Texture | null;
             if (sourceTexture !== null) {
+                sourceTexture.name = "";
                 sourceTexture.uOffset = 0.25;
                 sourceTexture.vScale = 0.5;
                 material.emissiveTexture = sourceTexture;
@@ -53,6 +54,7 @@ describe("CompressTexturesBlock", () => {
         expect(compressedTexture).not.toBe(sourceTexture);
         expect(sharedTextureIdentityWasPreserved).toBe(true);
         expect(sourceTextureWasDisposed).toBe(true);
+        expect(compressedTexture?.name).toBe("texture.ktx2");
         expect(compressedTexture?.uOffset).toBe(0.25);
         expect(compressedTexture?.vScale).toBe(0.5);
         expect(parsed.json.extensionsUsed).toContain("KHR_texture_basisu");

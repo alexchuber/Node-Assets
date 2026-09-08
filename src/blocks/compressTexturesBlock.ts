@@ -2,6 +2,7 @@ import type { BaseTexture } from "@babylonjs/core/Materials/Textures/baseTexture
 import type { Texture } from "@babylonjs/core/Materials/Textures/texture.js";
 import type { PBRMaterial } from "@babylonjs/core/Materials/PBR/pbrMaterial.js";
 import type { Scene as BabylonScene } from "@babylonjs/core/scene.js";
+import type sharpFactory from "sharp";
 
 import { Block } from "../block/block";
 import { defineBlock } from "../block/blockDefinition";
@@ -38,7 +39,6 @@ async function compressTexturesAsync(scene: BabylonScene): Promise<BabylonScene>
         import("@babylonjs/core/Materials/Textures/texture.js"),
         import("@babylonjs/serializers/exportImageUtils.js"),
         import("@babylonjs/serializers/glTF/2.0/Extensions/KHR_texture_basisu.pure.js"),
-        import("@babylonjs/core/Materials/Textures/Loaders/ktxTextureLoader.js"),
     ]);
 
     RegisterKHR_texture_basisu();
@@ -142,7 +142,9 @@ async function encodeToKtx2Async(source: Uint8Array): Promise<Uint8Array> {
         return encodeToKTX2(source, options);
     }
 
-    const { default: sharp } = await import("sharp");
+    const sharpModuleName = "sharp";
+    // Keep this Node-only dependency opaque to browser bundlers while preserving native ESM resolution.
+    const { default: sharp } = (await import(/* @vite-ignore */ sharpModuleName)) as { default: typeof sharpFactory };
     return encodeToKTX2(source, {
         ...options,
         imageDecoder: async (buffer) => {
@@ -185,7 +187,7 @@ async function createCompressedTextureAsync(TextureConstructor: typeof Texture, 
 }
 
 function copyTextureProperties(source: Texture, destination: Texture): void {
-    destination.name = source.name.endsWith(".ktx2") ? source.name : `${source.name}.ktx2`;
+    destination.name = source.name ? (source.name.endsWith(".ktx2") ? source.name : `${source.name}.ktx2`) : "texture.ktx2";
     destination.hasAlpha = source.hasAlpha;
     destination.getAlphaFromRGB = source.getAlphaFromRGB;
     destination.level = source.level;
