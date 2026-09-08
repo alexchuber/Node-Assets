@@ -1,7 +1,7 @@
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
 
 import { Block } from "../../src/block/block";
-import { defineBlock } from "../../src/block/blockDefinition";
+import { defineBlock, defineSourceBlock } from "../../src/block/blockDefinition";
 import { NodeAsset, NodeAssetContext } from "../../src/index";
 import type { Resource } from "../../src/resources/resource";
 import { ScaleDefinition, NumberDefinition } from "../fixtures/numberBlocks";
@@ -13,7 +13,10 @@ describe("NodeAsset", () => {
         const context = new NodeAssetContext(nodeAsset);
         context.setInput(block, 3);
 
-        await expect(nodeAsset.executeAsync(context)).resolves.toMatchObject({ output: 6 });
+        const result = nodeAsset.executeAsync(context);
+
+        expectTypeOf(result).toEqualTypeOf<Promise<number>>();
+        await expect(result).resolves.toBe(6);
     });
 
     it("rejects execution without a required input value", async () => {
@@ -21,6 +24,26 @@ describe("NodeAsset", () => {
         const nodeAsset = new NodeAsset({ name: "missing-input", outputBlock: block });
 
         await expect(nodeAsset.executeAsync()).rejects.toThrow();
+    });
+
+    it("executes a source block without a user input", async () => {
+        const valueResource = {
+            name: "source-value",
+            create: () => 5,
+            dispose: () => undefined,
+        } satisfies Resource<number>;
+        const sourceDefinition = defineSourceBlock({
+            type: "source",
+            output: NumberDefinition.output,
+            resources: { value: valueResource },
+            run: (_config, { value }) => value,
+        });
+        const source = new Block(sourceDefinition);
+        const nodeAsset = new NodeAsset({ name: "source", outputBlock: source });
+
+        expectTypeOf(source.input).toEqualTypeOf<undefined>();
+        expect(source.input).toBeUndefined();
+        await expect(nodeAsset.executeAsync()).resolves.toBe(5);
     });
 
     it("rejects context inputs outside the node asset", () => {
@@ -58,9 +81,97 @@ describe("NodeAsset", () => {
 
         const [defaultResult, contextResult] = await Promise.all([nodeAsset.executeAsync(), nodeAsset.executeAsync(context)]);
 
-        expect(defaultResult.output).toBe(6);
-        expect(contextResult.output).toBe(12);
-        expect(contextResult.outputBlock).toBe(nodeAsset.outputBlock);
+        expect(defaultResult).toBe(6);
+        expect(contextResult).toBe(12);
+    });
+
+    it("executes connected optional auxiliary inputs", async () => {
+        const addDefinition = defineBlock({
+            type: "add",
+            input: NumberDefinition.input,
+            auxiliaryInputs: {
+                addend: NumberDefinition.input,
+            },
+            output: NumberDefinition.output,
+            run: (input, _config, _resources, { addend }) => input + (addend ?? 0),
+        });
+        const addendDefinition = defineSourceBlock({
+            type: "addend-source",
+            output: NumberDefinition.output,
+            run: () => 3,
+        });
+        const addend = new Block(addendDefinition);
+        const add = new Block(addDefinition, { input: 4 });
+        add.auxiliaryInputs.addend.connectTo(addend.output);
+        const nodeAsset = new NodeAsset({ name: "auxiliary-input", outputBlock: add });
+
+        await expect(nodeAsset.executeAsync()).resolves.toBe(7);
+    });
+
+    it("passes undefined for an unconnected optional auxiliary input", async () => {
+        const definition = defineBlock({
+            type: "optional-auxiliary-input",
+            input: NumberDefinition.input,
+            auxiliaryInputs: { optional: NumberDefinition.input },
+            output: NumberDefinition.output,
+            run: (input, _config, _resources, { optional }) => {
+                expect(optional).toBeUndefined();
+                return input;
+            },
+        });
+        const block = new Block(definition, { input: 4 });
+
+        await expect(new NodeAsset({ name: "optional-auxiliary-input", outputBlock: block }).executeAsync()).resolves.toBe(4);
+    });
+
+    it("captures auxiliary input topology at construction", async () => {
+        const definition = defineBlock({
+            type: "captured-auxiliary-input",
+            input: NumberDefinition.input,
+            auxiliaryInputs: { addend: NumberDefinition.input },
+            output: NumberDefinition.output,
+            run: (input, _config, _resources, { addend }) => input + (addend ?? 0),
+        });
+        const source = new Block(NumberDefinition, { input: 3 });
+        const destination = new Block(definition, { input: 4 });
+        source.output.connectTo(destination.auxiliaryInputs.addend);
+        const nodeAsset = new NodeAsset({ name: "captured-auxiliary-input", outputBlock: destination });
+
+        source.output.disconnectFrom(destination.auxiliaryInputs.addend);
+
+        await expect(nodeAsset.executeAsync()).resolves.toBe(7);
+    });
+
+    it("releases auxiliary input values after their final consumer", async () => {
+        const source = new Block(NumberDefinition, { input: 2 });
+        const deleteSpy = vi.spyOn(Map.prototype, "delete");
+        const auxiliaryDefinition = defineBlock({
+            type: "auxiliary-consumer",
+            input: NumberDefinition.input,
+            auxiliaryInputs: { value: NumberDefinition.input },
+            output: NumberDefinition.output,
+            run: (input, _config, _resources, { value }) => input + (value ?? 0),
+        });
+        const auxiliaryConsumer = new Block(auxiliaryDefinition, { input: 3 });
+        const outputDefinition = defineBlock({
+            type: "auxiliary-release-observer",
+            input: NumberDefinition.input,
+            output: NumberDefinition.output,
+            run: (input) => {
+                expect(deleteSpy.mock.calls.some(([key]) => key === source)).toBe(true);
+                return input;
+            },
+        });
+        const output = new Block(outputDefinition);
+        source.output.connectTo(auxiliaryConsumer.auxiliaryInputs.value);
+        auxiliaryConsumer.output.connectTo(output.input);
+        const nodeAsset = new NodeAsset({ name: "bounded-auxiliary-values", outputBlock: output });
+
+        try {
+            await expect(nodeAsset.executeAsync()).resolves.toBe(5);
+        } finally {
+            deleteSpy.mockRestore();
+        }
     });
 
     it("releases intermediate outputs after their final consumer", async () => {
@@ -82,7 +193,7 @@ describe("NodeAsset", () => {
         const nodeAsset = new NodeAsset({ name: "bounded-values", outputBlock: output });
 
         try {
-            await expect(nodeAsset.executeAsync()).resolves.toMatchObject({ output: 4 });
+            await expect(nodeAsset.executeAsync()).resolves.toBe(4);
             const releasedBlocks = deleteSpy.mock.calls.map(([key]) => key).filter((key) => key === source || key === scale || key === output);
             expect(releasedBlocks).toEqual([source, scale]);
         } finally {
@@ -157,7 +268,7 @@ describe("NodeAsset", () => {
         const block = new Block(definition, { input: 3 });
         const nodeAsset = new NodeAsset({ name: "resources", outputBlock: block });
 
-        await expect(nodeAsset.executeAsync()).resolves.toMatchObject({ output: 6 });
+        await expect(nodeAsset.executeAsync()).resolves.toBe(6);
         expect(events).toEqual(["create multiplier", "create calculator", "run", "dispose calculator", "dispose multiplier"]);
     });
 
@@ -184,7 +295,7 @@ describe("NodeAsset", () => {
         expect(nextId).toBe(0);
         const results = await Promise.all([nodeAsset.executeAsync(), nodeAsset.executeAsync()]);
 
-        expect(results.map(({ output }) => output).sort()).toEqual([1, 2]);
+        expect(results.sort()).toEqual([1, 2]);
         expect(disposedIds.sort()).toEqual([1, 2]);
     });
 

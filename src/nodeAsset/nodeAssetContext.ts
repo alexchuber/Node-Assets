@@ -1,9 +1,9 @@
-import type { Block } from "../block/block";
-import type { _AnyBlockDefinition } from "../block/blockDefinition";
+import type { _BlockRuntime, Block } from "../block/block";
+import type { _InputBlockDefinition } from "../block/blockDefinition";
 import type { ConnectionPointValue } from "../block/connectionPointType";
 import type { NodeAsset } from "./nodeAsset";
 
-type AnyBlock = Block<_AnyBlockDefinition>;
+type AnyBlock = _BlockRuntime;
 
 /** Supplies per-execution values for a node asset's unconnected inputs. */
 export class NodeAssetContext<TAsset extends NodeAsset<AnyBlock>> {
@@ -15,11 +15,15 @@ export class NodeAssetContext<TAsset extends NodeAsset<AnyBlock>> {
     }
 
     /** Sets a block input for executions that use this context. */
-    public setInput<TDefinition extends _AnyBlockDefinition>(block: Block<TDefinition>, value: ConnectionPointValue<TDefinition["input"]>): void {
+    public setInput<TDefinition extends _InputBlockDefinition>(block: Block<TDefinition>, value: ConnectionPointValue<TDefinition["input"]>): void {
         if (!this.#asset._hasBlock(block)) {
             throw new Error(`Block "${block.name}" does not belong to this NodeAsset.`);
         }
-        if (block.input._source !== undefined) {
+        const input = block.input;
+        if (input === undefined) {
+            throw new Error(`Block "${block.name}" does not accept an input.`);
+        }
+        if (input._source !== undefined) {
             throw new Error(`Block "${block.name}" has a connected input.`);
         }
         if (!block._definition.input.is(value)) {

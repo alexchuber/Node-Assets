@@ -1,15 +1,18 @@
-import type { Block } from "../block/block";
-import type { _AnyBlockDefinition } from "../block/blockDefinition";
+import type { _BlockRuntime } from "../block/block";
 import type { ConnectionPointValue } from "../block/connectionPointType";
 import type { NodeAssetContext } from "./nodeAssetContext";
-import { NodeAssetResult } from "./nodeAssetResult";
 import { ResourceScope } from "../resources/resourceScope";
 
-type AnyBlock = Block<_AnyBlockDefinition>;
+type AnyBlock = _BlockRuntime;
 
 interface ErasedRunner {
-    readonly run?: (input: unknown, config: unknown, resources: Readonly<Record<string, unknown>>) => unknown;
-    readonly runAsync?: (input: unknown, config: unknown, resources: Readonly<Record<string, unknown>>) => Promise<unknown>;
+    readonly run?: (input: unknown, config: unknown, resources: Readonly<Record<string, unknown>>, auxiliaryInputs: Readonly<Record<string, unknown>>) => unknown;
+    readonly runAsync?: (input: unknown, config: unknown, resources: Readonly<Record<string, unknown>>, auxiliaryInputs: Readonly<Record<string, unknown>>) => Promise<unknown>;
+}
+
+interface ErasedSourceRunner {
+    readonly run?: (config: unknown, resources: Readonly<Record<string, unknown>>, auxiliaryInputs: Readonly<Record<string, unknown>>) => unknown;
+    readonly runAsync?: (config: unknown, resources: Readonly<Record<string, unknown>>, auxiliaryInputs: Readonly<Record<string, unknown>>) => Promise<unknown>;
 }
 
 interface NodeAssetOptions<TOutput extends AnyBlock> {
@@ -22,6 +25,7 @@ interface NodeAssetOptions<TOutput extends AnyBlock> {
 interface NodeRecord {
     readonly block: AnyBlock;
     readonly source: AnyBlock | undefined;
+    readonly auxiliarySources: Readonly<Record<string, AnyBlock | undefined>>;
 }
 
 /** An executable asset pipeline, captured from a terminal output block. */
@@ -43,7 +47,7 @@ export class NodeAsset<TOutput extends AnyBlock> {
     }
 
     /** Executes the captured graph with optional per-execution inputs. */
-    public executeAsync(context?: NodeAssetContext<this>): Promise<NodeAssetResult<TOutput>> {
+    public executeAsync(context?: NodeAssetContext<this>): Promise<ConnectionPointValue<TOutput["_definition"]["output"]>> {
         if (this.#isDisposed) {
             return Promise.reject(new Error(`NodeAsset "${this.name}" is disposed.`));
         }
@@ -76,13 +80,21 @@ function captureTopology(outputBlock: AnyBlock): readonly NodeRecord[] {
         }
 
         visiting.add(block);
-        const source = block.input._source?._block;
+        const source = block.input?._source?._block;
         if (source !== undefined) {
             visit(source);
         }
+        const auxiliarySources: Record<string, AnyBlock | undefined> = {};
+        for (const [name, input] of Object.entries(block.auxiliaryInputs)) {
+            const auxiliarySource = input._source?._block;
+            auxiliarySources[name] = auxiliarySource;
+            if (auxiliarySource !== undefined) {
+                visit(auxiliarySource);
+            }
+        }
         visiting.delete(block);
         visited.add(block);
-        records.push(Object.freeze({ block, source }));
+        records.push(Object.freeze({ block, source, auxiliarySources: Object.freeze(auxiliarySources) }));
     };
 
     visit(outputBlock);
@@ -91,9 +103,11 @@ function captureTopology(outputBlock: AnyBlock): readonly NodeRecord[] {
 
 function countConsumers(nodes: readonly NodeRecord[]): ReadonlyMap<AnyBlock, number> {
     const consumerCounts = new Map<AnyBlock, number>();
-    for (const { source } of nodes) {
-        if (source !== undefined) {
-            consumerCounts.set(source, (consumerCounts.get(source) ?? 0) + 1);
+    for (const { source, auxiliarySources } of nodes) {
+        for (const consumerSource of [source, ...Object.values(auxiliarySources)]) {
+            if (consumerSource !== undefined) {
+                consumerCounts.set(consumerSource, (consumerCounts.get(consumerSource) ?? 0) + 1);
+            }
         }
     }
     return consumerCounts;
@@ -104,15 +118,17 @@ async function executeAsync<TOutput extends AnyBlock>(
     consumerCounts: ReadonlyMap<AnyBlock, number>,
     outputBlock: TOutput,
     contextInputs: ReadonlyMap<AnyBlock, unknown>
-): Promise<NodeAssetResult<TOutput>> {
+): Promise<ConnectionPointValue<TOutput["_definition"]["output"]>> {
     const resourceScope = new ResourceScope();
     const remainingConsumers = new Map(consumerCounts);
     const values = new Map<AnyBlock, unknown>();
 
     try {
-        for (const { block, source } of nodes) {
+        for (const { block, source, auxiliarySources } of nodes) {
             let input: unknown;
-            if (source === undefined) {
+            if (block.input === undefined) {
+                input = undefined;
+            } else if (source === undefined) {
                 input = contextInputs.has(block) ? contextInputs.get(block) : block.input.defaultValue;
                 if (input === undefined) {
                     throw new Error(`No value was supplied for block "${block.name}".`);
@@ -121,33 +137,56 @@ async function executeAsync<TOutput extends AnyBlock>(
                 input = values.get(source);
             }
 
-            if (!block._definition.input.is(input)) {
+            if (block._definition.input !== undefined && !block._definition.input.is(input)) {
                 throw new Error(`Block "${block.name}" received an invalid input value.`);
             }
-            const runner = block._definition as unknown as ErasedRunner;
+            const auxiliaryInputs: Record<string, unknown> = {};
+            for (const [name, auxiliarySource] of Object.entries(auxiliarySources)) {
+                const auxiliaryInput = auxiliarySource === undefined ? undefined : values.get(auxiliarySource);
+                if (auxiliarySource !== undefined && !block._definition.auxiliaryInputs[name]?.is(auxiliaryInput)) {
+                    throw new Error(`Block "${block.name}" received an invalid value for auxiliary input "${name}".`);
+                }
+                auxiliaryInputs[name] = auxiliaryInput;
+            }
             const resources = await resourceScope.resolveAllAsync(block._definition.resources);
-            const output = runner.run === undefined ? await runner.runAsync?.(input, block._config, resources) : runner.run(input, block._config, resources);
+            let output: unknown;
+            if (block._definition.input === undefined) {
+                const runner = block._definition as unknown as ErasedSourceRunner;
+                output = runner.run === undefined ? await runner.runAsync?.(block._config, resources, auxiliaryInputs) : runner.run(block._config, resources, auxiliaryInputs);
+            } else {
+                const runner = block._definition as unknown as ErasedRunner;
+                output =
+                    runner.run === undefined
+                        ? await runner.runAsync?.(input, block._config, resources, auxiliaryInputs)
+                        : runner.run(input, block._config, resources, auxiliaryInputs);
+            }
             if (!block._definition.output.is(output)) {
                 throw new Error(`Block "${block.name}" produced an invalid output value.`);
             }
             values.set(block, output);
 
-            if (source !== undefined) {
-                const remaining = remainingConsumers.get(source);
-                if (remaining === undefined) {
-                    throw new Error(`Missing consumer count for block "${source.name}".`);
-                }
-                if (remaining === 1) {
-                    values.delete(source);
-                } else {
-                    remainingConsumers.set(source, remaining - 1);
+            for (const consumedSource of [source, ...Object.values(auxiliarySources)]) {
+                if (consumedSource !== undefined) {
+                    releaseConsumedValue(consumedSource, remainingConsumers, values);
                 }
             }
         }
 
-        return new NodeAssetResult(outputBlock, values.get(outputBlock) as ConnectionPointValue<TOutput["_definition"]["output"]>);
+        return values.get(outputBlock) as ConnectionPointValue<TOutput["_definition"]["output"]>;
     } finally {
         values.clear();
         await resourceScope.disposeAsync();
+    }
+}
+
+function releaseConsumedValue(source: AnyBlock, remainingConsumers: Map<AnyBlock, number>, values: Map<AnyBlock, unknown>): void {
+    const remaining = remainingConsumers.get(source);
+    if (remaining === undefined) {
+        throw new Error(`Missing consumer count for block "${source.name}".`);
+    }
+    if (remaining === 1) {
+        values.delete(source);
+    } else {
+        remainingConsumers.set(source, remaining - 1);
     }
 }

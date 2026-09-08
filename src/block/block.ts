@@ -1,10 +1,33 @@
 import type { ConnectionPointType, ConnectionPointValue } from "./connectionPointType";
-import type { _AnyBlockDefinition, ConfigDefinition, ConfigValues } from "./blockDefinition";
+import type { _AnyBlockDefinition, AuxiliaryInputDefinition, ConfigDefinition, ConfigValues } from "./blockDefinition";
+
+/** @internal */
+export interface _BlockRuntime {
+    readonly name: string;
+    readonly input: _InputPortRuntime | undefined;
+    readonly auxiliaryInputs: Readonly<Record<string, _InputPortRuntime>>;
+    readonly output: _OutputPortRuntime;
+    readonly _config: Readonly<Record<string, unknown>>;
+    readonly _definition: _AnyBlockDefinition;
+}
+
+interface _InputPortRuntime {
+    readonly _block: _BlockRuntime;
+    readonly type: ConnectionPointType<unknown>;
+    readonly defaultValue: unknown;
+    _source: _OutputPortRuntime | undefined;
+}
+
+interface _OutputPortRuntime {
+    readonly _block: _BlockRuntime;
+    readonly type: ConnectionPointType<unknown>;
+    readonly _endpoints: ReadonlySet<_InputPortRuntime>;
+}
 
 /** Options shared by all block instances. */
 export type BlockOptions<TDefinition extends _AnyBlockDefinition> = Partial<ConfigValues<TDefinition["config"]>> & {
     /** The value to use when an execution context does not supply one. */
-    readonly input?: ConnectionPointValue<TDefinition["input"]>;
+    readonly input?: TDefinition["input"] extends ConnectionPointType<unknown> ? ConnectionPointValue<TDefinition["input"]> : never;
     /** The name used to identify the block. */
     readonly name?: string;
 };
@@ -12,7 +35,8 @@ export type BlockOptions<TDefinition extends _AnyBlockDefinition> = Partial<Conf
 /** A typed processing step in a node asset graph. */
 export class Block<TDefinition extends _AnyBlockDefinition> {
     public readonly name: string;
-    public readonly input: InputPort<TDefinition["input"]>;
+    public readonly input: BlockInputPort<TDefinition>;
+    public readonly auxiliaryInputs: AuxiliaryInputPorts<TDefinition["auxiliaryInputs"]>;
     public readonly output: OutputPort<TDefinition["output"]>;
 
     /** @internal */
@@ -23,10 +47,21 @@ export class Block<TDefinition extends _AnyBlockDefinition> {
         this._definition = definition;
         this.name = options?.name ?? new.target.name;
         this._config = resolveConfig(definition.config, options);
-        this.input = new InputPort(this, definition.input, options?.input);
+        this.input = (definition.input === undefined ? undefined : new InputPort(this, definition.input, options?.input)) as BlockInputPort<TDefinition>;
+        this.auxiliaryInputs = createAuxiliaryInputPorts(this, definition.auxiliaryInputs);
         this.output = new OutputPort(this, definition.output);
     }
 }
+
+type BlockInputPort<TDefinition extends _AnyBlockDefinition> = [TDefinition["input"]] extends [undefined]
+    ? undefined
+    : undefined extends TDefinition["input"]
+      ? InputPort<Extract<TDefinition["input"], ConnectionPointType<unknown>>> | undefined
+      : InputPort<Extract<TDefinition["input"], ConnectionPointType<unknown>>>;
+
+export type AuxiliaryInputPorts<TInputs extends AuxiliaryInputDefinition> = {
+    readonly [TName in keyof TInputs]: InputPort<TInputs[TName]>;
+};
 
 /** A typed block input that accepts an initial, contextual, or connected value. */
 export class InputPort<TType extends ConnectionPointType<unknown>> {
@@ -35,16 +70,19 @@ export class InputPort<TType extends ConnectionPointType<unknown>> {
 
     public constructor(
         /** @internal */
-        public readonly _block: Block<_AnyBlockDefinition>,
+        public readonly _block: _BlockRuntime,
         public readonly type: TType,
         public readonly defaultValue: ConnectionPointValue<TType> | undefined
     ) {}
 
-    /** Disconnects this input from any of the supplied outputs. */
-    public disconnectFrom(outputs: readonly OutputPort<NoInfer<TType>>[]): void {
-        for (const output of outputs) {
-            output.disconnectFrom(this);
-        }
+    /** Connects this input to an output with the same type descriptor. */
+    public connectTo(output: OutputPort<NoInfer<TType>>): void {
+        output.connectTo(this);
+    }
+
+    /** Disconnects this input from an output. */
+    public disconnectFrom(output: OutputPort<NoInfer<TType>>): void {
+        output.disconnectFrom(this);
     }
 }
 
@@ -54,7 +92,7 @@ export class OutputPort<TType extends ConnectionPointType<unknown>> {
 
     public constructor(
         /** @internal */
-        public readonly _block: Block<_AnyBlockDefinition>,
+        public readonly _block: _BlockRuntime,
         public readonly type: TType
     ) {}
 
@@ -102,9 +140,17 @@ function resolveConfig<TConfig extends ConfigDefinition>(config: TConfig, option
     return Object.freeze(values) as ConfigValues<TConfig>;
 }
 
-function reaches(start: Block<_AnyBlockDefinition>, target: Block<_AnyBlockDefinition>): boolean {
+function createAuxiliaryInputPorts<TInputs extends AuxiliaryInputDefinition>(block: _BlockRuntime, inputs: TInputs): AuxiliaryInputPorts<TInputs> {
+    const ports: Partial<AuxiliaryInputPorts<TInputs>> = {};
+    for (const [name, type] of Object.entries(inputs)) {
+        ports[name as keyof TInputs] = new InputPort(block, type, undefined) as AuxiliaryInputPorts<TInputs>[keyof TInputs];
+    }
+    return Object.freeze(ports) as AuxiliaryInputPorts<TInputs>;
+}
+
+function reaches(start: _BlockRuntime, target: _BlockRuntime): boolean {
     const pending = [start];
-    const visited = new Set<Block<_AnyBlockDefinition>>();
+    const visited = new Set<_BlockRuntime>();
 
     while (pending.length > 0) {
         const block = pending.pop();
