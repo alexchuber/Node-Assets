@@ -3,6 +3,36 @@ export function generateGltfDataUri(): string {
 }
 
 export function generateTexturedGltfDataUri(): string {
+    return generateTexturedGltfWithTextures([{ sampler: 0, source: 0 }], {
+        emissiveTexture: { index: 0 },
+        pbrMetallicRoughness: {
+            baseColorTexture: { index: 0 },
+        },
+    });
+}
+
+export function generateMultiSamplerTexturedGltfDataUri(): string {
+    return generateTexturedGltfWithTextures(
+        [
+            { sampler: 0, source: 0 },
+            { sampler: 1, source: 0 },
+        ],
+        {
+            emissiveTexture: { index: 1 },
+            pbrMetallicRoughness: {
+                baseColorTexture: { index: 0 },
+            },
+        }
+    );
+}
+
+function generateTexturedGltfWithTextures(
+    textures: ReadonlyArray<{ readonly sampler: number; readonly source: number }>,
+    material: {
+        readonly emissiveTexture: { readonly index: number };
+        readonly pbrMetallicRoughness: { readonly baseColorTexture: { readonly index: number } };
+    }
+): string {
     const png = "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAAEUlEQVQImWP4z8DwH4QZYAwAR8oH+Xm0fdIAAAAASUVORK5CYII=";
     const binary = "AAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAAAAAAAAAAAAIA/AAABAAIA";
     return `data:${JSON.stringify({
@@ -21,20 +51,13 @@ export function generateTexturedGltfDataUri(): string {
             { buffer: 0, byteLength: 6, byteOffset: 96 },
         ],
         images: [{ uri: `data:image/png;base64,${png}` }],
-        materials: [
-            {
-                emissiveTexture: { index: 0 },
-                pbrMetallicRoughness: {
-                    baseColorTexture: { index: 0 },
-                },
-            },
-        ],
+        materials: [material],
         meshes: [{ primitives: [{ attributes: { NORMAL: 1, POSITION: 0, TEXCOORD_0: 2 }, indices: 3, material: 0 }] }],
         nodes: [{ mesh: 0 }],
-        samplers: [{}],
+        samplers: [{ magFilter: 9729 }, { magFilter: 9728 }],
         scene: 0,
         scenes: [{ nodes: [0] }],
-        textures: [{ sampler: 0, source: 0 }],
+        textures,
     })}`;
 }
 

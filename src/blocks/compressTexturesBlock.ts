@@ -21,7 +21,14 @@ export class CompressTexturesBlock extends Block<CompressTexturesBlockDefinition
 
 interface TextureReference {
     readonly texture: BaseTexture;
+    readonly isNormalMap: boolean;
     replace(texture: BaseTexture): void;
+}
+
+interface TextureEncodingSemantics {
+    readonly isNormalMap: boolean;
+    readonly isPerceptual: boolean;
+    readonly isSetKTX2SRGBTransferFunc: boolean;
 }
 
 function createCompressTexturesBlockDefinition() {
@@ -43,7 +50,7 @@ async function compressTexturesAsync(scene: BabylonScene): Promise<BabylonScene>
 
     RegisterKHR_texture_basisu();
 
-    const referencesByTexture = new Map<Texture, TextureReference[]>();
+    const referencesByTexture = new Map<Texture, Map<boolean, TextureReference[]>>();
     for (const material of scene.materials) {
         if (!(material instanceof PBRMaterial)) {
             continue;
@@ -52,25 +59,45 @@ async function compressTexturesAsync(scene: BabylonScene): Promise<BabylonScene>
             if (!(reference.texture instanceof Texture) || reference.texture.getClassName() !== "Texture") {
                 continue;
             }
-            const references = referencesByTexture.get(reference.texture);
-            if (references === undefined) {
-                referencesByTexture.set(reference.texture, [reference]);
-            } else {
-                references.push(reference);
-            }
+            const referencesBySemantics = referencesByTexture.get(reference.texture) ?? new Map<boolean, TextureReference[]>();
+            const references = referencesBySemantics.get(reference.isNormalMap) ?? [];
+            references.push(reference);
+            referencesBySemantics.set(reference.isNormalMap, references);
+            referencesByTexture.set(reference.texture, referencesBySemantics);
         }
     }
 
-    for (const [sourceTexture, references] of referencesByTexture) {
+    const encodedBySource = new Map<object | string, Map<string, Promise<Uint8Array>>>();
+    for (const [sourceTexture, referencesBySemantics] of referencesByTexture) {
         const cachedImage = await GetCachedImageAsync(sourceTexture);
         if (cachedImage === null) {
             throw new Error(`Texture "${sourceTexture.name}" does not have cached source image bytes.`);
         }
 
-        const encoded = await encodeToKtx2Async(new Uint8Array(cachedImage.data));
-        const compressedTexture = await createCompressedTextureAsync(Texture, scene, sourceTexture, encoded);
-        for (const reference of references) {
-            reference.replace(compressedTexture);
+        const source = new Uint8Array(cachedImage.data);
+        if (cachedImage.mimeType === "image/ktx2" || isKtx2(source)) {
+            continue;
+        }
+
+        const sourceIdentity = getSourceImageIdentity(sourceTexture, cachedImage.data);
+        for (const [isNormalMap, references] of referencesBySemantics) {
+            const semantics = _getTextureEncodingSemantics(sourceTexture.gammaSpace, isNormalMap);
+            const semanticsKey = `${semantics.isPerceptual}:${semantics.isNormalMap}`;
+            let encodesBySemantics = encodedBySource.get(sourceIdentity);
+            if (encodesBySemantics === undefined) {
+                encodesBySemantics = new Map<string, Promise<Uint8Array>>();
+                encodedBySource.set(sourceIdentity, encodesBySemantics);
+            }
+            let encoded = encodesBySemantics.get(semanticsKey);
+            if (encoded === undefined) {
+                encoded = encodeToKtx2Async(source, semantics);
+                encodesBySemantics.set(semanticsKey, encoded);
+            }
+
+            const compressedTexture = await createCompressedTextureAsync(Texture, scene, sourceTexture, await encoded);
+            for (const reference of references) {
+                reference.replace(compressedTexture);
+            }
         }
         sourceTexture.dispose();
     }
@@ -87,8 +114,28 @@ function getTextureReferences(material: PBRMaterial): TextureReference[] {
     );
     addReference(
         references,
+        () => material.baseWeightTexture,
+        (texture) => (material.baseWeightTexture = texture)
+    );
+    addReference(
+        references,
+        () => material.baseDiffuseRoughnessTexture,
+        (texture) => (material.baseDiffuseRoughnessTexture = texture)
+    );
+    addReference(
+        references,
         () => material.ambientTexture,
         (texture) => (material.ambientTexture = texture)
+    );
+    addReference(
+        references,
+        () => material.opacityTexture,
+        (texture) => (material.opacityTexture = texture)
+    );
+    addReference(
+        references,
+        () => material.reflectionTexture,
+        (texture) => (material.reflectionTexture = texture)
     );
     addReference(
         references,
@@ -112,28 +159,143 @@ function getTextureReferences(material: PBRMaterial): TextureReference[] {
     );
     addReference(
         references,
+        () => material.reflectanceTexture,
+        (texture) => (material.reflectanceTexture = texture)
+    );
+    addReference(
+        references,
         () => material.microSurfaceTexture,
         (texture) => (material.microSurfaceTexture = texture)
     );
     addReference(
         references,
         () => material.bumpTexture,
-        (texture) => (material.bumpTexture = texture)
+        (texture) => (material.bumpTexture = texture),
+        true
+    );
+    addReference(
+        references,
+        () => material.lightmapTexture,
+        (texture) => (material.lightmapTexture = texture)
+    );
+    addReference(
+        references,
+        () => material.refractionTexture,
+        (texture) => (material.refractionTexture = texture)
+    );
+    addReference(
+        references,
+        () => material.clearCoat.texture,
+        (texture) => (material.clearCoat.texture = texture)
+    );
+    addReference(
+        references,
+        () => material.clearCoat.textureRoughness,
+        (texture) => (material.clearCoat.textureRoughness = texture)
+    );
+    addReference(
+        references,
+        () => material.clearCoat.bumpTexture,
+        (texture) => (material.clearCoat.bumpTexture = texture),
+        true
+    );
+    addReference(
+        references,
+        () => material.clearCoat.tintTexture,
+        (texture) => (material.clearCoat.tintTexture = texture)
+    );
+    addReference(
+        references,
+        () => material.sheen.texture,
+        (texture) => (material.sheen.texture = texture)
+    );
+    addReference(
+        references,
+        () => material.sheen.textureRoughness,
+        (texture) => (material.sheen.textureRoughness = texture)
+    );
+    addReference(
+        references,
+        () => material.subSurface.thicknessTexture,
+        (texture) => (material.subSurface.thicknessTexture = texture)
+    );
+    addReference(
+        references,
+        () => material.subSurface.refractionTexture,
+        (texture) => (material.subSurface.refractionTexture = texture)
+    );
+    addReference(
+        references,
+        () => material.subSurface.refractionIntensityTexture,
+        (texture) => (material.subSurface.refractionIntensityTexture = texture)
+    );
+    addReference(
+        references,
+        () => material.subSurface.translucencyIntensityTexture,
+        (texture) => (material.subSurface.translucencyIntensityTexture = texture)
+    );
+    addReference(
+        references,
+        () => material.subSurface.translucencyColorTexture,
+        (texture) => (material.subSurface.translucencyColorTexture = texture)
+    );
+    addReference(
+        references,
+        () => material.iridescence.texture,
+        (texture) => (material.iridescence.texture = texture)
+    );
+    addReference(
+        references,
+        () => material.iridescence.thicknessTexture,
+        (texture) => (material.iridescence.thicknessTexture = texture)
+    );
+    addReference(
+        references,
+        () => material.anisotropy.texture,
+        (texture) => (material.anisotropy.texture = texture)
+    );
+    addReference(
+        references,
+        () => material.detailMap.texture,
+        (texture) => (material.detailMap.texture = texture)
     );
     return references;
 }
 
-function addReference(references: TextureReference[], get: () => BaseTexture | null, replace: (texture: BaseTexture) => void): void {
+function addReference(references: TextureReference[], get: () => BaseTexture | null, replace: (texture: BaseTexture) => void, isNormalMap = false): void {
     const texture = get();
     if (texture !== null) {
-        references.push({ texture, replace });
+        references.push({ texture, isNormalMap, replace });
     }
 }
 
-async function encodeToKtx2Async(source: Uint8Array): Promise<Uint8Array> {
+/** @internal */
+export function _getTextureEncodingSemantics(gammaSpace: boolean, isNormalMap: boolean): TextureEncodingSemantics {
+    const isPerceptual = gammaSpace && !isNormalMap;
+    return {
+        isNormalMap,
+        isPerceptual,
+        isSetKTX2SRGBTransferFunc: isPerceptual,
+    };
+}
+
+function getSourceImageIdentity(texture: Texture, data: ArrayBuffer): object | string {
+    const internalTexture = texture.getInternalTexture();
+    return internalTexture?.url || internalTexture || data;
+}
+
+function isKtx2(source: Uint8Array): boolean {
+    if (source.byteLength < KTX2_MAGIC.byteLength) {
+        return false;
+    }
+    return KTX2_MAGIC.every((byte, index) => source[index] === byte);
+}
+
+async function encodeToKtx2Async(source: Uint8Array, semantics: TextureEncodingSemantics): Promise<Uint8Array> {
     const { encodeToKTX2 } = await import("babylonpress-ktx2-encoder");
     const options = {
         generateMipmap: true,
+        ...semantics,
         isKTX2File: true,
         isUASTC: true,
     };
@@ -210,3 +372,5 @@ function copyTextureProperties(source: Texture, destination: Texture): void {
     destination.anisotropicFilteringLevel = source.anisotropicFilteringLevel;
     destination.gammaSpace = source.gammaSpace;
 }
+
+const KTX2_MAGIC = new Uint8Array([0xab, 0x4b, 0x54, 0x58, 0x20, 0x32, 0x30, 0xbb, 0x0d, 0x0a, 0x1a, 0x0a]);
