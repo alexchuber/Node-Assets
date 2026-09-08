@@ -21,12 +21,11 @@ const GltfInputBlockDefinition = /* @__PURE__ */ defineBlock({
         try {
             const response = await fetchOrThrowAsync(url, abortController.signal);
             const resolvedUrl = response.url || url;
-            const extension = getGltfExtension(resolvedUrl);
-            const source = extension === ".glb" ? new Uint8Array(await response.arrayBuffer()) : `data:${await response.text()}`;
+            const format = await readGltfResponseAsync(response, resolvedUrl);
 
-            return await LoadSceneAsync(source, engine, {
+            return await LoadSceneAsync(format.source, engine, {
                 rootUrl: new URL(".", resolvedUrl).href,
-                pluginExtension: extension,
+                pluginExtension: format.extension,
                 name: new URL(resolvedUrl).pathname.split("/").pop() ?? "",
                 pluginOptions: {
                     gltf: {
@@ -60,7 +59,32 @@ async function fetchOrThrowAsync(url: string, signal: AbortSignal): Promise<Resp
     return response;
 }
 
-function getGltfExtension(url: string): ".gltf" | ".glb" {
+interface GltfResponse {
+    readonly extension: ".gltf" | ".glb";
+    readonly source: string | Uint8Array;
+}
+
+async function readGltfResponseAsync(response: Response, url: string): Promise<GltfResponse> {
+    const extension = tryGetGltfExtension(url) ?? getGltfExtensionFromContentType(response.headers.get("content-type"));
+    if (extension === ".glb") {
+        return { extension, source: new Uint8Array(await response.arrayBuffer()) };
+    }
+    if (extension === ".gltf") {
+        return { extension, source: `data:${await response.text()}` };
+    }
+
+    const data = new Uint8Array(await response.arrayBuffer());
+    if (isGlb(data)) {
+        return { extension: ".glb", source: data };
+    }
+    const json = new TextDecoder().decode(data);
+    if (isGltfJson(json)) {
+        return { extension: ".gltf", source: `data:${json}` };
+    }
+    throw new Error(`Unable to determine the glTF format from "${url}".`);
+}
+
+function tryGetGltfExtension(url: string): ".gltf" | ".glb" | undefined {
     const pathname = new URL(url).pathname.toLowerCase();
     if (pathname.endsWith(".glb")) {
         return ".glb";
@@ -68,7 +92,32 @@ function getGltfExtension(url: string): ".gltf" | ".glb" {
     if (pathname.endsWith(".gltf")) {
         return ".gltf";
     }
-    throw new Error(`Unable to determine the glTF format from "${url}".`);
+    return undefined;
+}
+
+function getGltfExtensionFromContentType(contentType: string | null): ".gltf" | ".glb" | undefined {
+    switch (contentType?.split(";", 1)[0]?.trim().toLowerCase()) {
+        case "model/gltf-binary":
+            return ".glb";
+        case "model/gltf+json":
+        case "application/json":
+            return ".gltf";
+        default:
+            return undefined;
+    }
+}
+
+function isGlb(data: Uint8Array): boolean {
+    return data.byteLength >= 4 && data[0] === 0x67 && data[1] === 0x6c && data[2] === 0x54 && data[3] === 0x46;
+}
+
+function isGltfJson(json: string): boolean {
+    try {
+        const parsed = JSON.parse(json) as { asset?: { version?: unknown } };
+        return typeof parsed.asset?.version === "string";
+    } catch {
+        return false;
+    }
 }
 
 async function fetchAsDataUriAsync(url: string, signal: AbortSignal): Promise<string> {

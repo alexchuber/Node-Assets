@@ -43,6 +43,31 @@ describe("glTF pipeline", () => {
         await expectGlbFile(result);
     });
 
+    it("accepts extensionless HTTP GLB inputs", async () => {
+        const input = "https://example.com/model";
+        const encodedGlb = generateGlbDataUri().split(",", 2)[1];
+        if (encodedGlb === undefined) {
+            throw new Error("Expected an encoded GLB fixture.");
+        }
+        const glb = Uint8Array.from(atob(encodedGlb), (character) => character.charCodeAt(0));
+        vi.stubGlobal(
+            "fetch",
+            vi.fn(() => Promise.resolve(new Response(glb, { headers: { "content-type": "model/gltf-binary" } })))
+        );
+
+        try {
+            const source = new GltfInputBlock({ input });
+            const destination = new GltfOutputBlock();
+            source.output.connectTo(destination.input);
+
+            const result = await new NodeAsset({ name: "extensionless-http-glb", outputBlock: destination }).executeAsync();
+
+            await expectGlbFile(result);
+        } finally {
+            vi.unstubAllGlobals();
+        }
+    });
+
     it("disposes intermediate scenes and engines after conversion", async () => {
         let capturedScene: Scene | undefined;
         const captureSceneDefinition = defineBlock({
