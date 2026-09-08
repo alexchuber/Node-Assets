@@ -360,6 +360,34 @@ describe("NodeAsset", () => {
         expect(disposeSecond).toHaveBeenCalledOnce();
     });
 
+    it("preserves execution and cleanup failures", async () => {
+        const executionError = new Error("execution failed");
+        const cleanupError = new Error("cleanup failed");
+        const resource = {
+            name: "failing-cleanup",
+            create: () => ({}),
+            dispose: () => {
+                throw cleanupError;
+            },
+        } satisfies Resource<object>;
+        const definition = defineBlock({
+            type: "execution-and-cleanup-failure",
+            input: NumberDefinition.input,
+            output: NumberDefinition.output,
+            resources: { resource },
+            run: () => {
+                throw executionError;
+            },
+        });
+        const block = new Block(definition, { input: 1 });
+        const nodeAsset = new NodeAsset({ name: "execution-and-cleanup-failure", outputBlock: block });
+
+        const error = await nodeAsset.executeAsync().catch((caught: unknown) => caught);
+
+        expect(error).toBeInstanceOf(AggregateError);
+        expect((error as AggregateError).errors).toEqual([executionError, cleanupError]);
+    });
+
     it("rejects cyclic resource dependencies", async () => {
         interface CyclicDependencies {
             readonly [name: string]: Resource<object, CyclicDependencies>;
