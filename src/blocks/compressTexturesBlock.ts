@@ -81,7 +81,7 @@ async function compressTexturesAsync(scene: BabylonScene): Promise<BabylonScene>
 
         const sourceIdentity = getSourceImageIdentity(sourceTexture, cachedImage.data);
         for (const [isNormalMap, references] of referencesBySemantics) {
-            const semantics = _getTextureEncodingSemantics(sourceTexture.gammaSpace, isNormalMap);
+            const semantics = getTextureEncodingSemantics(sourceTexture.gammaSpace, isNormalMap);
             const semanticsKey = `${semantics.isPerceptual}:${semantics.isNormalMap}`;
             let encodesBySemantics = encodedBySource.get(sourceIdentity);
             if (encodesBySemantics === undefined) {
@@ -269,8 +269,7 @@ function addReference(references: TextureReference[], get: () => BaseTexture | n
     }
 }
 
-/** @internal */
-export function _getTextureEncodingSemantics(gammaSpace: boolean, isNormalMap: boolean): TextureEncodingSemantics {
+function getTextureEncodingSemantics(gammaSpace: boolean, isNormalMap: boolean): TextureEncodingSemantics {
     const isPerceptual = gammaSpace && !isNormalMap;
     return {
         isNormalMap,

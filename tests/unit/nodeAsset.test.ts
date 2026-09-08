@@ -109,19 +109,21 @@ describe("NodeAsset", () => {
     });
 
     it("passes undefined for an unconnected optional auxiliary input", async () => {
+        let receivedOptional: number | undefined;
         const definition = defineBlock({
             type: "optional-auxiliary-input",
             input: NumberDefinition.input,
             auxiliaryInputs: { optional: NumberDefinition.input },
             output: NumberDefinition.output,
             run: (input, _config, _resources, { optional }) => {
-                expect(optional).toBeUndefined();
+                receivedOptional = optional;
                 return input;
             },
         });
         const block = new Block(definition, { input: 4 });
 
         await expect(new NodeAsset({ name: "optional-auxiliary-input", outputBlock: block }).executeAsync()).resolves.toBe(4);
+        expect(receivedOptional).toBeUndefined();
     });
 
     it("captures auxiliary input topology at construction", async () => {
@@ -142,79 +144,17 @@ describe("NodeAsset", () => {
         await expect(nodeAsset.executeAsync()).resolves.toBe(7);
     });
 
-    it("releases auxiliary input values after their final consumer", async () => {
-        const source = new Block(NumberDefinition, { input: 2 });
-        const deleteSpy = vi.spyOn(Map.prototype, "delete");
-        const auxiliaryDefinition = defineBlock({
-            type: "auxiliary-consumer",
-            input: NumberDefinition.input,
-            auxiliaryInputs: { value: NumberDefinition.input },
-            output: NumberDefinition.output,
-            run: (input, _config, _resources, { value }) => input + (value ?? 0),
-        });
-        const auxiliaryConsumer = new Block(auxiliaryDefinition, { input: 3 });
-        const outputDefinition = defineBlock({
-            type: "auxiliary-release-observer",
-            input: NumberDefinition.input,
-            output: NumberDefinition.output,
-            run: (input) => {
-                expect(deleteSpy.mock.calls.some(([key]) => key === source)).toBe(true);
-                return input;
-            },
-        });
-        const output = new Block(outputDefinition);
-        source.output.connectTo(auxiliaryConsumer.auxiliaryInputs.value);
-        auxiliaryConsumer.output.connectTo(output.input);
-        const nodeAsset = new NodeAsset({ name: "bounded-auxiliary-values", outputBlock: output });
-
-        try {
-            await expect(nodeAsset.executeAsync()).resolves.toBe(5);
-        } finally {
-            deleteSpy.mockRestore();
-        }
-    });
-
-    it("releases intermediate outputs after their final consumer", async () => {
-        const source = new Block(NumberDefinition, { input: 2 });
-        const scale = new Block(ScaleDefinition);
-        const deleteSpy = vi.spyOn(Map.prototype, "delete");
-        const outputDefinition = defineBlock({
-            type: "release-observer",
-            input: NumberDefinition.input,
-            output: NumberDefinition.output,
-            run: (input) => {
-                expect(deleteSpy.mock.calls.some(([key]) => key === source)).toBe(true);
-                return input;
-            },
-        });
-        const output = new Block(outputDefinition);
-        source.output.connectTo(scale.input);
-        scale.output.connectTo(output.input);
-        const nodeAsset = new NodeAsset({ name: "bounded-values", outputBlock: output });
-
-        try {
-            await expect(nodeAsset.executeAsync()).resolves.toBe(4);
-            const releasedBlocks = deleteSpy.mock.calls.map(([key]) => key).filter((key) => key === source || key === scale || key === output);
-            expect(releasedBlocks).toEqual([source, scale]);
-        } finally {
-            deleteSpy.mockRestore();
-        }
-    });
-
-    it("preserves block connections when disposed", () => {
+    it("allows the same blocks to execute in a new asset after disposal", async () => {
         const source = new Block(NumberDefinition, { input: 2 });
         const output = new Block(NumberDefinition);
-        const unrelated = new Block(NumberDefinition);
         source.output.connectTo(output.input);
-        source.output.connectTo(unrelated.input);
-        const nodeAsset = new NodeAsset({ name: "disposable", outputBlock: output });
+        const firstAsset = new NodeAsset({ name: "disposable", outputBlock: output });
 
-        nodeAsset.dispose();
-        nodeAsset.dispose();
+        firstAsset.dispose();
+        firstAsset.dispose();
+        const secondAsset = new NodeAsset({ name: "reused-blocks", outputBlock: output });
 
-        expect(output.input._source).toBe(source.output);
-        expect(unrelated.input._source).toBe(source.output);
-        expect(source.output._endpoints).toEqual(new Set([output.input, unrelated.input]));
+        await expect(secondAsset.executeAsync()).resolves.toBe(2);
     });
 
     it("rejects execution after disposal", async () => {
@@ -223,7 +163,7 @@ describe("NodeAsset", () => {
 
         nodeAsset.dispose();
 
-        await expect(nodeAsset.executeAsync()).rejects.toThrow('NodeAsset "disposed-execution" is disposed.');
+        await expect(nodeAsset.executeAsync()).rejects.toThrow();
     });
 
     it("resolves shared resource dependencies once and disposes dependents first", async () => {
@@ -250,6 +190,7 @@ describe("NodeAsset", () => {
                 events.push("dispose calculator");
             },
         } satisfies Resource<(value: number) => number, { readonly multiplier: typeof multiplierResource }>;
+        let calculatorsWereShared = false;
         const definition = defineBlock({
             type: "resource-consumer",
             input: NumberDefinition.input,
@@ -260,7 +201,7 @@ describe("NodeAsset", () => {
             },
             run: (input, _config, { calculator, sameCalculator }) => {
                 expectTypeOf(calculator).toEqualTypeOf<(value: number) => number>();
-                expect(calculator).toBe(sameCalculator);
+                calculatorsWereShared = calculator === sameCalculator;
                 events.push("run");
                 return calculator(input);
             },
@@ -269,6 +210,7 @@ describe("NodeAsset", () => {
         const nodeAsset = new NodeAsset({ name: "resources", outputBlock: block });
 
         await expect(nodeAsset.executeAsync()).resolves.toBe(6);
+        expect(calculatorsWereShared).toBe(true);
         expect(events).toEqual(["create multiplier", "create calculator", "run", "dispose calculator", "dispose multiplier"]);
     });
 

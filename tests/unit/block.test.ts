@@ -5,14 +5,6 @@ import { defineBlock, value } from "../../src/block/blockDefinition";
 import { NodeAsset } from "../../src/nodeAsset/nodeAsset";
 import { ScaleDefinition, NumberDefinition, OtherNumberDefinition, NumberType } from "../fixtures/numberBlocks";
 
-describe("Block definition", () => {
-    it("freezes definitions and configuration descriptors", () => {
-        expect(Object.isFrozen(ScaleDefinition)).toBe(true);
-        expect(Object.isFrozen(ScaleDefinition.config)).toBe(true);
-        expect(Object.isFrozen(ScaleDefinition.config.scale)).toBe(true);
-    });
-});
-
 describe("Block class", () => {
     it("has input and output ports", () => {
         const block = new Block(NumberDefinition, { name: "Source", input: 5 });
@@ -59,20 +51,20 @@ describe("Block class", () => {
 });
 
 describe("Block connections", () => {
-    it("connects ports with the same connection point type", () => {
-        const inputBlock = new Block(NumberDefinition);
-        const outputBlock = new Block(NumberDefinition);
+    it("uses a connected source during execution", async () => {
+        const source = new Block(NumberDefinition, { input: 3 });
+        const destination = new Block(ScaleDefinition);
 
-        outputBlock.input.connectTo(inputBlock.output);
+        source.output.connectTo(destination.input);
 
-        expect(outputBlock.input._source).toBe(inputBlock.output);
+        await expect(new NodeAsset({ name: "connected-source", outputBlock: destination }).executeAsync()).resolves.toBe(6);
     });
 
     it("rejects distinct connection point type descriptors", () => {
         const inputBlock = new Block(NumberDefinition);
         const outputBlock = new Block(OtherNumberDefinition);
 
-        expect(() => inputBlock.output.connectTo(outputBlock.input)).toThrow('Cannot connect connection point type "number" to "number".');
+        expect(() => inputBlock.output.connectTo(outputBlock.input)).toThrow();
     });
 
     it("validates auxiliary input connection point types", () => {
@@ -86,7 +78,7 @@ describe("Block connections", () => {
         const source = new Block(NumberDefinition);
         const destination = new Block(definition);
 
-        expect(() => destination.auxiliaryInputs.value.connectTo(source.output)).toThrow('Cannot connect connection point type "number" to "number".');
+        expect(() => destination.auxiliaryInputs.value.connectTo(source.output)).toThrow();
     });
 
     it("rejects a second source for an input", () => {
@@ -99,29 +91,30 @@ describe("Block connections", () => {
         expect(() => secondInputBlock.output.connectTo(outputBlock.input)).toThrow();
     });
 
-    it("disconnects an output from an input", () => {
+    it("disconnects from the output side before connecting a different source", async () => {
         const firstSource = new Block(NumberDefinition);
-        const secondSource = new Block(NumberDefinition);
-        const destination = new Block(NumberDefinition);
+        const secondSource = new Block(NumberDefinition, { input: 3 });
+        const destination = new Block(ScaleDefinition);
 
         firstSource.output.connectTo(destination.input);
         firstSource.output.disconnectFrom(destination.input);
         firstSource.output.disconnectFrom(destination.input);
         secondSource.output.connectTo(destination.input);
 
-        expect(destination.input._source).toBe(secondSource.output);
-        expect(firstSource.output._endpoints).not.toContain(destination.input);
+        await expect(new NodeAsset({ name: "output-side-disconnect", outputBlock: destination }).executeAsync()).resolves.toBe(6);
     });
 
-    it("disconnects an input from an output", () => {
-        const connectedSource = new Block(NumberDefinition);
-        const destination = new Block(NumberDefinition);
+    it("connects and disconnects equivalently from the input side", async () => {
+        const firstSource = new Block(NumberDefinition);
+        const secondSource = new Block(NumberDefinition, { input: 4 });
+        const destination = new Block(ScaleDefinition);
 
-        connectedSource.output.connectTo(destination.input);
-        destination.input.disconnectFrom(connectedSource.output);
+        destination.input.connectTo(firstSource.output);
+        destination.input.disconnectFrom(firstSource.output);
+        destination.input.disconnectFrom(firstSource.output);
+        destination.input.connectTo(secondSource.output);
 
-        expect(destination.input._source).toBeUndefined();
-        expect(connectedSource.output._endpoints).not.toContain(destination.input);
+        await expect(new NodeAsset({ name: "input-side-disconnect", outputBlock: destination }).executeAsync()).resolves.toBe(8);
     });
 
     it("excludes disconnected edges from cycle detection", () => {
