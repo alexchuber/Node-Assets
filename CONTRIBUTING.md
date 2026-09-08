@@ -26,4 +26,4 @@ pnpm build         # Build with Vite and emit dist/
 pnpm typedocs      # Generate the TypeDoc API reference
 ```
 
-Run `pnpm lint`, `pnpm test`, and `pnpm build` before opening a pull request.
+Make sure you've run `pnpm lint`, `pnpm test`, and `pnpm build` before opening a pull request.
