@@ -33,7 +33,7 @@ Named by verb.
     - Input: input (BabylonScene)
     - Output: output (BabylonScene)
     - Resources: `babylonpress-ktx2-encoder`
-    - Behavior: Reads back pixels of each texture, applies BasisU compression to the resulting image, creates new textures (with new backing .ktx2 image source and mimeType set), then reassigns old textures to new
+    - Behavior: Applies BasisU compression to each image, resulting in .ktx2 images
 
 # Outputs
 
