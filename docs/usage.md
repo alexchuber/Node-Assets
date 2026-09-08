@@ -14,11 +14,21 @@ Blocks have input and output ports. Some might also have additional, optional in
 
 Named by noun.
 
+- `FbxInputBlock`
+    - Input: `string` which is a URL (HTTPS or data) that points to an FBX file.
+    - Output: output (BabylonScene)
+    - Resources: Babylon FBX loader
+    - Behavior: Uses the Babylon scene loader to load an FBX using NullEngine.
 - `GltfInputBlock`
     - Input: `string` which is a URL (HTTPS or data) that points to a glTF or GLB.
     - Output: output (BabylonScene)
     - Resources: Babylon glTF loader
     - Behavior: Uses the Babylon scene loader to load a glTF using NullEngine.
+- `StlInputBlock`
+    - Input: `string` which is a URL (HTTPS or data) that points to an STL file.
+    - Output: output (BabylonScene)
+    - Resources: Babylon STL loader
+    - Behavior: Uses the Babylon scene loader to load an STL using NullEngine.
 - `DracoEncoderBlock`
     - Input: none
     - Output: output (DracoEncoder)

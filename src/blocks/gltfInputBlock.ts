@@ -2,6 +2,7 @@ import { Block, type BlockOptions } from "../block/block";
 import { defineBlock } from "../block/blockDefinition";
 import { BabylonSceneType, UrlType } from "../block/connectionPointType";
 import { NullEngineResource } from "../resources/nullEngineResource";
+import { fetchOrThrowAsync, isHttpUrl, loadSceneWithPluginAsync, toBase64 } from "./loadSceneWithPlugin";
 
 const GltfInputBlockDefinition = /* @__PURE__ */ defineBlock({
     type: "input.gltf",
@@ -11,10 +12,8 @@ const GltfInputBlockDefinition = /* @__PURE__ */ defineBlock({
         engine: NullEngineResource,
     },
     runAsync: async (url, _config, { engine }) => {
-        const [{ LoadSceneAsync }] = await Promise.all([import("@babylonjs/core/Loading/sceneLoader.js"), import("@babylonjs/loaders/glTF/index.js")]);
-
         if (!isHttpUrl(url)) {
-            return LoadSceneAsync(url, engine);
+            return loadSceneWithPluginAsync(url, engine, () => import("@babylonjs/loaders/glTF/index.js"));
         }
 
         const abortController = new AbortController();
@@ -23,7 +22,7 @@ const GltfInputBlockDefinition = /* @__PURE__ */ defineBlock({
             const resolvedUrl = response.url || url;
             const format = await readGltfResponseAsync(response, resolvedUrl);
 
-            return await LoadSceneAsync(format.source, engine, {
+            return await loadSceneWithPluginAsync(format.source, engine, () => import("@babylonjs/loaders/glTF/index.js"), {
                 rootUrl: new URL(".", resolvedUrl).href,
                 pluginExtension: format.extension,
                 name: new URL(resolvedUrl).pathname.split("/").pop() ?? "",
@@ -44,19 +43,6 @@ export class GltfInputBlock extends Block<typeof GltfInputBlockDefinition> {
     public constructor(options?: BlockOptions<typeof GltfInputBlockDefinition>) {
         super(GltfInputBlockDefinition, options);
     }
-}
-
-function isHttpUrl(url: string): boolean {
-    const scheme = url.slice(0, 8).toLowerCase();
-    return scheme.startsWith("http://") || scheme.startsWith("https://");
-}
-
-async function fetchOrThrowAsync(url: string, signal: AbortSignal): Promise<Response> {
-    const response = await fetch(url, { signal });
-    if (!response.ok) {
-        throw new Error(`Failed to fetch "${url}": HTTP ${response.status} ${response.statusText}`.trim());
-    }
-    return response;
 }
 
 interface GltfResponse {
@@ -129,17 +115,4 @@ async function fetchAsDataUriAsync(url: string, signal: AbortSignal): Promise<st
     const contentType = response.headers.get("content-type")?.split(";", 1)[0] || "application/octet-stream";
     const data = new Uint8Array(await response.arrayBuffer());
     return `data:${contentType};base64,${toBase64(data)}`;
-}
-
-function toBase64(data: Uint8Array): string {
-    if (typeof Buffer === "function") {
-        return Buffer.from(data.buffer, data.byteOffset, data.byteLength).toString("base64");
-    }
-
-    const chunkSize = 32_768;
-    let binary = "";
-    for (let offset = 0; offset < data.length; offset += chunkSize) {
-        binary += String.fromCharCode(...data.subarray(offset, offset + chunkSize));
-    }
-    return btoa(binary);
 }
