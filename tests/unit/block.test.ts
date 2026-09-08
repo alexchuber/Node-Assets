@@ -85,7 +85,7 @@ describe("Block connections", () => {
         expect(() => secondInputBlock.output.connectTo(outputBlock.input)).toThrow();
     });
 
-    it("disconnects both ports and allows the input to be reconnected", () => {
+    it("disconnects an output from an input", () => {
         const firstSource = new Block(NumberDefinition);
         const secondSource = new Block(NumberDefinition);
         const destination = new Block(NumberDefinition);
@@ -97,6 +97,18 @@ describe("Block connections", () => {
 
         expect(destination.input._source).toBe(secondSource.output);
         expect(firstSource.output._endpoints).not.toContain(destination.input);
+    });
+
+    it("disconnects an input from any of the supplied outputs", () => {
+        const connectedSource = new Block(NumberDefinition);
+        const otherSource = new Block(NumberDefinition);
+        const destination = new Block(NumberDefinition);
+
+        connectedSource.output.connectTo(destination.input);
+        destination.input.disconnectFrom([otherSource.output, connectedSource.output]);
+
+        expect(destination.input._source).toBeUndefined();
+        expect(connectedSource.output._endpoints).not.toContain(destination.input);
     });
 
     it("excludes disconnected edges from cycle detection", () => {

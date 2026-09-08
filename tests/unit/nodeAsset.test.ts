@@ -90,7 +90,7 @@ describe("NodeAsset", () => {
         }
     });
 
-    it("disposes only the connections captured by the node asset", () => {
+    it("preserves block connections when disposed", () => {
         const source = new Block(NumberDefinition, { input: 2 });
         const output = new Block(NumberDefinition);
         const unrelated = new Block(NumberDefinition);
@@ -101,24 +101,9 @@ describe("NodeAsset", () => {
         nodeAsset.dispose();
         nodeAsset.dispose();
 
-        expect(output.input._source).toBeUndefined();
+        expect(output.input._source).toBe(source.output);
         expect(unrelated.input._source).toBe(source.output);
-        expect(source.output._endpoints).toEqual(new Set([unrelated.input]));
-    });
-
-    it("preserves connections that replaced a captured edge", () => {
-        const capturedSource = new Block(NumberDefinition);
-        const replacementSource = new Block(NumberDefinition);
-        const output = new Block(NumberDefinition);
-        capturedSource.output.connectTo(output.input);
-        const nodeAsset = new NodeAsset({ name: "reconnected", outputBlock: output });
-        capturedSource.output.disconnectFrom(output.input);
-        replacementSource.output.connectTo(output.input);
-
-        nodeAsset.dispose();
-
-        expect(output.input._source).toBe(replacementSource.output);
-        expect(replacementSource.output._endpoints).toContain(output.input);
+        expect(source.output._endpoints).toEqual(new Set([output.input, unrelated.input]));
     });
 
     it("rejects execution after disposal", async () => {

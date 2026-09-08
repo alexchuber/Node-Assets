@@ -39,6 +39,13 @@ export class InputPort<TType extends ConnectionPointType<unknown>> {
         public readonly type: TType,
         public readonly defaultValue: ConnectionPointValue<TType> | undefined
     ) {}
+
+    /** Disconnects this input from any of the supplied outputs. */
+    public disconnectFrom(outputs: readonly OutputPort<NoInfer<TType>>[]): void {
+        for (const output of outputs) {
+            output.disconnectFrom(this);
+        }
+    }
 }
 
 /** A typed block output that can connect to compatible input ports. */

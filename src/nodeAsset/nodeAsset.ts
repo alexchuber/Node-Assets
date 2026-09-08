@@ -51,16 +51,9 @@ export class NodeAsset<TOutput extends AnyBlock> {
         return executeAsync(this.#nodes, this.#consumerCounts, this.outputBlock, inputs);
     }
 
-    /** Releases the connections captured by this node asset. */
+    /** Disposes this node asset without modifying its blocks. */
     public dispose(): void {
-        if (this.#isDisposed) {
-            return;
-        }
         this.#isDisposed = true;
-
-        for (const { block, source } of this.#nodes) {
-            source?.output.disconnectFrom(block.input);
-        }
     }
 
     /** @internal */
