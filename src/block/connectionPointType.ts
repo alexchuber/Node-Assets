@@ -1,3 +1,4 @@
+import type { DracoEncoder } from "@babylonjs/core/Meshes/Compression/dracoEncoder.js";
 import type { Scene as BabylonScene } from "@babylonjs/core/scene.js";
 
 declare const connectionPointData: unique symbol;
@@ -19,6 +20,11 @@ export function defineConnectionPointType<P>(id: string, isData: (value: unknown
 export const UrlType = defineConnectionPointType<string>("url", (value): value is string => typeof value === "string");
 
 export const FileType = defineConnectionPointType<File>("file", (value): value is File => value instanceof File);
+
+export const DracoEncoderType = defineConnectionPointType<DracoEncoder>(
+    "draco-encoder",
+    (value): value is DracoEncoder => typeof value === "object" && value !== null && "encodeMeshAsync" in value && typeof value.encodeMeshAsync === "function"
+);
 
 export const BabylonSceneType = defineConnectionPointType<BabylonScene>(
     "babylon-scene",
