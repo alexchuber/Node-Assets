@@ -38,11 +38,25 @@ interface DracoEncoderGlobal {
 
 type DracoEncoderModuleFactory = (configuration: { wasmBinary: ArrayBuffer }) => Promise<unknown>;
 
+let defaultEncoderPreparationPromise: Promise<void> | undefined;
+
 async function prepareDefaultEncoderForNodeAsync(DracoEncoder: DracoEncoderConstructor): Promise<void> {
     if (!isNode() || !isBabylonDefaultConfiguration(DracoEncoder.DefaultConfiguration)) {
         return;
     }
 
+    const preparationPromise = (defaultEncoderPreparationPromise ??= initializeDefaultEncoderForNodeAsync(DracoEncoder));
+    try {
+        await preparationPromise;
+    } catch (error) {
+        if (defaultEncoderPreparationPromise === preparationPromise) {
+            defaultEncoderPreparationPromise = undefined;
+        }
+        throw error;
+    }
+}
+
+async function initializeDefaultEncoderForNodeAsync(DracoEncoder: DracoEncoderConstructor): Promise<void> {
     const [{ createRequire }, { readFile }, { dirname }, { pathToFileURL }] = await Promise.all([
         import("node:module"),
         import("node:fs/promises"),

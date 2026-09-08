@@ -1,6 +1,6 @@
 import type { DracoEncoder as BabylonDracoEncoder } from "@babylonjs/core/Meshes/Compression/dracoEncoder.js";
 
-import { describe, expect, expectTypeOf, it } from "vitest";
+import { describe, expect, expectTypeOf, it, vi } from "vitest";
 
 import { DracoEncoderBlock } from "../../src/blocks/dracoEncoderBlock";
 import { GltfInputBlock } from "../../src/blocks/gltfInputBlock";
@@ -22,18 +22,31 @@ describe("Draco compression", () => {
         expect(gltf.meshes[0]?.primitives[0]?.extensions?.KHR_draco_mesh_compression).toBeUndefined();
     });
 
-    it("compresses connected glTF output with Draco", async () => {
-        const source = new GltfInputBlock({ input: generateGltfDataUri() });
-        const encoder = new DracoEncoderBlock();
-        const destination = new GltfOutputBlock();
-        source.output.connectTo(destination.input);
-        encoder.output.connectTo(destination.geometryCompressor);
+    it("compresses concurrent connected glTF outputs with one default encoder initialization", async () => {
+        const { DracoEncoder } = await import("@babylonjs/core/Meshes/Compression/dracoEncoder.js");
+        const resetDefault = vi.spyOn(DracoEncoder, "ResetDefault");
 
-        const result = await new NodeAsset({ name: "draco-compressed-glb", outputBlock: destination }).executeAsync();
-        const gltf = await readGlbJsonAsync(result);
+        try {
+            const assets = ["first", "second"].map((name) => {
+                const source = new GltfInputBlock({ input: generateGltfDataUri() });
+                const encoder = new DracoEncoderBlock();
+                const destination = new GltfOutputBlock();
+                source.output.connectTo(destination.input);
+                encoder.output.connectTo(destination.geometryCompressor);
+                return new NodeAsset({ name: `draco-compressed-${name}-glb`, outputBlock: destination });
+            });
 
-        expect(gltf.extensionsUsed).toContain("KHR_draco_mesh_compression");
-        expect(gltf.meshes[0]?.primitives[0]?.extensions).toHaveProperty("KHR_draco_mesh_compression");
+            const results = await Promise.all(assets.map((asset) => asset.executeAsync()));
+            const gltfs = await Promise.all(results.map(readGlbJsonAsync));
+
+            expect(resetDefault).toHaveBeenCalledOnce();
+            for (const gltf of gltfs) {
+                expect(gltf.extensionsUsed).toContain("KHR_draco_mesh_compression");
+                expect(gltf.meshes[0]?.primitives[0]?.extensions).toHaveProperty("KHR_draco_mesh_compression");
+            }
+        } finally {
+            resetDefault.mockRestore();
+        }
     });
 
     it("provides Babylon's default Draco encoder", async () => {
