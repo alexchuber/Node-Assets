@@ -4,7 +4,7 @@ import { Block } from "../../src/block/block";
 import { defineBlock, defineSourceBlock } from "../../src/block/blockDefinition";
 import { NodeAsset, NodeAssetContext } from "../../src/index";
 import type { Resource } from "../../src/resources/resource";
-import { ScaleDefinition, NumberDefinition } from "../fixtures/numberBlocks";
+import { ScaleDefinition, NumberDefinition } from "../helpers/numberBlocks";
 
 describe("NodeAsset", () => {
     it("treats an unconnected input as a graph input", async () => {

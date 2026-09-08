@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { Block } from "../../src/block/block";
 import { defineBlock, value } from "../../src/block/blockDefinition";
 import { NodeAsset } from "../../src/nodeAsset/nodeAsset";
-import { ScaleDefinition, NumberDefinition, OtherNumberDefinition, NumberType } from "../fixtures/numberBlocks";
+import { ScaleDefinition, NumberDefinition, OtherNumberDefinition, NumberType } from "../helpers/numberBlocks";
 
 describe("Block class", () => {
     it("has input and output ports", () => {
