@@ -1,14 +1,8 @@
 import type { ISceneLoaderPluginFactory } from "@babylonjs/core/Loading/sceneLoader.js";
 import { FBXFileLoaderMetadata } from "@babylonjs/loaders/FBX/fbxFileLoader.metadata.js";
 
-import { GltfDocumentType } from "../connectionPoints/gltfDocument";
-import { UrlType } from "../connectionPoints/url";
-import { convertBabylonSceneToDocumentAsync } from "../helpers/convertBabylonSceneToDocument";
-import { loadSceneWithPluginAsync } from "../helpers/loadSceneWithPlugin";
-import { NullEngineResource } from "../resources/nullEngineResource";
-import { PlatformIOResource } from "../resources/platformIOResource";
 import { Block, type BlockOptions } from "./block";
-import { defineBlock } from "./blockDefinition";
+import { defineBabylonSceneInputBlock } from "./babylonSceneInputBlock";
 
 const FbxLoaderFactory = {
     ...FBXFileLoaderMetadata,
@@ -22,21 +16,12 @@ const FbxLoaderFactory = {
     },
 } satisfies ISceneLoaderPluginFactory;
 
-const FbxInputBlockDefinition = /* @__PURE__ */ defineBlock({
+const FbxInputBlockDefinition = /* @__PURE__ */ defineBabylonSceneInputBlock({
     type: "input.fbx",
-    input: UrlType,
-    output: GltfDocumentType,
-    resources: {
-        engine: NullEngineResource,
-        io: PlatformIOResource,
+    loaderFactory: FbxLoaderFactory,
+    loadOptions: {
+        pluginExtension: ".fbx",
     },
-    runAsync: async (url, _config, { engine, io }) =>
-        convertBabylonSceneToDocumentAsync(
-            await loadSceneWithPluginAsync(url, engine, FbxLoaderFactory, {
-                pluginExtension: ".fbx",
-            }),
-            io
-        ),
 });
 
 /** Loads an FBX URL or Node filesystem path. */
