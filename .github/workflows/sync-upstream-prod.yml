@@ -1,0 +1,110 @@
+name: Sync upstream to prod
+
+# Keep this workflow on the fork's default branch, not on prod.
+# UPSTREAM_SYNC_TOKEN: fine-grained PAT with access to this fork and
+# Contents and Workflows read/write permissions. Renew it before expiry.
+# For a private upstream, UPSTREAM_READ_TOKEN can provide separate read access
+# if UPSTREAM_SYNC_TOKEN cannot read the source repository.
+# prod is an exact mirror: fork-only commits there are overwritten.
+# Schedules are best-effort and may need re-enabling after 60 days of inactivity.
+on:
+    schedule:
+        - cron: "17 * * * *"
+    workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+    group: sync-upstream-prod
+    cancel-in-progress: false
+
+jobs:
+    sync:
+        if: github.repository == 'alexchuber/Node-Assets' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+        runs-on: ubuntu-latest
+        timeout-minutes: 5
+        env:
+            GH_TOKEN: ${{ secrets.UPSTREAM_SYNC_TOKEN }}
+            GH_HOST: github.com
+            UPSTREAM_READ_TOKEN: ${{ secrets.UPSTREAM_READ_TOKEN }}
+            TARGET_REPOSITORY: alexchuber/Node-Assets
+            UPSTREAM_REPOSITORY: BabylonJS/Node-Assets
+            UPSTREAM_PRIVATE: "false"
+            TARGET_BRANCH: prod
+        steps:
+            - name: Mirror upstream default branch
+              shell: bash
+              run: |
+                  set -euo pipefail
+
+                  fail() {
+                    echo "::error::$1"
+                    exit 1
+                  }
+
+                  # Never send credentials to a public upstream.
+                  upstream_api() {
+                    if [[ "$UPSTREAM_PRIVATE" == "true" ]]; then
+                      GH_TOKEN="${UPSTREAM_READ_TOKEN:-$GH_TOKEN}" gh api "repos/$UPSTREAM_REPOSITORY$1"
+                    else
+                      curl --fail --silent --show-error \
+                        -H "Accept: application/vnd.github+json" \
+                        "https://api.github.com/repos/$UPSTREAM_REPOSITORY$1"
+                    fi
+                  }
+
+                  [[ -n "$GH_TOKEN" ]] || fail "Set the UPSTREAM_SYNC_TOKEN repository Actions secret before running."
+                  [[ "$GITHUB_REPOSITORY" == "$TARGET_REPOSITORY" && "$TARGET_BRANCH" == "prod" ]] ||
+                    fail "Only the configured repository's prod branch may be updated."
+                  [[ "$UPSTREAM_PRIVATE" == "true" || "$UPSTREAM_PRIVATE" == "false" ]] ||
+                    fail "Unexpected upstream visibility."
+
+                  fork_metadata=$(gh api "repos/$TARGET_REPOSITORY")
+                  default_branch=$(jq -er '.default_branch | select(type == "string" and length > 0)' <<< "$fork_metadata")
+                  [[ "$GITHUB_REF" == "refs/heads/$default_branch" && "$TARGET_BRANCH" != "$default_branch" ]] ||
+                    fail "Run from the fork's default branch; never mirror over the default branch."
+                  if ! jq -e --arg upstream "$UPSTREAM_REPOSITORY" --argjson private "$UPSTREAM_PRIVATE" \
+                    '.fork == true and .parent.full_name == $upstream and .parent.private == $private' <<< "$fork_metadata" > /dev/null; then
+                    fail "The target is not the expected upstream fork."
+                  fi
+
+                  upstream_branch=$(upstream_api "" | jq -er '.default_branch | select(type == "string" and length > 0)')
+                  encoded_branch=$(jq -rn --arg branch "$upstream_branch" '$branch | @uri')
+                  upstream_sha=$(upstream_api "/branches/$encoded_branch" | jq -er '.commit.sha')
+                  [[ "$upstream_sha" =~ ^[0-9a-f]{40}$ ]] || fail "Upstream did not return a valid commit SHA."
+                  gh api "repos/$TARGET_REPOSITORY/git/commits/$upstream_sha" > /dev/null
+
+                  target_ref="refs/heads/$TARGET_BRANCH"
+                  matching_refs=$(gh api "repos/$TARGET_REPOSITORY/git/matching-refs/heads/$TARGET_BRANCH")
+                  previous_sha=$(jq -r --arg ref "$target_ref" '
+                    map(select(.ref == $ref)) |
+                    if length == 0 then ""
+                    elif length == 1 then .[0].object.sha
+                    else error("Multiple exact target references returned")
+                    end
+                  ' <<< "$matching_refs")
+                  [[ -z "$previous_sha" || "$previous_sha" =~ ^[0-9a-f]{40}$ ]] ||
+                    fail "The target reference did not return a valid commit SHA."
+
+                  if [[ -z "$previous_sha" ]]; then
+                    gh api --method POST "repos/$TARGET_REPOSITORY/git/refs" \
+                      -f ref="$target_ref" -f sha="$upstream_sha" > /dev/null
+                    status="Created"
+                  elif [[ "$previous_sha" == "$upstream_sha" ]]; then
+                    status="Already current"
+                  else
+                    gh api --method PATCH "repos/$TARGET_REPOSITORY/git/refs/heads/$TARGET_BRANCH" \
+                      -f sha="$upstream_sha" -F force=true > /dev/null
+                    status="Updated"
+                  fi
+
+                  actual_sha=$(gh api "repos/$TARGET_REPOSITORY/git/ref/heads/$TARGET_BRANCH" --jq '.object.sha')
+                  [[ "$actual_sha" == "$upstream_sha" ]] || fail "prod does not match the captured upstream commit."
+
+                  {
+                    printf '## Upstream mirror: %s\n\n' "$status"
+                    printf -- '- Source: `%s:%s`\n' "$UPSTREAM_REPOSITORY" "$upstream_branch"
+                    printf -- '- Target: `%s:%s`\n' "$TARGET_REPOSITORY" "$TARGET_BRANCH"
+                    printf -- '- Previous commit: `%s`\n' "${previous_sha:-not yet created}"
+                    printf -- '- Upstream commit: `%s`\n' "$upstream_sha"
+                  } >> "$GITHUB_STEP_SUMMARY"
