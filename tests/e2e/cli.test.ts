@@ -47,6 +47,10 @@ describe("Node Assets CLI", () => {
             ".fbx",
             ".obj",
             ".stl",
+            ".usd",
+            ".usda",
+            ".usdc",
+            ".usdz",
             "draco",
             "meshopt",
             "ktx2",
@@ -91,6 +95,15 @@ describe("Node Assets CLI", () => {
         const result = await runNodeAsync([launcher, ...args], cwd);
         expect(result.code).toBe(1);
         expect(result.stderr.trim()).not.toBe("");
+        expect(await readdir(cwd)).toEqual(before);
+    });
+
+    it.skipIf(typeof Worker !== "undefined")("fails without writing output when USD lacks Web Worker support", async () => {
+        const cwd = await mkdtemp(join(directory, "usd-"));
+        await writeFile(join(cwd, "input.usda"), "#usda 1.0\n");
+        const before = await readdir(cwd);
+        const result = await runNodeAsync([launcher, "pipeline", "input.usda", "output.glb"], cwd);
+        expect(result.code).toBe(1);
         expect(await readdir(cwd)).toEqual(before);
     });
 

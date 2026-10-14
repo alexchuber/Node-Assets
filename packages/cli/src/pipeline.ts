@@ -21,6 +21,10 @@ export function getPipelineDefinitions() {
                 extensions: [".stl"],
                 create: (library: typeof NodeAssets, path: string) => new library.StlInputBlock({ input: path }),
             },
+            {
+                extensions: [".usd", ".usda", ".usdc", ".usdz"],
+                create: (library: typeof NodeAssets, path: string) => new library.UsdInputBlock({ input: path }),
+            },
         ],
         outputs: [
             {

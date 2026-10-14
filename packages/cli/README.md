@@ -24,9 +24,11 @@ node-assets pipeline <input> [operation...] <output> [--stats] [--benchmark]
 
 | Element   | Supported values                                                        |
 | --------- | ----------------------------------------------------------------------- |
-| Input     | `.gltf`, `.glb`, `.fbx`, `.obj`, `.stl`                                 |
+| Input     | `.gltf`, `.glb`, `.fbx`, `.obj`, `.stl`, `.usd`, `.usda`, `.usdc`, `.usdz` |
 | Output    | `.glb`                                                                  |
 | Operation | `draco`, `meshopt`, `ktx2`, `validate`, `quantize`, `cull-unused`, `strip-materials` |
+
+USD inputs require a Node version with Web Worker support (a global `Worker`).
 
 Without specifying operations, the CLI reads the input and writes it back out as the target output format.
 
