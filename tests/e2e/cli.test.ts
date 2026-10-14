@@ -135,6 +135,24 @@ describe("Node Assets CLI", () => {
         expect((await readGlbAsync(output)).json.meshes).toHaveLength(1);
     });
 
+    it.skipIf(typeof Worker === "undefined" && !process.allowedNodeEnvironmentFlags.has("--experimental-web-worker"))(
+        "converts a local USDA input to GLB when Web Workers are available",
+        async () => {
+            const source = join(directory, "source.usda");
+            const output = join(directory, "usda-input.glb");
+            await writeFile(
+                source,
+                '#usda 1.0\n(\n    defaultPrim = "Root"\n)\ndef Xform "Root"\n{\n    def Mesh "Tri"\n    {\n        int[] faceVertexCounts = [3]\n        int[] faceVertexIndices = [0, 1, 2]\n        point3f[] points = [(0, 0, 0), (1, 0, 0), (0, 1, 0)]\n    }\n}\n'
+            );
+            const flags = typeof Worker === "undefined" ? ["--experimental-web-worker"] : [];
+
+            const result = await runNodeAsync([...flags, launcher, "pipeline", source, output], directory);
+
+            expect(result.code).toBe(0);
+            expect((await readGlbAsync(output)).json.meshes).toHaveLength(1);
+        }
+    );
+
     it.each([
         { extension: "gltf", flags: ["--stats"] },
         { extension: "glb", flags: ["--stats"] },

@@ -28,7 +28,12 @@ node-assets pipeline <input> [operation...] <output> [--stats] [--benchmark]
 | Output    | `.glb`                                                                  |
 | Operation | `draco`, `meshopt`, `ktx2`, `validate`, `quantize`, `cull-unused`, `strip-materials` |
 
-USD inputs require a Node version with Web Worker support (a global `Worker`).
+USD inputs require Web Worker support (a global `Worker`). On Node versions that
+offer it behind a flag, such as Node 26, enable it with:
+
+```sh
+NODE_OPTIONS=--experimental-web-worker node-assets pipeline model.usdz output.glb
+```
 
 Without specifying operations, the CLI reads the input and writes it back out as the target output format.
 

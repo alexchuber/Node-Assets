@@ -4,6 +4,7 @@ import { USDFileLoaderMetadata } from "@babylonjs/loaders/USD/usdFileLoader.meta
 import { GltfDocumentType } from "../connectionPoints/gltfDocument";
 import { UrlType } from "../connectionPoints/url";
 import { convertBabylonSceneToDocumentAsync } from "../helpers/convertBabylonSceneToDocument";
+import { resolveInputLocationAsync } from "../helpers/inputLocation";
 import { loadSceneWithPluginAsync } from "../helpers/loadSceneWithPlugin";
 import { NullEngineResource } from "../resources/nullEngineResource";
 import { PlatformIOResource } from "../resources/platformIOResource";
@@ -18,7 +19,9 @@ const UsdLoaderFactory = {
             import("virtual:node-assets-usd-runtime-urls"),
         ]);
         _RegisterUSDLoaderDependencies();
-        return new USDFileLoader(runtimeUrls);
+        // Emscripten's Node data loader passes this URL straight to fs.readFileSync, which rejects file URL strings.
+        const { path: dataPath } = await resolveInputLocationAsync(runtimeUrls.dataUrl);
+        return new USDFileLoader({ ...runtimeUrls, dataUrl: dataPath ?? runtimeUrls.dataUrl });
     },
 } satisfies ISceneLoaderPluginFactory;
 
