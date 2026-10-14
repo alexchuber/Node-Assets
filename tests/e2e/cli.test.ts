@@ -8,8 +8,11 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import cliPackage from "../../packages/cli/package.json";
 import { EncodeDracoBlock, EncodeKTX2Block, EncodeMeshoptBlock, GltfInputBlock, GltfOutputBlock, NodeAsset } from "../../packages/core/src/index";
 import { buildCliFixtureAsync, runNodeAsync } from "../helpers/cli";
+import { generateFbxData } from "../helpers/fbx";
 import { expectKtx2Image, parseGlbAsync } from "../helpers/glb";
 import { generateGlbData, generateGltfJson, generateTexturedGltfJson } from "../helpers/gltf";
+import { generateObjData } from "../helpers/obj";
+import { generateStlData } from "../helpers/stl";
 
 describe("Node Assets CLI", () => {
     let directory: string;
@@ -37,7 +40,23 @@ describe("Node Assets CLI", () => {
         const result = await runNodeAsync([launcher, ...args], directory);
         expect(result.code).toBe(0);
         expect(result.stderr).toBe("");
-        for (const term of ["pipeline", ".gltf", ".glb", "draco", "meshopt", "ktx2", "validate", "--stats", "--benchmark"]) {
+        for (const term of [
+            "pipeline",
+            ".gltf",
+            ".glb",
+            ".fbx",
+            ".obj",
+            ".stl",
+            "draco",
+            "meshopt",
+            "ktx2",
+            "validate",
+            "quantize",
+            "cull-unused",
+            "strip-materials",
+            "--stats",
+            "--benchmark",
+        ]) {
             expect(result.stdout).toContain(term);
         }
     });
@@ -58,7 +77,7 @@ describe("Node Assets CLI", () => {
             ["pipeline", "input.gltf", "DRACO", "output.glb"],
             ["pipeline", "--unknown", "input.gltf", "output.glb"],
             ["pipeline", "input.gltf", "--force", "output.glb"],
-            ["pipeline", "input.obj", "output.glb"],
+            ["pipeline", "input.ply", "output.glb"],
             ["pipeline", "input", "output.glb"],
             ["pipeline", "input.gltf", "output.gltf"],
             ["pipeline", "input.gltf", "output"],
@@ -66,7 +85,7 @@ describe("Node Assets CLI", () => {
     )("rejects invalid arguments $args", async ({ args }) => {
         const cwd = await mkdtemp(join(directory, "invalid-"));
         await cp(input, join(cwd, "input.gltf"));
-        await cp(input, join(cwd, "input.obj"));
+        await cp(input, join(cwd, "input.ply"));
         await cp(input, join(cwd, "input"));
         const before = await readdir(cwd);
         const result = await runNodeAsync([launcher, ...args], cwd);
@@ -86,6 +105,21 @@ describe("Node Assets CLI", () => {
         const parsed = await readGlbAsync(output);
         expect(parsed.json.extensionsUsed ?? []).not.toContain("KHR_draco_mesh_compression");
         expect(parsed.json.extensionsUsed ?? []).not.toContain("EXT_meshopt_compression");
+    });
+
+    it.each([
+        { extension: "obj", data: generateObjData() },
+        { extension: "stl", data: generateStlData() },
+        { extension: "fbx", data: generateFbxData() },
+    ])("converts a local $extension input to GLB", async ({ extension, data }) => {
+        const source = join(directory, `source.${extension}`);
+        const output = join(directory, `${extension}-input.glb`);
+        await writeFile(source, data);
+
+        const result = await runNodeAsync([launcher, "pipeline", source, output], directory);
+
+        expect(result.code).toBe(0);
+        expect((await readGlbAsync(output)).json.meshes).toHaveLength(1);
     });
 
     it.each([
@@ -267,6 +301,38 @@ describe("Node Assets CLI", () => {
         },
         60_000
     );
+
+    it("quantizes mesh attributes", async () => {
+        const output = join(directory, "quantized.glb");
+        const result = await runNodeAsync([launcher, "pipeline", input, "quantize", output], directory);
+
+        expect(result.code).toBe(0);
+        expect((await readGlbAsync(output)).json.extensionsUsed).toContain("KHR_mesh_quantization");
+    });
+
+    it("culls unused resources", async () => {
+        const source = join(directory, "unused-material.gltf");
+        const output = join(directory, "culled.glb");
+        const gltf = JSON.parse(generateGltfJson()) as { materials?: unknown[] };
+        gltf.materials = [{ name: "Unused" }];
+        await writeFile(source, JSON.stringify(gltf));
+
+        const result = await runNodeAsync([launcher, "pipeline", source, "cull-unused", output], directory);
+
+        expect(result.code).toBe(0);
+        expect((await readGlbAsync(output)).json.materials).toBeUndefined();
+    });
+
+    it("strips materials and their unused textures", async () => {
+        const output = join(directory, "stripped.glb");
+        const result = await runNodeAsync([launcher, "pipeline", texturedInput, "strip-materials", output], directory);
+
+        expect(result.code).toBe(0);
+        const { json } = await readGlbAsync(output);
+        expect(json.materials).toBeUndefined();
+        expect(json.textures).toBeUndefined();
+        expect(json.images).toBeUndefined();
+    });
 
     it("prints validation diagnostics and writes output for a valid document", async () => {
         const source = join(directory, "validate-warnings.gltf");

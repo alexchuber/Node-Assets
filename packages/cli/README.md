@@ -13,6 +13,7 @@ A pipeline is a sequence of operations applied to a 3D asset. The CLI allows you
 ```sh
 node-assets pipeline input.gltf output.glb
 node-assets pipeline input.glb ktx2 draco output.glb
+node-assets pipeline model.fbx cull-unused quantize meshopt output.glb
 ```
 
 The command syntax is:
@@ -21,11 +22,11 @@ The command syntax is:
 node-assets pipeline <input> [operation...] <output> [--stats] [--benchmark]
 ```
 
-| Element   | Supported values           |
-| --------- | -------------------------- |
-| Input     | `.gltf`, `.glb`            |
-| Output    | `.glb`                     |
-| Operation | `draco`, `meshopt`, `ktx2`, `validate` |
+| Element   | Supported values                                                        |
+| --------- | ----------------------------------------------------------------------- |
+| Input     | `.gltf`, `.glb`, `.fbx`, `.obj`, `.stl`                                 |
+| Output    | `.glb`                                                                  |
+| Operation | `draco`, `meshopt`, `ktx2`, `validate`, `quantize`, `cull-unused`, `strip-materials` |
 
 Without specifying operations, the CLI reads the input and writes it back out as the target output format.
 

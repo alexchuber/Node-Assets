@@ -9,6 +9,18 @@ export function getPipelineDefinitions() {
                 extensions: [".gltf", ".glb"],
                 create: (library: typeof NodeAssets, path: string) => new library.GltfInputBlock({ input: path }),
             },
+            {
+                extensions: [".fbx"],
+                create: (library: typeof NodeAssets, path: string) => new library.FbxInputBlock({ input: path }),
+            },
+            {
+                extensions: [".obj"],
+                create: (library: typeof NodeAssets, path: string) => new library.ObjInputBlock({ input: path }),
+            },
+            {
+                extensions: [".stl"],
+                create: (library: typeof NodeAssets, path: string) => new library.StlInputBlock({ input: path }),
+            },
         ],
         outputs: [
             {
@@ -36,6 +48,21 @@ export function getPipelineDefinitions() {
                 name: "ktx2",
                 description: "Encode textures as KTX2",
                 create: (library: typeof NodeAssets) => new library.EncodeKTX2Block(),
+            },
+            {
+                name: "quantize",
+                description: "Quantize mesh attributes",
+                create: (library: typeof NodeAssets) => new library.QuantizeBlock(),
+            },
+            {
+                name: "cull-unused",
+                description: "Remove unused resources",
+                create: (library: typeof NodeAssets) => new library.CullUnusedBlock(),
+            },
+            {
+                name: "strip-materials",
+                description: "Remove materials and their unused textures",
+                create: (library: typeof NodeAssets) => new library.StripMaterialsBlock(),
             },
         ],
     };

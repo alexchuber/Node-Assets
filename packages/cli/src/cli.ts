@@ -69,6 +69,7 @@ export async function runCliAsync(args: string[]): Promise<void> {
 
 function printHelp(): void {
     const { inputs, outputs, operations } = getPipelineDefinitions();
+    const operationNameWidth = Math.max(...operations.map(({ name }) => name.length)) + 2;
     console.log(
         [
             "Usage: node-assets pipeline <input> [operations...] <output> [--stats] [--benchmark]",
@@ -79,7 +80,7 @@ function printHelp(): void {
             "Paths are local and relative to the working directory.",
             "",
             "Operations:",
-            ...operations.map(({ name, description }) => `  ${name.padEnd(9)}${description}`),
+            ...operations.map(({ name, description }) => `  ${name.padEnd(operationNameWidth)}${description}`),
             "",
             "Options:",
             "  -h, --help     Show this help",
@@ -88,7 +89,7 @@ function printHelp(): void {
             "  --benchmark   Show completion time, CPU time, RSS, and heap usage",
             "  --            End options before hyphen-prefixed paths",
             "",
-            "Example: node-assets pipeline input.gltf ktx2 draco output.glb",
+            "Example: node-assets pipeline model.fbx cull-unused quantize meshopt output.glb",
         ].join("\n")
     );
 }
