@@ -104,6 +104,7 @@ describe("Node Assets CLI", () => {
         const before = await readdir(cwd);
         const result = await runNodeAsync([launcher, "pipeline", "input.usda", "output.glb"], cwd);
         expect(result.code).toBe(1);
+        expect(result.stderr.trim()).not.toBe("");
         expect(await readdir(cwd)).toEqual(before);
     });
 

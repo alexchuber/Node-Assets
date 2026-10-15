@@ -21,6 +21,9 @@ const result = await asset.executeAsync();
 All input blocks accept HTTP(S) URLs and, in Node, filesystem paths and `file:` URLs.
 Relative paths use the working directory.
 
+USD input requires a global `Worker`. On Node versions that offer it behind a flag,
+such as Node 26, run with `--experimental-web-worker`.
+
 # Example: CLI run reports
 
 ```sh
