@@ -1,0 +1,101 @@
+{
+ "id": "g2__G1__tune-json__haiku__r2",
+ "task": "G1",
+ "variant": "tune-json",
+ "model": "haiku",
+ "rep": 2,
+ "tag": "g2",
+ "wall_s": 264.6,
+ "timed_out": false,
+ "cost": 0.00373338,
+ "turns": 8,
+ "duration_s": 263.5,
+ "in_tokens": 75040,
+ "out_tokens": 2027,
+ "is_error": false,
+ "n_results": 1,
+ "final": "`public/models/helmet.glb` now uses about 7 MiB of GPU memory, down from 107 MiB. The file is 3.30 MB, down from 3.77 MB.\n\n- **Fidelity:** the worst-case SSIM against the original is 0.94, above the 0.9 limit the tool recommends for no visible quality loss. The side-by-side preview looks identical to me.\n- **Method:** I ran `node-assets tune --for gpu` and applied the best result. Textures are KTX2 (ETC1S for color, UASTC for data) at up to 1024px, and geometry is quantized. The `--check` run passed.\n- **Decoder:** the output needs the KTX2 transcoder. Your Babylon.js scene loads it automatically, as you said.\n- **Source untouched:** `assets/helmet.glb` is unchanged. The recipe is saved at `recipes/helmet.gpu.recipe.json`, with a preview image and the full candidate table alongside it, in case you want to rerun it on other models.",
+ "tool_calls": 6,
+ "bash_calls": 5,
+ "bash_cmds": [
+  "node-assets --help 2>&1 | head -80; echo ---; ls -la assets public/models 2>&1; echo ---; pwd; ls -la",
+  "node-assets inspect assets/helmet.glb --view 1024 2>&1 | head -150; echo ---; node-assets tune --help 2>&1 | head -80",
+  "mkdir -p recipes && node-assets tune assets/helmet.glb --for gpu -o recipes/ 2>&1 | tail -80",
+  "node-assets run --help 2>&1 | head -40; echo ---; cat recipes/helmet.gpu.recipe.json; echo; cmp assets/helmet.glb public/models/helmet.glb && echo \"public copy identical to source\"",
+  "node-assets run recipes/helmet.gpu.recipe.json assets/helmet.glb -o public/models/helmet.glb --check --force 2>&1 | tail -40; echo ---; node-assets inspect public/models/helmet.glb --against assets/helmet.glb --view 1024 2>&1 | head -80; echo ---; ls -la public/models/helmet.glb assets/helmet.glb"
+ ],
+ "wrote_scripts": 0,
+ "read_cli_source": false,
+ "na_calls": 7,
+ "na_unfinished": 0,
+ "na_failed": 0,
+ "na_usage_err": 0,
+ "na_help": 3,
+ "na_out_chars": 7926,
+ "na_args": [
+  [
+   "--help"
+  ],
+  [
+   "inspect",
+   "assets/helmet.glb",
+   "--view",
+   "1024"
+  ],
+  [
+   "tune",
+   "--help"
+  ],
+  [
+   "tune",
+   "assets/helmet.glb",
+   "--for",
+   "gpu",
+   "-o",
+   "recipes/"
+  ],
+  [
+   "run",
+   "--help"
+  ],
+  [
+   "run",
+   "recipes/helmet.gpu.recipe.json",
+   "assets/helmet.glb",
+   "-o",
+   "public/models/helmet.glb",
+   "--check",
+   "--force"
+  ],
+  [
+   "inspect",
+   "public/models/helmet.glb",
+   "--against",
+   "assets/helmet.glb",
+   "--view",
+   "1024"
+  ]
+ ],
+ "grade": {
+  "source_intact": true,
+  "valid": true,
+  "fidelity_ok": true,
+  "near_best": true,
+  "_gpu": 7370339,
+  "_ratio": 1.0,
+  "_fid": 0.94,
+  "_bytes": 3294776,
+  "_dec": [
+   "ktx2"
+  ],
+  "_keys": [
+   "valid",
+   "fidelity_ok",
+   "near_best",
+   "source_intact"
+  ],
+  "success": true,
+  "score": 1.0,
+  "_raw": true
+ }
+}

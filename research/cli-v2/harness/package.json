@@ -1,0 +1,18 @@
+{
+    "name": "node-assets-cli-v2-harness",
+    "private": true,
+    "description": "Agent-trial harness and independent graders for the node-assets CLI v2 research. Not part of the pnpm workspace.",
+    "dependencies": {
+        "@gltf-transform/core": "4.5.0",
+        "@gltf-transform/extensions": "4.5.0",
+        "draco3dgltf": "1.5.7",
+        "gltf-validator": "2.0.0-dev.3.10",
+        "meshoptimizer": "1.2.0",
+        "playwright": "1.56.0",
+        "three": "0.180.0"
+    },
+    "optionalDependencies": {
+        "@anthropic-ai/tokenizer": "0.0.4",
+        "gpt-tokenizer": "4.1.0"
+    }
+}

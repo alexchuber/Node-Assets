@@ -1,0 +1,4 @@
+48 jobs, 48 to run
+g1__M1__knobs__sonnet__r2: done cost=$0.087 turns=14 na=12 1446.2s
+g1__S1__tune__sonnet__r2: done cost=$0.118 turns=14 na=14 2322.6s
+g1__S1__tune__sonnet__r1: done cost=$0.084 turns=10 na=10 1090.4s

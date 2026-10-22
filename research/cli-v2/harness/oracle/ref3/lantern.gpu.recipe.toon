@@ -1,0 +1,46 @@
+recipe: 1
+name: lantern.gpu
+goal: gpu
+stages:
+  cleanup:
+    prune: true
+    dedup: true
+    weld: true
+    metalRough: true
+    instance: true
+    flatten: true
+    palette: false
+  textures:
+    format: ktx2
+    quality: 90
+    dataQuality: 95
+    maxSize: 768
+    ktx2:
+      color: uastc
+      data: uastc
+      etc1sQuality: 128
+      uastcQuality: 1
+      zstd: true
+  geometry:
+    mode: quantize
+    simplify: 1
+    meshoptLevel: medium
+    dracoPosition: 14
+    dracoNormal: 10
+    dracoTexcoord: 12
+    dracoDecodeSpeed: 5
+check:
+  fidelity: 0.9
+  view: 1024
+  views: 4
+tuned:
+  input: assets/lantern.glb
+  date: 2026-10-22
+  network: 4g
+  amortized_over: 1
+  result:
+    bytes: 1525824
+    decoders: ktx2
+    gpu_mib: 3.1
+    load_s: 1.67
+    fidelity: 0.912

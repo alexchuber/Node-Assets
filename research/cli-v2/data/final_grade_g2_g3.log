@@ -1,0 +1,61 @@
+graded g3__L1__tune__haiku__r1
+graded g3__G1__tune__haiku__r1
+graded g3__L1__tune__sonnet__r1
+graded g3__G1__tune__sonnet__r1
+graded g3__M1__tune__sonnet__r1
+graded g3__M1__tune__haiku__r1
+best known: {"G1": 7370339, "C1": 1369696, "S1": 1243524, "L1": 0.491, "M1s": 227703.0, "M1g": 3277572} {"G1": "oracle", "C1": "oracle", "S1": "g2__S1__tune__sonnet__r1", "L1": "oracle", "M1s": "g2__M1__tune-json__sonnet__r2", "M1g": "oracle"}
+g2__S1__knobs__sonnet__r1          success=False ratio=2.288 valid=True fidelity_ok=True viewer_compat=True near_best=False source_intact=True
+g2__L1__knobs__sonnet__r1          success=False ratio=2.079 valid=True fidelity_ok=True viewer_compat=True source_intact=True near_best=False
+g2__S1__tune__sonnet__r1           success=True  ratio=1.0 valid=True fidelity_ok=True viewer_compat=True near_best=True source_intact=True
+g2__C1__knobs__haiku__r1           success=False ratio=1.297 valid=True no_extensions=True fidelity_ok=True near_best=False source_intact=True
+g2__M1__tune-json__sonnet__r2      success=False ratio=1.746 valid=True fidelity_ok=True small_near_best=True gpu_near_best=False source_intact=True
+g2__S1__knobs__haiku__r2           success=False ratio=5.52 valid=True fidelity_ok=True viewer_compat=True near_best=False source_intact=True
+g2__G1__knobs__sonnet__r1          success=True  ratio=1.0 valid=True fidelity_ok=True near_best=True source_intact=True
+g2__C1__tune__sonnet__r2           success=True  ratio=1.018 valid=True no_extensions=True fidelity_ok=True near_best=True source_intact=True
+g2__M1__tune-json__sonnet__r1      success=False ratio=1.746 valid=True fidelity_ok=True small_near_best=True gpu_near_best=False source_intact=True
+g2__L1__tune__sonnet__r1           success=False ratio=1.965 valid=True fidelity_ok=True viewer_compat=True source_intact=True near_best=False
+g2__G1__tune-json__sonnet__r1      success=True  ratio=1.0 valid=True fidelity_ok=True near_best=True source_intact=True
+g2__M1__knobs__sonnet__r1          success=False ratio=5.493 valid=True fidelity_ok=True small_near_best=False gpu_near_best=False source_intact=True
+g2__C1__knobs__haiku__r2           success=False ratio=1.285 valid=True no_extensions=True fidelity_ok=True near_best=False source_intact=True
+g2__G1__tune-json__haiku__r2       success=True  ratio=1.0 valid=True fidelity_ok=True near_best=True source_intact=True
+g2__M1__tune__haiku__r1            success=False ratio=1.746 valid=True fidelity_ok=True small_near_best=True gpu_near_best=False source_intact=True
+g2__L1__tune__haiku__r1            success=False ratio=1.89 valid=True fidelity_ok=True viewer_compat=True source_intact=True near_best=False
+g2__M1__knobs__sonnet__r2          success=False ratio=6.865 valid=True fidelity_ok=True small_near_best=False gpu_near_best=False source_intact=True
+g2__L1__knobs__haiku__r1           success=False ratio=1.988 valid=True fidelity_ok=True viewer_compat=True source_intact=True near_best=False
+g2__C1__knobs__sonnet__r1          success=False ratio=1.302 valid=True no_extensions=True fidelity_ok=True near_best=False source_intact=True
+g2__C1__tune__haiku__r2            success=False ratio=1.504 valid=True no_extensions=True fidelity_ok=True near_best=False source_intact=True
+g2__C1__knobs__sonnet__r2          success=False ratio=1.302 valid=True no_extensions=True fidelity_ok=True near_best=False source_intact=True
+g2__C1__tune__sonnet__r1           success=True  ratio=1.018 valid=True no_extensions=True fidelity_ok=True near_best=True source_intact=True
+g2__G1__knobs__sonnet__r2          success=True  ratio=1.0 valid=True fidelity_ok=True near_best=True source_intact=True
+g2__L1__tune__haiku__r2            success=False ratio=1.642 valid=True fidelity_ok=True viewer_compat=True source_intact=True near_best=False
+g3__L1__tune__haiku__r1            success=False ratio=2.177 valid=True fidelity_ok=True viewer_compat=True source_intact=True near_best=False
+g2__M1__knobs__haiku__r2           success=False ratio=2.745 valid=True fidelity_ok=True small_near_best=False gpu_near_best=True source_intact=True
+g2__L1__knobs__sonnet__r2          success=False ratio=2.99 valid=True fidelity_ok=True viewer_compat=True source_intact=True near_best=False
+g2__G1__tune__haiku__r1            success=True  ratio=1.0 valid=True fidelity_ok=True near_best=True source_intact=True
+g2__M1__tune__sonnet__r2           success=False ratio=1.746 valid=True fidelity_ok=True small_near_best=True gpu_near_best=False source_intact=True
+g2__G1__tune-json__haiku__r1       success=True  ratio=1.0 valid=True fidelity_ok=True near_best=True source_intact=True
+g3__G1__tune__haiku__r1            success=False ratio=3.845 valid=True fidelity_ok=True near_best=False source_intact=True
+g2__L1__knobs__haiku__r2           success=False ratio=2.138 valid=True fidelity_ok=True viewer_compat=True source_intact=True near_best=False
+g3__L1__tune__sonnet__r1           success=False ratio=1.446 valid=True fidelity_ok=True viewer_compat=True source_intact=True near_best=False
+g2__G1__tune__sonnet__r2           success=True  ratio=1.0 valid=True fidelity_ok=True near_best=True source_intact=True
+g2__G1__tune__sonnet__r1           success=True  ratio=1.0 valid=True fidelity_ok=True near_best=True source_intact=True
+g2__L1__tune__sonnet__r2           success=True  ratio=1.155 valid=True fidelity_ok=True viewer_compat=True source_intact=True near_best=True
+g3__G1__tune__sonnet__r1           success=False ratio=3.845 valid=True fidelity_ok=True near_best=False source_intact=True
+g2__S1__tune__haiku__r1            success=True  ratio=1.012 valid=True fidelity_ok=True viewer_compat=True near_best=True source_intact=True
+g2__S1__tune__haiku__r2            success=True  ratio=1.0 valid=True fidelity_ok=True viewer_compat=True near_best=True source_intact=True
+g2__C1__tune__haiku__r1            success=True  ratio=1.018 valid=True no_extensions=True fidelity_ok=True near_best=True source_intact=True
+g2__G1__knobs__haiku__r2           success=True  ratio=1.0 valid=True fidelity_ok=True near_best=True source_intact=True
+g2__M1__tune-json__haiku__r2       success=False ratio=1.746 valid=True fidelity_ok=True small_near_best=True gpu_near_best=False source_intact=True
+g3__M1__tune__sonnet__r1           success=True  ratio=1.0 valid=True fidelity_ok=True small_near_best=True gpu_near_best=True source_intact=True
+g2__S1__knobs__haiku__r1           success=False ratio=2.528 valid=True fidelity_ok=True viewer_compat=False near_best=False source_intact=True
+g2__G1__knobs__haiku__r1           success=True  ratio=1.0 valid=True fidelity_ok=True near_best=True source_intact=True
+g2__G1__tune__haiku__r2            success=False ratio=3.845 valid=True fidelity_ok=True near_best=False source_intact=True
+g2__S1__tune__sonnet__r2           success=True  ratio=1.0 valid=True fidelity_ok=True viewer_compat=True near_best=True source_intact=True
+g2__M1__tune__haiku__r2            success=False ratio=1.746 valid=True fidelity_ok=True small_near_best=True gpu_near_best=False source_intact=True
+g2__S1__knobs__sonnet__r2          success=False ratio=2.648 valid=True fidelity_ok=True viewer_compat=True near_best=False source_intact=True
+g3__M1__tune__haiku__r1            success=True  ratio=1.0 valid=True fidelity_ok=True small_near_best=True gpu_near_best=True source_intact=True
+g2__M1__tune__sonnet__r1           success=False ratio=1.746 valid=True fidelity_ok=True small_near_best=True gpu_near_best=False source_intact=True
+g2__M1__tune-json__haiku__r1       success=False ratio=1.746 valid=True fidelity_ok=True small_near_best=True gpu_near_best=False source_intact=True
+g2__M1__knobs__haiku__r1           success=False ratio=2.388 valid=True fidelity_ok=True small_near_best=False gpu_near_best=False source_intact=True
+g2__G1__tune-json__sonnet__r2      success=True  ratio=1.0 valid=True fidelity_ok=True near_best=True source_intact=True

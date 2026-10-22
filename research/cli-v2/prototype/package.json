@@ -1,0 +1,22 @@
+{
+    "name": "node-assets-cli-v2-prototype",
+    "private": true,
+    "version": "0.7.0",
+    "description": "Research prototype of the goal-tuned node-assets CLI (tune / run / inspect). Not part of the pnpm workspace.",
+    "type": "module",
+    "bin": { "node-assets": "bin.mjs" },
+    "engines": { "node": ">=20.19" },
+    "dependencies": {
+        "@gltf-transform/core": "4.5.0",
+        "@gltf-transform/extensions": "4.5.0",
+        "@gltf-transform/functions": "4.5.0",
+        "@toon-format/toon": "4.4.0",
+        "babylonpress-ktx2-encoder": "0.6.0",
+        "draco3dgltf": "1.5.7",
+        "gltf-validator": "2.0.0-dev.3.10",
+        "meshoptimizer": "1.2.0",
+        "playwright": "1.56.0",
+        "sharp": "0.35.4",
+        "three": "0.180.0"
+    }
+}

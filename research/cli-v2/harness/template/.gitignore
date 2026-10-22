@@ -1,0 +1,7 @@
+# downloaded by fetch_assets.sh
+assets/*.glb
+assets/*.fbx
+assets/*.obj
+assets/*.mtl
+assets/*.JPG
+public/models/*.glb

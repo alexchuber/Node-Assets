@@ -1,0 +1,40 @@
+input: assets/toycar.glb
+limit: fidelity >= 0.9 at 1024px
+candidates[37]{candidate,bytes,decoders,gpu_mib,load_s,fidelity,within_limit}:
+  baseline (cleanup only),4482660,none,37,4.09,0.985,true
+  geometry meshopt-high,2524432,meshopt,37.4,2.37,0.984,true
+  geometry draco,2136668,draco,38.1,2.17,0.983,true
+  textures avif 1024px q90/90,2897156,none,37,2.71,0.984,true
+  "load: avif 1024px q90/90 + draco",551156,draco,38.1,0.71,0.983,true
+  textures avif 384px q90/90,2794792,none,8.3,2.54,0.957,true
+  textures avif 256px q90/90,2766036,none,5,2.54,0.96,true
+  "load: avif 384px q90/90 + draco",448784,draco,9.5,0.64,0.959,true
+  textures avif 256px q55/55,2747812,none,5,2.5,0.935,true
+  textures avif 256px q35/35,2742832,none,5,2.51,0.898,false
+  textures avif 256px q45/45,2744436,none,5,2.5,0.913,true
+  textures avif 256px q40/40,2743756,none,5,2.51,0.91,true
+  textures avif 256px q30/40,2743244,none,5,2.52,0.906,true
+  textures avif 256px q25/40,2743124,none,5,2.5,0.908,true
+  textures avif 256px q25/30,2742024,none,5,2.5,0.894,false
+  textures avif 256px q25/35,2742536,none,5,2.5,0.899,false
+  geometry meshopt,2816668,meshopt,37,2.61,0.985,true
+  geometry draco-low,2022660,draco,38.1,2.01,0.94,true
+  geometry draco-12,2039300,draco,38.1,1.99,0.964,true
+  geometry quantize simplify 0.5,2970604,none,35.7,2.73,0.853,false
+  geometry quantize simplify 0.7,3375368,none,36,3.14,0.917,true
+  geometry quantize simplify 0.6,3175212,none,35.8,2.93,0.859,false
+  geometry meshopt-high simplify 0.7,2344468,meshopt,36.3,2.19,0.917,true
+  geometry draco simplify 0.7,2058864,draco,36.9,2.03,0.918,true
+  "load: avif 256px q25/40 + draco-12",299740,draco,6.1,0.4,0.884,false
+  "load: avif 256px q55/55 + draco-12",304432,draco,6.1,0.51,0.914,true
+  textures webp 1024px q90/90,3122420,none,37,2.88,0.983,true
+  textures webp 384px q90/90,2862604,none,8.3,2.62,0.958,true
+  textures webp 256px q90/90,2793576,none,5,2.56,0.949,true
+  textures webp 256px q55/55,2752612,none,5,2.51,0.933,true
+  textures webp 256px q35/35,2747284,none,5,2.49,0.915,true
+  textures webp 256px q25/25,2744924,none,5,2.5,0.912,true
+  textures ktx2 etc1s 512px,2928976,ktx2,5,3.09,0.841,false
+  textures ktx2 etc1s 768px,3016648,ktx2,7.5,3,0.841,false
+  textures ktx2 etc1s 1024px,3110736,ktx2,11,3.08,0.846,false
+  "load: webp 256px q35/35 + draco-12",303904,draco,6.1,0.41,0.893,false
+  "load: webp 256px q55/55 + draco-12",309236,draco,6.1,0.49,0.922,true

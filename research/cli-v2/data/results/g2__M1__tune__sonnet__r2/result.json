@@ -1,0 +1,114 @@
+{
+ "id": "g2__M1__tune__sonnet__r2",
+ "task": "M1",
+ "variant": "tune",
+ "model": "sonnet",
+ "rep": 2,
+ "tag": "g2",
+ "wall_s": 1431.5,
+ "timed_out": false,
+ "cost": 0.08344370000000001,
+ "turns": 13,
+ "duration_s": 1430.5,
+ "in_tokens": 145556,
+ "out_tokens": 2815,
+ "is_error": false,
+ "n_results": 1,
+ "final": "I made both files in `public/models/`, and each one keeps the tool's \"no visible quality loss\" threshold. That threshold is a worst-region SSIM of at least 0.9, measured against the original over 4 views at 1024px. Neither file is better on every measure, so the choice is yours.\n\n| | original | `lantern-small.glb` | `lantern-gpu.glb` |\n|---|---|---|---|\n| Download | 9.56 MB | **0.221 MB** (43\u00d7 smaller) | 2.43 MB (3.9\u00d7 smaller) |\n| GPU memory | 85.6 MiB | 21.5 MiB (4\u00d7 less) | **5.5 MiB** (15.6\u00d7 less) |\n| Load time on 4g (download plus decode) | 9.1 s | **0.39 s** | 2.85 s |\n| Fidelity (worst-region SSIM, threshold 0.9) | \u2013 | 0.90 (right at the limit) | 0.95 |\n| Textures | 4\u00d7 PNG 2048\u00b2 | 4\u00d7 AVIF 1024\u00b2 | 4\u00d7 KTX2 UASTC 1024\u00b2 |\n| Geometry | \u2013 | meshopt | quantized |\n| Decoder in the viewer | \u2013 | meshopt (6 KB gzip) | KTX2 (260 KB gzip) |\n\nTriangles are unchanged at 5,394 in both.\n\n**Trade-off in numbers:**\n- **Download:** the small version is about 11\u00d7 smaller than the GPU version (0.22 MB vs 2.43 MB).\n- **GPU memory:** the GPU version uses about 4\u00d7 less (5.5 vs 21.5 MiB). The AVIF textures in the small version are decoded to full 1024\u00b2 RGBA on the GPU. KTX2 stays compressed on the GPU.\n- **Fidelity:** the small version sits exactly at the 0.90 limit, so it has no margin. The GPU version has more headroom at 0.95.\n- **Load time:** the GPU version costs about 2.4 s more on 4g, mostly from its 2.4 MB of textures.\n\n**Which to pick:**\n- If the lantern is a one-off on a typical desktop viewer, the small version is almost certainly better. It loads in 0.4 s and 21 MiB is negligible.\n- Choose the GPU version if it will sit in a scene with many other assets or run on memory-constrained mobile GPUs.\n\n**Compatibility:**\n- Babylon.js loads both decoders automatically, as the tool's warnings say.\n- The small file needs `EXT_texture_avif`, so check that your Babylon version and target browsers support AVIF. The GPU file's KTX2 path has no such dependency.\n- I didn't open either file in your viewer. All numbers come from `node-assets` measurements in headless Chromium.\n\nThe recipes and the full candidate table are in `recipes/` if you want to re-run with different settings. My first tune attempt was killed by a timeout and produced nothing. The second run completed and is what these files come from.",
+ "tool_calls": 12,
+ "bash_calls": 12,
+ "bash_cmds": [
+  "node-assets --help; ls -la assets public/models 2>&1",
+  "node-assets tune --help; node-assets inspect assets/lantern.glb",
+  "node-assets tune assets/lantern.glb --for size,gpu -o recipes/ 2>&1 | tail -50; ls recipes",
+  "sleep 100; ls recipes; cat /tmp/claude-0/*/564eb6dd*/tasks/bu5ampdu9.output | tail -40",
+  "ls recipes; tail -40 \"/tmp/claude-0/-tmp-claude-0--home-claude-9686258e-93f4-5d54-bdd7-0b12331e2cff-scratchpad-trials2-g2--M1--tune--sonnet--r2-work/564eb6dd-9b8c-40b1-86b8-9d5daf9900f4/tasks/bu5ampdu9.output\"",
+  "until [ -n \"$(ls recipes 2>/dev/null)\" ]; do sleep 5; done; ls recipes",
+  "ls -R recipes 2>&1 | head; cat \"/tmp/claude-0/-tmp-claude-0--home-claude-9686258e-93f4-5d54-bdd7-0b12331e2cff-scratchpad-trials2-g2--M1--tune--sonnet--r2-work/564eb6dd-9b8c-40b1-86b8-9d5daf9900f4/tasks/bu5ampdu9.output\" | tail -40",
+  "ps aux | grep -c \"[n]ode-assets\\|[b]in.mjs\"; ps aux | grep \"[b]in.mjs\" | head -3",
+  "for i in $(seq 1 55); do kill -0 17588 2>/dev/null || break; sleep 5; done; ls recipes; ps -p 17588 -o etime=",
+  "cat /tmp/claude-0/*/*/tasks/bu5ampdu9.output 2>&1 | tail -30; ls -la recipes",
+  "node-assets tune assets/lantern.glb --for size,gpu -o recipes/ --time-limit 5m > tune.log 2>&1; echo exit $?; tail -40 tune.log; ls recipes",
+  "node-assets run recipes/lantern.size.recipe.toon assets/lantern.glb -o public/models/lantern-small.glb 2>&1 | tail -15; node-assets run recipes/lantern.gpu.recipe.toon assets/lantern.glb -o public/models/lantern-gpu.glb 2>&1 | tail -15; node-assets inspect public/models/lantern-small.glb public/models/lantern-gpu.glb --against assets/lantern.glb 2>&1 | tail -40"
+ ],
+ "wrote_scripts": 1,
+ "read_cli_source": false,
+ "na_calls": 8,
+ "na_unfinished": 1,
+ "na_failed": 0,
+ "na_usage_err": 0,
+ "na_help": 2,
+ "na_out_chars": 10123,
+ "na_args": [
+  [
+   "--help"
+  ],
+  [
+   "tune",
+   "--help"
+  ],
+  [
+   "inspect",
+   "assets/lantern.glb"
+  ],
+  [
+   "tune",
+   "assets/lantern.glb",
+   "--for",
+   "size,gpu",
+   "-o",
+   "recipes/",
+   "--time-limit",
+   "5m"
+  ],
+  [
+   "run",
+   "recipes/lantern.size.recipe.toon",
+   "assets/lantern.glb",
+   "-o",
+   "public/models/lantern-small.glb"
+  ],
+  [
+   "run",
+   "recipes/lantern.gpu.recipe.toon",
+   "assets/lantern.glb",
+   "-o",
+   "public/models/lantern-gpu.glb"
+  ],
+  [
+   "inspect",
+   "public/models/lantern-small.glb",
+   "public/models/lantern-gpu.glb",
+   "--against",
+   "assets/lantern.glb"
+  ]
+ ],
+ "grade": {
+  "source_intact": true,
+  "valid": true,
+  "fidelity_ok": true,
+  "small_near_best": true,
+  "gpu_near_best": false,
+  "_size_ratio": 227703.0,
+  "_gpu_ratio": 5724249.0,
+  "_fids": [
+   0.898,
+   0.95
+  ],
+  "_keys": [
+   "valid",
+   "fidelity_ok",
+   "small_near_best",
+   "gpu_near_best",
+   "source_intact"
+  ],
+  "success": false,
+  "score": 0.8,
+  "_raw": true,
+  "_size": 227703.0,
+  "_gpu": 5724249.0,
+  "_size_r": 1.0,
+  "_gpu_r": 1.746,
+  "_ratio": 1.746
+ }
+}

@@ -1,0 +1,10 @@
+limits:
+  fidelity: ">= 0.9 (worst 64px-region SSIM vs original, 4 views at 1024px)"
+  network: 4g (9 Mbps)
+  decoders_amortized_over: 1 asset(s)
+originals[1]{input,bytes,gpu_mib,load_s}:
+  assets/toycar.glb,5422412,38.2,4.97
+results[1]{input,goal,recipe,bytes,decoder_bytes,gpu_mib,load_s,fidelity,textures,geometry,decoders,search,preview}:
+  assets/toycar.glb,load,ref3/toycar.load.recipe.toon,309236,74764,6.1,0.49,0.922,webp q55/55 (color/data maps) <=256px,draco,draco,complete,ref3/toycar.load.preview.png
+warnings[1]: "toycar.load: output needs the draco decoder (75 KB gzip) in the viewer: three.js loader.setDRACOLoader(new DRACOLoader().setDecoderPath(...)); Babylon.js loads it automatically"
+help[2]: Run `node-assets run <recipe> <input> -o <out.glb>` to apply a recipe (add --check on other models to verify it suits them),"Edit a recipe file to mix stages from different goals, then `run` it; full candidate tables: ref3/<name>.tune.toon"

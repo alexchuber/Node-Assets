@@ -1,0 +1,116 @@
+{
+ "id": "g2__C1__tune__haiku__r1",
+ "task": "C1",
+ "variant": "tune",
+ "model": "haiku",
+ "rep": 1,
+ "tag": "g2",
+ "wall_s": 362.8,
+ "timed_out": false,
+ "cost": 0.00668327,
+ "turns": 10,
+ "duration_s": 361.6,
+ "in_tokens": 137926,
+ "out_tokens": 4532,
+ "is_error": false,
+ "n_results": 1,
+ "final": "`public/models/helmet.glb` is written: 1,393,936 bytes, down from 3,773,916 (about 63% smaller).\n\nIt is a plain glTF 2.0 file with no extensions, so it should load in old viewers that support none. I checked the JSON chunk directly: no `extensionsUsed` or `extensionsRequired`, five JPEG images, and one mesh. The original is unchanged.\n\n**Settings chosen:** the tuner's `compat` goal, which ranks by fewest required extensions and then by size. The output uses:\n- JPEG textures at 2048px, quality 30 for color maps and 70 for normal, metal/rough and occlusion maps.\n- No geometry compression, since Draco, meshopt and quantized vertices all need extensions.\n- Lossless cleanup: pruning, dedup, welding and flattening.\n\n**Quality:** the fidelity check gives 0.903 against the 0.9 limit (worst 64px-region SSIM over 4 views at 1024px). The side-by-side preview shows no visible difference. The score is close to the limit, though, so a visual check on the target viewers is worth doing.\n\n**What I didn't use, and why:**\n- The tuner's best `size` result (AVIF plus Draco or quantized geometry, about 0.85 MB) needs extensions, so old viewers would fail on it.\n- WebP, which the default `optimize` recipe uses, is also an extension.\n\n**Not searched:** texture sizes between 1024 and 2048px, and mixed quality settings beyond the tuner's grid. A 1536px variant might shrink the file further, but I didn't test it. The tuner's `size` search also hit its time limit before finishing.\n\nThe recipe is at `recipes/helmet.compat.recipe.toon`, with the full candidate table in `recipes/helmet.tune.toon`. The `recipes/` directory is a working artifact and can be deleted or kept.",
+ "tool_calls": 8,
+ "bash_calls": 7,
+ "bash_cmds": [
+  "pwd; ls -la; ls -la assets public 2>&1; node-assets --help 2>&1 | head -80",
+  "node-assets inspect assets/helmet.glb --view 1024 2>&1 | head -150; echo ---; node-assets optimize --help 2>&1 | head -120",
+  "node-assets tune --help 2>&1 | head -80; echo ---; node-assets run --help 2>&1 | head -40; echo ---; node-assets inspect --help 2>&1 | head -40",
+  "mkdir -p recipes && timeout 600000 node-assets tune assets/helmet.glb --for compat,size -o recipes/ --fidelity 0.9 --view 1024 2>&1 | tail -80",
+  "cat recipes/helmet.compat.recipe.toon; echo ---; ls -la recipes; head -c 3000 recipes/helmet.tune.toon",
+  "mkdir -p public/models && node-assets run recipes/helmet.compat.recipe.toon assets/helmet.glb -o public/models/helmet.glb --check --force 2>&1 | tail -30; echo ---; node-assets inspect public/models/helmet.glb --against assets/helmet.glb --view 1024 --network 4g 2>&1",
+  "cd /tmp && node -e '\nconst fs=require(\"fs\");const b=fs.readFileSync(process.argv[1]);\nconst len=b.readUInt32LE(12);const j=JSON.parse(b.slice(20,20+len).toString(\"utf8\"));\nconsole.log(\"magic\",b.toString(\"ascii\",0,4),\"version\",b.readUInt32LE(4));\nconsole.log(\"extensionsUsed\",j.extensionsUsed,\"extensionsRequired\",j.extensionsRequired);\nconsole.log(\"images\",(j.images||[]).map(i=>i.mimeType),\"meshes\",j.meshes.length);\n' /home/claude/nonexistent 2>/dev/null; cd - >/dev/null; node -e '\nconst fs=require(\"fs\");const b=fs.readFileSync(process.argv[1]);\nconst len=b.readUInt32LE(12);const j=JSON.parse(b.slice(20,20+len).toString(\"utf8\"));\nconsole.log(\"magic\",b.toString(\"ascii\",0,4),\"version\",b.readUInt32LE(4));\nconsole.log(\"extensionsUsed\",j.extensionsUsed,\"extensionsRequired\",j.extensionsRequired);\nconsole.log(\"images\",(j.images||[]).map(i=>i.mimeType),\"meshes\",j.meshes.length);\n' \"$PWD/public/models/helmet.glb\""
+ ],
+ "wrote_scripts": 1,
+ "read_cli_source": false,
+ "na_calls": 9,
+ "na_unfinished": 0,
+ "na_failed": 0,
+ "na_usage_err": 0,
+ "na_help": 5,
+ "na_out_chars": 10581,
+ "na_args": [
+  [
+   "--help"
+  ],
+  [
+   "inspect",
+   "assets/helmet.glb",
+   "--view",
+   "1024"
+  ],
+  [
+   "optimize",
+   "--help"
+  ],
+  [
+   "tune",
+   "--help"
+  ],
+  [
+   "run",
+   "--help"
+  ],
+  [
+   "inspect",
+   "--help"
+  ],
+  [
+   "tune",
+   "assets/helmet.glb",
+   "--for",
+   "compat,size",
+   "-o",
+   "recipes/",
+   "--fidelity",
+   "0.9",
+   "--view",
+   "1024"
+  ],
+  [
+   "run",
+   "recipes/helmet.compat.recipe.toon",
+   "assets/helmet.glb",
+   "-o",
+   "public/models/helmet.glb",
+   "--check",
+   "--force"
+  ],
+  [
+   "inspect",
+   "public/models/helmet.glb",
+   "--against",
+   "assets/helmet.glb",
+   "--view",
+   "1024",
+   "--network",
+   "4g"
+  ]
+ ],
+ "grade": {
+  "source_intact": true,
+  "valid": true,
+  "no_extensions": true,
+  "fidelity_ok": true,
+  "near_best": true,
+  "_bytes": 1393936,
+  "_ratio": 1.018,
+  "_fid": 0.903,
+  "_req": [],
+  "_keys": [
+   "valid",
+   "no_extensions",
+   "fidelity_ok",
+   "near_best",
+   "source_intact"
+  ],
+  "success": true,
+  "score": 1.0,
+  "_raw": true
+ }
+}

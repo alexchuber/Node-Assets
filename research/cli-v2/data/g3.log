@@ -1,0 +1,7 @@
+6 jobs, 6 to run
+g3__M1__tune__haiku__r1: done cost=$0.006 turns=9 na=9 571.2s
+g3__L1__tune__sonnet__r1: done cost=$0.068 turns=9 na=6 356.5s
+g3__L1__tune__haiku__r1: done cost=$0.009 turns=14 na=12 521.9s
+g3__M1__tune__sonnet__r1: done cost=$0.125 turns=16 na=8 1605.8s
+g3__G1__tune__haiku__r1: done cost=$0.009 turns=15 na=16 1927.5s
+g3__G1__tune__sonnet__r1: done cost=$0.041 turns=5 na=5 559.3s

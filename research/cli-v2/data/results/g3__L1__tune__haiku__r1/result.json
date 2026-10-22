@@ -1,0 +1,191 @@
+{
+ "id": "g3__L1__tune__haiku__r1",
+ "task": "L1",
+ "variant": "tune",
+ "model": "haiku",
+ "rep": 1,
+ "tag": "g3",
+ "wall_s": 521.9,
+ "timed_out": false,
+ "cost": 0.00944642,
+ "turns": 14,
+ "duration_s": 521.0,
+ "in_tokens": 223505,
+ "out_tokens": 7830,
+ "is_error": false,
+ "n_results": 1,
+ "final": "The toy car now loads at 0.85 MB instead of 5.4 MB, with no measurable visual change.\n\n**What changed**\n- `public/models/toycar.glb` is replaced with a WebP + Draco version (from `assets/toycar.glb`). Textures stay at their native 1024px and geometry is not simplified.\n- `src/viewer.js` now sets up a `DRACOLoader` on the `GLTFLoader`, pointed at `/draco/gltf/`. The other models are uncompressed, so they still load as before.\n- `public/draco/gltf/` holds the three.js r0.170.0 Draco decoder files, copied from the installed package.\n\n**Measurements (4G, 1024px, `node-assets inspect`)**\n\n| Version | Size | Fidelity (1 = identical) | Load time |\n|---|---|---|---|\n| Original | 5.42 MB | \u2014 | ~5.0 s |\n| **Shipped** (WebP 1024 + Draco) | **0.85 MB** | **0.982** | **~1.15 s** |\n| Tuner's `load` pick (256px textures + 75% triangles) | 0.39 MB | 0.902 | ~0.56 s |\n\nI didn't ship the tuner's pick. Its fidelity is right at the 0.9 floor, and it cuts texture resolution to 256px and drops a quarter of the triangles, which would show on a product page where users can zoom in. The extra ~0.5 s it saves isn't worth that risk. Going below 0.85 MB would also mean lowering texture quality; a q80 test saved almost nothing and fell to 0.981, so I kept the q90 version.\n\n**Things to know**\n- The Draco decoder adds about 75 KB (gzip) on first load. That's already included in the 1.15 s figure.\n- I ran `npm install` to get the decoder files, which created `node_modules/` and `package-lock.json` in the project. Delete the lockfile if you don't want it committed.\n- `vite build` passes. The only warning is the existing chunk-size notice, which comes from three.js and not from this change.\n- I didn't load the page in a browser. The load and fidelity numbers come from `node-assets`' headless Chromium run, not from `viewer.js` itself, so please open the Toy car option once to confirm it renders.",
+ "tool_calls": 13,
+ "bash_calls": 11,
+ "bash_cmds": [
+  "pwd; ls -la; ls -la assets public/models src 2>/dev/null; node-assets --help 2>&1 | head -50",
+  "node-assets inspect assets/toycar.glb --network 4g --view 1024 2>&1 | head -120; echo ---; cat src/viewer.js; echo ---; cat index.html package.json",
+  "node-assets tune --help 2>&1 | head -80; echo ---; node-assets optimize --help 2>&1 | head -80",
+  "cd /tmp/claude-0/-home-claude/9686258e-93f4-5d54-bdd7-0b12331e2cff/scratchpad/trials2/g3__L1__tune__haiku__r1 && mkdir -p tune-out && cd work && node-assets tune assets/toycar.glb --for load --network 4g --view 1024 --fidelity 0.9 -o ../tune-out --time-limit 6m 2>&1 | tail -60",
+  "cd /tmp/claude-0/-home-claude/9686258e-93f4-5d54-bdd7-0b12331e2cff/scratchpad/trials2/g3__L1__tune__haiku__r1 && mkdir -p cand && cd work && \\\nnode-assets optimize assets/toycar.glb -o ../cand/b_webp1024_draco.glb --texture-format webp --texture-size 1024 --geometry draco -f 2>&1 | tail -5; \\\nnode-assets optimize assets/toycar.glb -o ../cand/c_webp2048_draco.glb --texture-format webp --texture-size 2048 --geometry draco -f 2>&1 | tail -5; \\\nnode-assets optimize assets/toycar.glb -o ../cand/d_webp1024_meshopt.glb --texture-format webp --texture-size 1024 --geometry meshopt -f 2>&1 | tail -5; \\\nnode-assets inspect ../cand/b_webp1024_draco.glb ../cand/c_webp2048_draco.glb ../cand/d_webp1024_meshopt.glb --against assets/toycar.glb --view 1024 --network 4g 2>&1",
+  "\\\nnode-assets optimize assets/toycar.glb -o ../cand/e_webp1024_q80_draco.glb --texture-format webp --texture-size 1024 --texture-quality 80 --texture-data-quality 90 --geometry draco -f 2>&1 | tail -2; \\\nnode-assets inspect ../cand/e_webp1024_q80_draco.glb --against assets/toycar.glb --view 1024 --network 4g 2>&1 | grep -A3 compared",
+  "node-assets inspect ../cand/e_webp1024_q80_draco.glb --against assets/toycar.glb --view 1024 --network 4g 2>&1 | tail -12",
+  "ls /tmp/claude-0/-home-claude/9686258e-93f4-5d54-bdd7-0b12331e2cff/scratchpad/trials2/g3__L1__tune__haiku__r1/ ; ls -d node_modules 2>/dev/null; npm root -g 2>/dev/null; ls $(npm root -g 2>/dev/null) 2>/dev/null | head; find / -path /proc -prune -o -type d -name draco -print 2>/dev/null | grep -i three | head -5",
+  "npm install --no-audit --no-fund 2>&1 | tail -5; ls node_modules/three/examples/jsm/libs/draco/gltf/ 2>&1; cat node_modules/three/package.json | grep '\"version\"'",
+  "cp ../cand/b_webp1024_draco.glb public/models/toycar.glb && mkdir -p public/draco/gltf && cp node_modules/three/examples/jsm/libs/draco/gltf/draco_decoder.js node_modules/three/examples/jsm/libs/draco/gltf/draco_decoder.wasm node_modules/three/examples/jsm/libs/draco/gltf/draco_wasm_wrapper.js public/draco/gltf/ && ls -la public/models public/draco/gltf",
+  "npx vite build --outDir ../dist-check --emptyOutDir 2>&1 | tail -12; ls ../dist-check ../dist-check/draco/gltf ../dist-check/models 2>&1"
+ ],
+ "wrote_scripts": 2,
+ "read_cli_source": false,
+ "na_calls": 12,
+ "na_unfinished": 0,
+ "na_failed": 0,
+ "na_usage_err": 0,
+ "na_help": 3,
+ "na_out_chars": 12829,
+ "na_args": [
+  [
+   "--help"
+  ],
+  [
+   "inspect",
+   "assets/toycar.glb",
+   "--network",
+   "4g",
+   "--view",
+   "1024"
+  ],
+  [
+   "tune",
+   "--help"
+  ],
+  [
+   "optimize",
+   "--help"
+  ],
+  [
+   "tune",
+   "assets/toycar.glb",
+   "--for",
+   "load",
+   "--network",
+   "4g",
+   "--view",
+   "1024",
+   "--fidelity",
+   "0.9",
+   "-o",
+   "../tune-out",
+   "--time-limit",
+   "6m"
+  ],
+  [
+   "optimize",
+   "assets/toycar.glb",
+   "-o",
+   "../cand/b_webp1024_draco.glb",
+   "--texture-format",
+   "webp",
+   "--texture-size",
+   "1024",
+   "--geometry",
+   "draco",
+   "-f"
+  ],
+  [
+   "optimize",
+   "assets/toycar.glb",
+   "-o",
+   "../cand/c_webp2048_draco.glb",
+   "--texture-format",
+   "webp",
+   "--texture-size",
+   "2048",
+   "--geometry",
+   "draco",
+   "-f"
+  ],
+  [
+   "optimize",
+   "assets/toycar.glb",
+   "-o",
+   "../cand/d_webp1024_meshopt.glb",
+   "--texture-format",
+   "webp",
+   "--texture-size",
+   "1024",
+   "--geometry",
+   "meshopt",
+   "-f"
+  ],
+  [
+   "inspect",
+   "../cand/b_webp1024_draco.glb",
+   "../cand/c_webp2048_draco.glb",
+   "../cand/d_webp1024_meshopt.glb",
+   "--against",
+   "assets/toycar.glb",
+   "--view",
+   "1024",
+   "--network",
+   "4g"
+  ],
+  [
+   "optimize",
+   "assets/toycar.glb",
+   "-o",
+   "../cand/e_webp1024_q80_draco.glb",
+   "--texture-format",
+   "webp",
+   "--texture-size",
+   "1024",
+   "--texture-quality",
+   "80",
+   "--texture-data-quality",
+   "90",
+   "--geometry",
+   "draco",
+   "-f"
+  ],
+  [
+   "inspect",
+   "../cand/e_webp1024_q80_draco.glb",
+   "--against",
+   "assets/toycar.glb",
+   "--view",
+   "1024",
+   "--network",
+   "4g"
+  ],
+  [
+   "inspect",
+   "../cand/e_webp1024_q80_draco.glb",
+   "--against",
+   "assets/toycar.glb",
+   "--view",
+   "1024",
+   "--network",
+   "4g"
+  ]
+ ],
+ "grade": {
+  "source_intact": true,
+  "valid": true,
+  "fidelity_ok": true,
+  "viewer_compat": true,
+  "_net_s": 0.822,
+  "_fid": 0.982,
+  "_bytes": 849508,
+  "_dec": [
+   "draco"
+  ],
+  "near_best": false,
+  "_keys": [
+   "valid",
+   "fidelity_ok",
+   "viewer_compat",
+   "source_intact",
+   "near_best"
+  ],
+  "success": false,
+  "score": 0.8,
+  "_load_s": 1.069,
+  "_raw": true,
+  "_ratio": 2.177
+ }
+}

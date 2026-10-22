@@ -1,0 +1,37 @@
+input: assets/boombox.glb
+limit: fidelity >= 0.9 at 1024px
+candidates[34]{candidate,bytes,decoders,gpu_mib,load_s,fidelity,within_limit}:
+  baseline (cleanup only),10542960,none,85.4,9.62,0.929,true
+  geometry draco,10446492,draco,85.5,9.65,0.932,true
+  geometry meshopt-high,10456276,meshopt,85.5,9.57,0.929,true
+  textures avif 2048px q90/90,471956,none,85.4,0.59,0.902,true
+  "size: avif 2048px q90/90 + meshopt-high",385264,meshopt,85.5,0.55,0.87,false
+  "size: avif 2048px q90/90 + draco",375484,draco,85.5,0.54,0.901,true
+  textures avif 512px q90/90,171936,none,5.4,0.19,0.552,false
+  textures avif 1024px q90/90,230772,none,21.4,0.28,0.801,false
+  textures avif 1536px q90/90,323812,none,48.1,0.4,0.872,false
+  textures avif 2048px q55/55,276612,none,85.4,0.39,0.869,false
+  textures avif 2048px q70/70,344428,none,85.4,0.49,0.887,false
+  textures avif 2048px q80/80,406956,none,85.4,0.54,0.896,false
+  textures avif 2048px q85/85,434580,none,85.4,0.56,0.894,false
+  textures avif 2048px q55/90,433164,none,85.4,0.57,0.902,true
+  textures avif 2048px q35/90,411444,none,85.4,0.57,0.902,true
+  textures avif 2048px q25/90,406028,none,85.4,0.54,0.901,true
+  textures avif 2048px q25/55,249476,none,85.4,0.38,0.868,false
+  textures avif 2048px q25/70,301988,none,85.4,0.43,0.885,false
+  textures avif 2048px q25/80,352644,none,85.4,0.47,0.894,false
+  textures avif 2048px q25/85,375636,none,85.4,0.48,0.893,false
+  geometry draco-low,10439484,draco,85.5,9.59,0.746,false
+  geometry draco-12,10440564,draco,85.5,9.61,0.754,false
+  geometry draco-10,10436888,draco,85.5,9.54,0.68,false
+  geometry meshopt,10484436,meshopt,85.4,9.58,0.929,true
+  geometry quantize simplify 0.5,10477468,none,85.4,9.59,0.454,false
+  geometry quantize simplify 0.7,10504812,none,85.4,9.6,0.804,false
+  geometry quantize simplify 0.8,10518072,none,85.4,9.6,0.786,false
+  geometry quantize simplify 0.9,10530800,none,85.4,9.64,0.903,true
+  geometry draco simplify 0.9,10444200,draco,85.5,9.58,0.906,true
+  geometry meshopt-high simplify 0.9,10452656,meshopt,85.5,9.53,0.903,true
+  "size: avif 2048px q35/90 + meshopt-high simplify 0.9",321132,meshopt,85.5,0.48,0.873,false
+  "size: avif 2048px q35/90 + meshopt-high",324752,meshopt,85.5,0.46,0.869,false
+  "size: avif 2048px q25/90 + draco",309548,draco,85.5,0.46,0.9,true
+  textures webp 2048px q90/90,941224,none,85.4,1,0.808,false

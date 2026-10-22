@@ -1,0 +1,147 @@
+{
+ "id": "g2__S1__tune__sonnet__r2",
+ "task": "S1",
+ "variant": "tune",
+ "model": "sonnet",
+ "rep": 2,
+ "tag": "g2",
+ "wall_s": 1812.2,
+ "timed_out": false,
+ "cost": 0.0910074,
+ "turns": 8,
+ "duration_s": 1811.1,
+ "in_tokens": 102493,
+ "out_tokens": 2463,
+ "is_error": false,
+ "n_results": 1,
+ "final": "The three models now download about 1.17 MB in total, down from 19.8 MB. I haven't loaded the page in a browser, so the viewer change is untested.\n\nEach model was compressed with the recipe `node-assets tune --for size` found for it. All three keep the tool's worst-region SSIM at or above the 0.9 limit.\n\n| Model | Before | After | Textures | Fidelity |\n|---|---|---|---|---|\n| `boombox.glb` | 10.61 MB | 331 KB | AVIF, 2048px, q50 color / q90 data maps | 0.901 |\n| `helmet.glb` | 3.77 MB | 546 KB | AVIF, 2048px, q60 | 0.901 |\n| `toycar.glb` | 5.42 MB | 291 KB | WebP, 256px, q50 | 0.901 |\n\nAll three use Draco geometry.\n\nThe Draco decoder is a one-time download of about 75 KB gzipped, shared by all three models. I copied `draco_wasm_wrapper.js` and `draco_decoder.wasm` from three 0.170 into `public/draco/`. In `src/viewer.js` I added a `DRACOLoader` that points at `/draco/` and is set to use only the wasm decoder, so the larger JS fallback isn't fetched. `public/models/` now holds the compressed files; `assets/` is untouched.\n\n- **Fidelity is at the limit:** 0.901 is right at the 0.9 threshold. Each recipe was tuned to the smallest size that still passes, so there's no margin.\n- **Toycar textures:** the toycar textures are shrunk to 256px, and the tool rates that as fine at 1024px view size. Look at it on screen before shipping, because a larger texture is the safer choice if it looks soft. The 1024px AVIF version was 551 KB.\n- **Recipes:** they're in `recipes/` if you want to re-run them.\n- **Dependencies:** the project has no `node_modules`, so I didn't run `vite build`.",
+ "tool_calls": 7,
+ "bash_calls": 7,
+ "bash_cmds": [
+  "ls -la . assets public public/models src; node-assets --help; cat src/viewer.js",
+  "cat package.json; node-assets tune --help; node-assets tune assets/boombox.glb assets/helmet.glb assets/toycar.glb --for size --network 4g -o recipes/ 2>&1 | tail -60",
+  "node-assets tune assets/boombox.glb assets/helmet.glb assets/toycar.glb --for size --amortize 3 --time-limit 9m -o recipes/ 2>&1 | tail -25",
+  "(node-assets tune assets/toycar.glb --for size --amortize 3 --time-limit 9m -o recipes/ 2>&1 | grep -E \"^tune: (size|textures)|results|assets/toycar.glb,size\" ) ; ",
+  "(node-assets tune assets/helmet.glb --for size --amortize 3 --time-limit 9m -o recipes_h/ 2>&1 | grep -E \"^tune: (size|textures)|assets/helmet.glb,size\" ) ; ",
+  "cp recipes_h/helmet.size.recipe.toon recipes/; for m in boombox helmet toycar; do node-assets run recipes/$m.size.recipe.toon assets/$m.glb -o public/models/$m.glb --force 2>&1 | tail -3; done; ls -l public/models; find / -name \"draco_decoder*\" -path \"*three*\" 2>/dev/null | head; ls node_modules 2>&1 | head -3",
+  "D=/tmp/scratch_tools/deps/node_modules/three/examples/jsm/libs/draco/gltf; ls -l $D; grep '\"version\"' /tmp/scratch_tools/deps/node_modules/three/package.json\nmkdir -p public/draco && cp $D/draco_wasm_wrapper.js $D/draco_decoder.wasm public/draco/\npython3 - <<'E'\np='src/viewer.js'\ns=open(p).read()\ns=s.replace(\"import { OrbitControls\",\"import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';\\nimport { OrbitControls\",1)\ns=s.replace(\"const loader = new GLTFLoader();\",\"// Models use Draco geometry; only the wasm decoder is fetched (served from public/draco/).\\nconst draco = new DRACOLoader().setDecoderPath('/draco/');\\ndraco.setDecoderConfig({ type: 'wasm' });\\nconst loader = new GLTFLoader().setDRACOLoader(draco);\",1)\nopen(p,'w').write(s)\nE\nls -l public/draco; gzip -c public/draco/draco_wasm_wrapper.js|wc -c; gzip -c public/draco/draco_decoder.wasm|wc -c"
+ ],
+ "wrote_scripts": 0,
+ "read_cli_source": false,
+ "na_calls": 9,
+ "na_unfinished": 0,
+ "na_failed": 0,
+ "na_usage_err": 0,
+ "na_help": 2,
+ "na_out_chars": 24381,
+ "na_args": [
+  [
+   "--help"
+  ],
+  [
+   "tune",
+   "--help"
+  ],
+  [
+   "tune",
+   "assets/boombox.glb",
+   "assets/helmet.glb",
+   "assets/toycar.glb",
+   "--for",
+   "size",
+   "--network",
+   "4g",
+   "-o",
+   "recipes/"
+  ],
+  [
+   "tune",
+   "assets/boombox.glb",
+   "assets/helmet.glb",
+   "assets/toycar.glb",
+   "--for",
+   "size",
+   "--amortize",
+   "3",
+   "--time-limit",
+   "9m",
+   "-o",
+   "recipes/"
+  ],
+  [
+   "tune",
+   "assets/toycar.glb",
+   "--for",
+   "size",
+   "--amortize",
+   "3",
+   "--time-limit",
+   "9m",
+   "-o",
+   "recipes/"
+  ],
+  [
+   "tune",
+   "assets/helmet.glb",
+   "--for",
+   "size",
+   "--amortize",
+   "3",
+   "--time-limit",
+   "9m",
+   "-o",
+   "recipes_h/"
+  ],
+  [
+   "run",
+   "recipes/boombox.size.recipe.toon",
+   "assets/boombox.glb",
+   "-o",
+   "public/models/boombox.glb",
+   "--force"
+  ],
+  [
+   "run",
+   "recipes/helmet.size.recipe.toon",
+   "assets/helmet.glb",
+   "-o",
+   "public/models/helmet.glb",
+   "--force"
+  ],
+  [
+   "run",
+   "recipes/toycar.size.recipe.toon",
+   "assets/toycar.glb",
+   "-o",
+   "public/models/toycar.glb",
+   "--force"
+  ]
+ ],
+ "grade": {
+  "source_intact": true,
+  "valid": true,
+  "fidelity_ok": true,
+  "viewer_compat": true,
+  "near_best": true,
+  "_total": 1243524,
+  "_ratio": 1.0,
+  "_fids": [
+   0.901,
+   0.901,
+   0.901
+  ],
+  "_dec": [
+   "draco"
+  ],
+  "_keys": [
+   "valid",
+   "fidelity_ok",
+   "viewer_compat",
+   "near_best",
+   "source_intact"
+  ],
+  "success": true,
+  "score": 1.0,
+  "_raw": true
+ }
+}

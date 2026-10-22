@@ -1,0 +1,46 @@
+recipe: 1
+name: lantern.size
+goal: size
+stages:
+  cleanup:
+    prune: true
+    dedup: true
+    weld: true
+    metalRough: true
+    instance: true
+    flatten: true
+    palette: false
+  textures:
+    format: avif
+    quality: 85
+    dataQuality: 80
+    maxSize: 1024
+    ktx2:
+      color: etc1s
+      data: uastc
+      etc1sQuality: 128
+      uastcQuality: 1
+      zstd: true
+  geometry:
+    mode: meshopt
+    simplify: 1
+    meshoptLevel: high
+    dracoPosition: 14
+    dracoNormal: 10
+    dracoTexcoord: 12
+    dracoDecodeSpeed: 5
+check:
+  fidelity: 0.9
+  view: 1024
+  views: 4
+tuned:
+  input: assets/lantern.glb
+  date: 2026-10-22
+  network: 4g
+  amortized_over: 1
+  result:
+    bytes: 233856
+    decoders: meshopt
+    gpu_mib: 21.5
+    load_s: 0.29
+    fidelity: 0.903

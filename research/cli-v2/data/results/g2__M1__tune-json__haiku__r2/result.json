@@ -1,0 +1,121 @@
+{
+ "id": "g2__M1__tune-json__haiku__r2",
+ "task": "M1",
+ "variant": "tune-json",
+ "model": "haiku",
+ "rep": 2,
+ "tag": "g2",
+ "wall_s": 467.7,
+ "timed_out": false,
+ "cost": 0.00648778,
+ "turns": 10,
+ "duration_s": 466.2,
+ "in_tokens": 104859,
+ "out_tokens": 4436,
+ "is_error": false,
+ "n_results": 1,
+ "final": "Both files are in `public/models/`. The small one is 43\u00d7 smaller than the original and the GPU one uses 15\u00d7 less GPU memory. Both pass the fidelity check against the original.\n\n| | Original | `lantern-small.glb` | `lantern-gpu.glb` |\n|---|---|---|---|\n| File size | 9.56 MB | **0.22 MB** (2.3%) | 2.43 MB (25%) |\n| GPU memory | 85.6 MiB | 21.4 MiB | **5.5 MiB** |\n| Load on 4G | 9.8 s | 0.37 s | 2.9 s |\n| Fidelity (SSIM, 1 = identical) | \u2014 | 0.900 | 0.950 |\n| Textures | 4\u00d7 PNG 2048px | 4\u00d7 AVIF 1024px | 4\u00d7 KTX2 1024px |\n| Geometry | 5,394 tris | 5,394 tris, meshopt | 5,394 tris, quantized |\n| Extra decoder | none | meshopt, 6 KB | KTX2, 260 KB |\n\nThe trade-off: the small file downloads faster, but the GPU version uses about 4\u00d7 less GPU memory (5.5 vs 21.4 MiB) and has better fidelity (0.95 vs 0.90). The small file's fidelity is exactly at the 0.9 floor. The preview images show no visible difference at that size, but it has no margin.\n\nThings to check before shipping:\n- **Babylon.js support.** The small file uses `EXT_texture_avif`, and the tool did not warn about it. I haven't confirmed that Babylon's glTF loader reads AVIF. Load the file in the viewer to confirm. If it doesn't load, rerun the size goal with WebP textures.\n- **KTX2 transcoder.** The GPU file needs the Basis transcoder. The tool says Babylon loads it automatically, but I haven't tested that either.\n- **Partial search.** Tuning hit its 5-minute limit, so untried KTX2 texture sizes could still beat these. Running `node-assets tune assets/lantern.glb --for size,gpu --time-limit 9m` would finish the search.\n\nThe tuning recipes and candidate tables are in the scratch directory, outside the project. I didn't touch `assets/` or any other file.",
+ "tool_calls": 7,
+ "bash_calls": 5,
+ "bash_cmds": [
+  "ls -la && ls -la assets public 2>&1; node-assets --help 2>&1 | head -80",
+  "node-assets inspect assets/lantern.glb --view 1024 2>&1; echo ---; node-assets tune --help 2>&1; echo ---; node-assets optimize --help 2>&1",
+  "node-assets tune assets/lantern.glb --for size,gpu -o /tmp/claude-0/-home-claude/9686258e-93f4-5d54-bdd7-0b12331e2cff/scratchpad/recipes --fidelity 0.9 --view 1024 --time-limit 5m 2>&1 | tail -150",
+  "R=/tmp/claude-0/-home-claude/9686258e-93f4-5d54-bdd7-0b12331e2cff/scratchpad/recipes && node-assets run $R/lantern.size.recipe.json assets/lantern.glb -o public/models/lantern-small.glb --check 2>&1; echo ---; node-assets run $R/lantern.gpu.recipe.json assets/lantern.glb -o public/models/lantern-gpu.glb --check 2>&1; echo ---; ls -la public/models",
+  "node-assets inspect public/models/lantern-small.glb public/models/lantern-gpu.glb --against assets/lantern.glb --view 1024 2>&1; ls -la /tmp/claude-0/-home-claude/9686258e-93f4-5d54-bdd7-0b12331e2cff/scratchpad/recipes/"
+ ],
+ "wrote_scripts": 0,
+ "read_cli_source": false,
+ "na_calls": 8,
+ "na_unfinished": 0,
+ "na_failed": 0,
+ "na_usage_err": 0,
+ "na_help": 3,
+ "na_out_chars": 13844,
+ "na_args": [
+  [
+   "--help"
+  ],
+  [
+   "inspect",
+   "assets/lantern.glb",
+   "--view",
+   "1024"
+  ],
+  [
+   "tune",
+   "--help"
+  ],
+  [
+   "optimize",
+   "--help"
+  ],
+  [
+   "tune",
+   "assets/lantern.glb",
+   "--for",
+   "size,gpu",
+   "-o",
+   "/tmp/claude-0/-home-claude/9686258e-93f4-5d54-bdd7-0b12331e2cff/scratchpad/recipes",
+   "--fidelity",
+   "0.9",
+   "--view",
+   "1024",
+   "--time-limit",
+   "5m"
+  ],
+  [
+   "run",
+   "/tmp/claude-0/-home-claude/9686258e-93f4-5d54-bdd7-0b12331e2cff/scratchpad/recipes/lantern.size.recipe.json",
+   "assets/lantern.glb",
+   "-o",
+   "public/models/lantern-small.glb",
+   "--check"
+  ],
+  [
+   "run",
+   "/tmp/claude-0/-home-claude/9686258e-93f4-5d54-bdd7-0b12331e2cff/scratchpad/recipes/lantern.gpu.recipe.json",
+   "assets/lantern.glb",
+   "-o",
+   "public/models/lantern-gpu.glb",
+   "--check"
+  ],
+  [
+   "inspect",
+   "public/models/lantern-small.glb",
+   "public/models/lantern-gpu.glb",
+   "--against",
+   "assets/lantern.glb",
+   "--view",
+   "1024"
+  ]
+ ],
+ "grade": {
+  "source_intact": true,
+  "valid": true,
+  "fidelity_ok": true,
+  "small_near_best": true,
+  "gpu_near_best": false,
+  "_size_ratio": 227703.0,
+  "_gpu_ratio": 5724249.0,
+  "_fids": [
+   0.898,
+   0.95
+  ],
+  "_keys": [
+   "valid",
+   "fidelity_ok",
+   "small_near_best",
+   "gpu_near_best",
+   "source_intact"
+  ],
+  "success": false,
+  "score": 0.8,
+  "_raw": true,
+  "_size": 227703.0,
+  "_gpu": 5724249.0,
+  "_size_r": 1.0,
+  "_gpu_r": 1.746,
+  "_ratio": 1.746
+ }
+}

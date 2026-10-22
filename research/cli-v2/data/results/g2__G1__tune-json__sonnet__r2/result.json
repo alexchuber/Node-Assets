@@ -1,0 +1,91 @@
+{
+ "id": "g2__G1__tune-json__sonnet__r2",
+ "task": "G1",
+ "variant": "tune-json",
+ "model": "sonnet",
+ "rep": 2,
+ "tag": "g2",
+ "wall_s": 184.0,
+ "timed_out": false,
+ "cost": 0.0455959,
+ "turns": 7,
+ "duration_s": 182.2,
+ "in_tokens": 50114,
+ "out_tokens": 1075,
+ "is_error": false,
+ "n_results": 1,
+ "final": "`public/models/helmet.glb` now uses an estimated 7 MiB of GPU memory, down from 107.2 MiB. I haven't loaded it in your Babylon scene or on a Quest headset.\n\n- **What changed:** The five 2048\u00d72048 JPEG textures became KTX2 textures at 1024\u00d71024. The geometry is quantized, and the triangle count is unchanged at 15,452. The recipe is in `recipes/helmet.gpu.recipe.json` if you want to re-run it.\n- **Quality:** The tool's fidelity score is 0.94, against a minimum of 0.9 for no visible quality loss. The score is the worst 64px region's SSIM across four views at 1024px. In the side-by-side preview (`recipes/helmet.gpu.preview.png`) the original and the optimized helmet look the same to me.\n- **File size:** The file went from 3.77 MB to 3.29 MB. Size wasn't the goal here, and the GPU-memory saving comes from the smaller textures and KTX2 compression.\n- **Load time:** The tool measured about 4.9 s on a simulated 4G connection, against about 4.0 s for the original. The extra time is the 260 KB KTX2 decoder plus decode time. You said Babylon.js handles KTX2 itself, so this shouldn't need any code change.\n- **Extensions:** The file now requires `KHR_texture_basisu` and `KHR_mesh_quantization`.\n- **Original untouched:** `assets/helmet.glb` is unchanged. I overwrote the old copy in `public/models/` with `--force`.",
+ "tool_calls": 5,
+ "bash_calls": 4,
+ "bash_cmds": [
+  "node-assets --help; ls -la assets public/models",
+  "node-assets tune --help; node-assets inspect assets/helmet.glb",
+  "node-assets tune assets/helmet.glb --for gpu -o recipes/ 2>&1 | tail -40; ls recipes",
+  "node-assets run recipes/helmet.gpu.recipe.json assets/helmet.glb -o public/models/helmet.glb --force 2>&1 | tail -15; node-assets inspect public/models/helmet.glb --against assets/helmet.glb"
+ ],
+ "wrote_scripts": 0,
+ "read_cli_source": false,
+ "na_calls": 6,
+ "na_unfinished": 0,
+ "na_failed": 0,
+ "na_usage_err": 0,
+ "na_help": 2,
+ "na_out_chars": 7473,
+ "na_args": [
+  [
+   "--help"
+  ],
+  [
+   "tune",
+   "--help"
+  ],
+  [
+   "inspect",
+   "assets/helmet.glb"
+  ],
+  [
+   "tune",
+   "assets/helmet.glb",
+   "--for",
+   "gpu",
+   "-o",
+   "recipes/"
+  ],
+  [
+   "run",
+   "recipes/helmet.gpu.recipe.json",
+   "assets/helmet.glb",
+   "-o",
+   "public/models/helmet.glb",
+   "--force"
+  ],
+  [
+   "inspect",
+   "public/models/helmet.glb",
+   "--against",
+   "assets/helmet.glb"
+  ]
+ ],
+ "grade": {
+  "source_intact": true,
+  "valid": true,
+  "fidelity_ok": true,
+  "near_best": true,
+  "_gpu": 7370339,
+  "_ratio": 1.0,
+  "_fid": 0.94,
+  "_bytes": 3294776,
+  "_dec": [
+   "ktx2"
+  ],
+  "_keys": [
+   "valid",
+   "fidelity_ok",
+   "near_best",
+   "source_intact"
+  ],
+  "success": true,
+  "score": 1.0,
+  "_raw": true
+ }
+}

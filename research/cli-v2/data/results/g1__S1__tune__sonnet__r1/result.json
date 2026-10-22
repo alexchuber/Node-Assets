@@ -1,0 +1,126 @@
+{
+ "id": "g1__S1__tune__sonnet__r1",
+ "task": "S1",
+ "variant": "tune",
+ "model": "sonnet",
+ "rep": 1,
+ "tag": "g1",
+ "wall_s": 1090.4,
+ "timed_out": false,
+ "cost": 0.0838442,
+ "turns": 10,
+ "duration_s": 1089.5,
+ "in_tokens": 122122,
+ "out_tokens": 2674,
+ "is_error": false,
+ "n_results": 1,
+ "final": "The three models now download 1.76 MB in total, down from 19.81 MB. That counts about 0.25 MB of Draco decoder files, which the models share. I haven't run the viewer in a browser or built the site, because `node_modules` isn't installed here.\n\n| Model | Before | After | Fidelity (limit 0.9) |\n|---|---|---|---|\n| `boombox.glb` | 10.61 MB | 0.42 MB | 0.907 |\n| `helmet.glb` | 3.77 MB | 1.04 MB | 0.916 |\n| `toycar.glb` | 5.42 MB | 0.30 MB | 0.934 |\n\n- **How I got there:** `node-assets tune --for size --amortize 3` picked the settings, and `run` wrote the new files into `public/models/`. All three use Draco geometry and AVIF textures. Texture sizes differ: boombox and helmet keep their size, toycar drops to 256px.\n- **Toycar:** The first tuning pass ran out of time before trying Draco and AVIF on toycar, so I reran it with a longer limit. That took it from 2.77 MB to 0.30 MB. I reran helmet the same way and got the same result.\n- **Fidelity:** The scores are the tool's worst-region similarity check against the originals. I didn't look at the preview images, so \"no visible quality loss\" rests on that score.\n- **Decoder:** I added `public/draco/draco_wasm_wrapper.js` and `draco_decoder.wasm`, copied from three r170. They are about 75 KB gzipped, and I left out the unused JS-fallback decoder. `src/viewer.js` now sets up a `DRACOLoader` pointing at `/draco/` with WASM only. Browsers without WebAssembly would fail to load the models.\n- **AVIF:** three r170's `GLTFLoader` reads AVIF textures, but I haven't checked that the target browsers do.\n\nThe `recipes/`, `r2/` and `r3/` folders hold the tuning output (recipes, previews and candidate tables) and can be deleted.",
+ "tool_calls": 9,
+ "bash_calls": 9,
+ "bash_cmds": [
+  "ls -la . assets public public/models src; cat src/viewer.js; node-assets --help",
+  "node-assets tune --help; node-assets inspect assets/boombox.glb assets/helmet.glb assets/toycar.glb",
+  "node-assets tune assets/boombox.glb assets/helmet.glb assets/toycar.glb --for size --amortize 3 -o recipes/ 2>&1 | tail -40; ls recipes",
+  "mkdir -p r2; node-assets tune assets/toycar.glb --for size --amortize 3 --time-limit 9m -o r2/ 2>&1 | tail -25",
+  "mkdir -p r3; node-assets tune assets/helmet.glb --for size --amortize 3 --time-limit 9m -o r3/ 2>&1 | tail -12",
+  "cat package.json; ls node_modules/three/examples/jsm/libs/draco 2>&1 | head; grep -c EXT_texture_avif node_modules/three/examples/jsm/loaders/GLTFLoader.js; cat r2/toycar.size.recipe.toon",
+  "node-assets run recipes/boombox.size.recipe.toon assets/boombox.glb -o public/models/boombox.glb --force 2>&1 | tail -5\nnode-assets run r3/helmet.size.recipe.toon assets/helmet.glb -o public/models/helmet.glb --force 2>&1 | tail -5\nnode-assets run r2/toycar.size.recipe.toon assets/toycar.glb -o public/models/toycar.glb --force 2>&1 | tail -5\nls -l public/models; find / -name \"draco_decoder*\" -not -path \"*/proc/*\" 2>/dev/null | head",
+  "d=/tmp/draco_pkg/node_modules/three/examples/jsm/libs/draco; ls -l $d/gltf; cat /tmp/draco_pkg/node_modules/three/package.json | grep '\"version\"'",
+  "d=/tmp/draco_pkg/node_modules/three/examples/jsm/libs/draco/gltf; mkdir -p public/draco; cp $d/draco_wasm_wrapper.js $d/draco_decoder.wasm public/draco/\npython3 - <<'E'\np='src/viewer.js'\ns=open(p).read()\ns=s.replace(\"import { OrbitControls\",\"import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';\\nimport { OrbitControls\",1)\ns=s.replace(\"const loader = new GLTFLoader();\",\"const loader = new GLTFLoader();\\nconst draco = new DRACOLoader().setDecoderPath('/draco/');\\ndraco.setDecoderConfig({ type: 'wasm' });\\nloader.setDRACOLoader(draco);\")\nopen(p,'w').write(s)\nE\nnode-assets inspect public/models/*.glb --against assets/boombox.glb 2>&1 | tail -8; gzip -c public/draco/* | wc -c"
+ ],
+ "wrote_scripts": 0,
+ "read_cli_source": false,
+ "na_calls": 10,
+ "na_unfinished": 0,
+ "na_failed": 1,
+ "na_usage_err": 1,
+ "na_help": 2,
+ "na_out_chars": 16239,
+ "na_args": [
+  [
+   "--help"
+  ],
+  [
+   "tune",
+   "--help"
+  ],
+  [
+   "inspect",
+   "assets/boombox.glb",
+   "assets/helmet.glb",
+   "assets/toycar.glb"
+  ],
+  [
+   "tune",
+   "assets/boombox.glb",
+   "assets/helmet.glb",
+   "assets/toycar.glb",
+   "--for",
+   "size",
+   "--amortize",
+   "3",
+   "-o",
+   "recipes/"
+  ],
+  [
+   "tune",
+   "assets/toycar.glb",
+   "--for",
+   "size",
+   "--amortize",
+   "3",
+   "--time-limit",
+   "9m",
+   "-o",
+   "r2/"
+  ],
+  [
+   "tune",
+   "assets/helmet.glb",
+   "--for",
+   "size",
+   "--amortize",
+   "3",
+   "--time-limit",
+   "9m",
+   "-o",
+   "r3/"
+  ],
+  [
+   "run",
+   "recipes/boombox.size.recipe.toon",
+   "assets/boombox.glb",
+   "-o",
+   "public/models/boombox.glb",
+   "--force"
+  ],
+  [
+   "run",
+   "r3/helmet.size.recipe.toon",
+   "assets/helmet.glb",
+   "-o",
+   "public/models/helmet.glb",
+   "--force"
+  ],
+  [
+   "run",
+   "r2/toycar.size.recipe.toon",
+   "assets/toycar.glb",
+   "-o",
+   "public/models/toycar.glb",
+   "--force"
+  ],
+  [
+   "inspect",
+   "public/models/boombox.glb",
+   "public/models/helmet.glb",
+   "public/models/toycar.glb",
+   "--against",
+   "assets/boombox.glb"
+  ]
+ ],
+ "grade": {
+  "pending": true,
+  "source_intact": true
+ }
+}

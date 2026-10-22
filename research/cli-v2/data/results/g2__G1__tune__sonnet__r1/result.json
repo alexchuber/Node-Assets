@@ -1,0 +1,82 @@
+{
+ "id": "g2__G1__tune__sonnet__r1",
+ "task": "G1",
+ "variant": "tune",
+ "model": "sonnet",
+ "rep": 1,
+ "tag": "g2",
+ "wall_s": 207.0,
+ "timed_out": false,
+ "cost": 0.026467400000000002,
+ "turns": 4,
+ "duration_s": 205.6,
+ "in_tokens": 35544,
+ "out_tokens": 768,
+ "is_error": false,
+ "n_results": 1,
+ "final": "`public/models/helmet.glb` now uses about 7 MiB of GPU memory, down from 107 MiB. The file is also slightly smaller, 3.29 MB against 3.77 MB.\n\n- **What changed:** the five textures are now KTX2 (ETC1S+UASC) capped at 1024px, and the geometry is quantized.\n- **Quality:** the tool's fidelity score is 0.94 against the original. Its recommended no-visible-loss limit is 0.9, and the score is the worst 64px region across 4 views at 1024px. I didn't look at the renders myself, but `recipes/helmet.gpu.preview.png` has the tool's preview.\n- **Smaller options rejected:** the 512px textures drop to 2 MiB but score 0.78. The ETC1S-only 1024px version is smaller still in file size but scores 0.75. Both are below the limit, so I didn't use them.\n- **Decoder:** the output needs the KTX2 decoder (260 KB gzip). Babylon.js loads it automatically, as you said.\n- **Load time:** it's about the same as before, 4.25 s against 4.33 s on a simulated 4G connection. That includes the decoder download and a cold decode.\n\nThe tuned recipe is saved at `recipes/helmet.gpu.recipe.toon`. `assets/helmet.glb` is untouched.",
+ "tool_calls": 3,
+ "bash_calls": 3,
+ "bash_cmds": [
+  "node-assets --help; ls -la assets public/models",
+  "node-assets tune assets/helmet.glb --for gpu -o recipes/ 2>&1 | tail -50",
+  "node-assets run recipes/helmet.gpu.recipe.toon assets/helmet.glb -o public/models/helmet.glb --force 2>&1 | tail -15; node-assets inspect public/models/helmet.glb --against assets/helmet.glb 2>&1 | tail -20"
+ ],
+ "wrote_scripts": 0,
+ "read_cli_source": false,
+ "na_calls": 4,
+ "na_unfinished": 0,
+ "na_failed": 0,
+ "na_usage_err": 0,
+ "na_help": 1,
+ "na_out_chars": 4433,
+ "na_args": [
+  [
+   "--help"
+  ],
+  [
+   "tune",
+   "assets/helmet.glb",
+   "--for",
+   "gpu",
+   "-o",
+   "recipes/"
+  ],
+  [
+   "run",
+   "recipes/helmet.gpu.recipe.toon",
+   "assets/helmet.glb",
+   "-o",
+   "public/models/helmet.glb",
+   "--force"
+  ],
+  [
+   "inspect",
+   "public/models/helmet.glb",
+   "--against",
+   "assets/helmet.glb"
+  ]
+ ],
+ "grade": {
+  "source_intact": true,
+  "valid": true,
+  "fidelity_ok": true,
+  "near_best": true,
+  "_gpu": 7370339,
+  "_ratio": 1.0,
+  "_fid": 0.94,
+  "_bytes": 3294776,
+  "_dec": [
+   "ktx2"
+  ],
+  "_keys": [
+   "valid",
+   "fidelity_ok",
+   "near_best",
+   "source_intact"
+  ],
+  "success": true,
+  "score": 1.0,
+  "_raw": true
+ }
+}

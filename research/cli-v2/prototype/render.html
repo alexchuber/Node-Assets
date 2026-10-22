@@ -1,0 +1,161 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>render</title>
+<script type="importmap">
+{ "imports": { "three": "/node_modules/three/build/three.module.js", "three/addons/": "/node_modules/three/examples/jsm/" } }
+</script>
+</head>
+<body style="margin:0;background:#000">
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
+import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
+import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+let R; // renderer state, created once per page
+function setup(size) {
+  if (R && R.size === size) return R;
+  const renderer = new THREE.WebGLRenderer({ antialias: false, preserveDrawingBuffer: true, alpha: true });
+  renderer.setPixelRatio(1);
+  renderer.setSize(size, size);
+  renderer.setClearColor(0x000000, 0);
+  document.body.appendChild(renderer.domElement);
+  const env = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture;
+  const loader = new GLTFLoader()
+    .setDRACOLoader(new DRACOLoader().setDecoderPath('/node_modules/three/examples/jsm/libs/draco/gltf/'))
+    .setKTX2Loader(new KTX2Loader().setTranscoderPath('/node_modules/three/examples/jsm/libs/basis/').detectSupport(renderer))
+    .setMeshoptDecoder(MeshoptDecoder);
+  R = { size, renderer, env, loader, gl: renderer.getContext() };
+  return R;
+}
+
+function placeCamera(cam, f, i, views) {
+  const az = (i / views) * Math.PI * 2 + 0.4, el = 0.35, d = (f.r / Math.sin(THREE.MathUtils.degToRad(17.5))) * 1.05;
+  cam.position.set(f.c[0] + d * Math.cos(el) * Math.sin(az), f.c[1] + d * Math.sin(el), f.c[2] + d * Math.cos(el) * Math.cos(az));
+  cam.lookAt(f.c[0], f.c[1], f.c[2]);
+}
+
+// Load + render all views; returns pixel buffers (RGBA, top-down) and timings.
+async function renderViews(url, size, views, frame) {
+  const { renderer, env, loader, gl } = setup(size);
+  const t0 = performance.now();
+  const gltf = await loader.loadAsync(url);
+  const loadMs = performance.now() - t0;
+  const scene = new THREE.Scene();
+  scene.environment = env;
+  scene.add(gltf.scene);
+  gltf.scene.updateMatrixWorld(true);
+  let f = frame;
+  if (!f) {
+    const s = new THREE.Box3().setFromObject(gltf.scene).getBoundingSphere(new THREE.Sphere());
+    f = { c: s.center.toArray(), r: s.radius };
+  }
+  const cam = new THREE.PerspectiveCamera(35, 1, f.r * 0.01, f.r * 20);
+  const pixels = [];
+  for (let i = 0; i < views; i++) {
+    placeCamera(cam, f, i, views);
+    renderer.render(scene, cam);
+    const px = new Uint8Array(size * size * 4);
+    gl.readPixels(0, 0, size, size, gl.RGBA, gl.UNSIGNED_BYTE, px);
+    const flipped = new Uint8Array(px.length), row = size * 4; // GL is bottom-up
+    for (let y = 0; y < size; y++) flipped.set(px.subarray((size - 1 - y) * row, (size - y) * row), y * row);
+    pixels.push(flipped);
+  }
+  scene.traverse((o) => { o.geometry?.dispose(); [].concat(o.material ?? []).forEach((m) => { for (const k in m) if (m[k]?.isTexture) m[k].dispose(); m.dispose(); }); });
+  return { frame: f, pixels, loadMs };
+}
+
+// ---- SSIM on luminance (gaussian sigma 1.5), restricted to the object, worst 64px tile ----
+const K = (() => { const k = []; let s = 0; for (let i = -5; i <= 5; i++) { const v = Math.exp(-(i * i) / 4.5); k.push(v); s += v; } return Float32Array.from(k.map((v) => v / s)); })();
+function blur(src, w, h, tmp, out) {
+  for (let y = 0; y < h; y++) {
+    const o = y * w;
+    for (let x = 0; x < w; x++) {
+      let a = 0;
+      if (x >= 5 && x < w - 5) { for (let k = 0; k < 11; k++) a += src[o + x + k - 5] * K[k]; }
+      else { for (let k = 0; k < 11; k++) { let xx = x + k - 5; xx = xx < 0 ? 0 : xx >= w ? w - 1 : xx; a += src[o + xx] * K[k]; } }
+      tmp[o + x] = a;
+    }
+  }
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      let a = 0;
+      if (y >= 5 && y < h - 5) { for (let k = 0; k < 11; k++) a += tmp[(y + k - 5) * w + x] * K[k]; }
+      else { for (let k = 0; k < 11; k++) { let yy = y + k - 5; yy = yy < 0 ? 0 : yy >= h ? h - 1 : yy; a += tmp[yy * w + x] * K[k]; } }
+      out[y * w + x] = a;
+    }
+  }
+  return out;
+}
+function prep(px, n) {
+  const L = new Float32Array(n), M = new Uint8Array(n);
+  for (let i = 0; i < n; i++) {
+    const a = px[i * 4 + 3] / 255, g = 0.5 * (1 - a);
+    L[i] = 0.2126 * (px[i * 4] / 255 * a + g) + 0.7152 * (px[i * 4 + 1] / 255 * a + g) + 0.0722 * (px[i * 4 + 2] / 255 * a + g);
+    M[i] = a > 0 ? 1 : 0;
+  }
+  return { L, M };
+}
+function prepRef(px, size) {
+  const n = size * size, { L, M } = prep(px, n), tmp = new Float32Array(n);
+  const LL = new Float32Array(n); for (let i = 0; i < n; i++) LL[i] = L[i] * L[i];
+  return { L, M, mx: blur(L, size, size, tmp, new Float32Array(n)), sxx: blur(LL, size, size, tmp, new Float32Array(n)) };
+}
+function worstTile(ref, px, size) {
+  const n = size * size, c = prep(px, n), tmp = new Float32Array(n);
+  const my = blur(c.L, size, size, tmp, new Float32Array(n));
+  const t2 = new Float32Array(n);
+  for (let i = 0; i < n; i++) t2[i] = c.L[i] * c.L[i];
+  const syy = blur(t2, size, size, tmp, new Float32Array(n));
+  for (let i = 0; i < n; i++) t2[i] = ref.L[i] * c.L[i];
+  const sxy = blur(t2, size, size, tmp, new Float32Array(n));
+  const C1 = 1e-4, C2 = 9e-4, ssim = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    const mx = ref.mx[i], m2 = my[i];
+    ssim[i] = ((2 * mx * m2 + C1) * (2 * (sxy[i] - mx * m2) + C2)) / ((mx * mx + m2 * m2 + C1) * ((ref.sxx[i] - mx * mx) + (syy[i] - m2 * m2) + C2));
+  }
+  const m0 = new Uint8Array(n); for (let i = 0; i < n; i++) m0[i] = ref.M[i] | c.M[i];
+  const mask = new Uint8Array(n);
+  for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) if (m0[y * size + x]) {
+    for (let dy = -3; dy <= 3; dy++) { const yy = y + dy; if (yy < 0 || yy >= size) continue; for (let dx = -3; dx <= 3; dx++) { const xx = x + dx; if (xx >= 0 && xx < size) mask[yy * size + xx] = 1; } }
+  }
+  let worst = 1;
+  for (let ty = 0; ty < size; ty += 64) for (let tx = 0; tx < size; tx += 64) {
+    let s = 0, k = 0, tot = 0;
+    for (let y = ty; y < Math.min(size, ty + 64); y++) for (let x = tx; x < Math.min(size, tx + 64); x++) { tot++; if (mask[y * size + x]) { s += ssim[y * size + x]; k++; } }
+    if (k / tot > 0.25 && s / k < worst) worst = s / k;
+  }
+  return worst;
+}
+
+let REF;
+window.setReference = async (url, { size, views }) => {
+  const r = await renderViews(url, size, views, null);
+  REF = { size, views, frame: r.frame, views_: r.pixels.map((p) => prepRef(p, size)), pixels: r.pixels };
+  return { frame: r.frame, loadMs: r.loadMs };
+};
+// Warm evaluation against the stored reference: returns only numbers.
+window.evaluate = async (url) => {
+  const r = await renderViews(url, REF.size, REF.views, REF.frame);
+  let worst = 1, worstView = 0;
+  r.pixels.forEach((p, i) => { const w = worstTile(REF.views_[i], p, REF.size); if (w < worst) { worst = w; worstView = i; } });
+  window.__last = r.pixels;
+  return { worst, worstView, loadMs: r.loadMs };
+};
+// PNG of reference | last candidate at one view.
+window.preview = (view) => {
+  const s = REF.size, c = document.createElement('canvas'); c.width = s * 2; c.height = s;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#404040'; ctx.fillRect(0, 0, s * 2, s);
+  const put = (px, x) => { const tmp = document.createElement('canvas'); tmp.width = s; tmp.height = s; tmp.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(px), s, s), 0, 0); ctx.drawImage(tmp, x, 0); };
+  put(REF.pixels[view], 0); put(window.__last[view], s);
+  return c.toDataURL('image/png');
+};
+// Cold load timing (call in a fresh context).
+window.coldLoad = async (url) => { const { loader } = setup(256); const t0 = performance.now(); await loader.loadAsync(url); return performance.now() - t0; };
+window.ready = true;
+</script>
+</body>
+</html>

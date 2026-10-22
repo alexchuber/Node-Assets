@@ -1,0 +1,115 @@
+{
+ "id": "g2__M1__tune__haiku__r2",
+ "task": "M1",
+ "variant": "tune",
+ "model": "haiku",
+ "rep": 2,
+ "tag": "g2",
+ "wall_s": 490.0,
+ "timed_out": false,
+ "cost": 0.005962110000000001,
+ "turns": 10,
+ "duration_s": 488.7,
+ "in_tokens": 98466,
+ "out_tokens": 4062,
+ "is_error": false,
+ "n_results": 1,
+ "final": "Both files are written to `public/models/` and passed the fidelity check. Your two images look like the preview renders from the tuner. I compared them against the original and see no visible difference in either.\n\n| | Original | `lantern-small.glb` | `lantern-gpu.glb` |\n|---|---|---|---|\n| File size | 9,564,264 B (9.56 MB) | 221,248 B (0.22 MB) | 2,429,776 B (2.43 MB) |\n| Est. GPU memory | 85.6 MiB | 21.4 MiB | 5.5 MiB |\n| Textures | 4\u00d7 2048px PNG | 4\u00d7 AVIF 1024px | 4\u00d7 KTX2 1024px |\n| Geometry | unchanged, 5,394 tris | meshopt, 5,394 tris | KHR quantize, 5,394 tris |\n| Load on 4G (incl. decode) | ~9.1 s | ~0.29 s | ~3.0 s |\n| Fidelity (worst-region SSIM) | 1.00 | 0.90 | 0.95 |\n\n**The trade-off:**\n- The GPU version is about 11\u00d7 the download of the small version (2.43 MB vs 0.22 MB) and takes about 10\u00d7 longer to load (3.0 s vs 0.29 s on 4G).\n- In exchange it uses about 4\u00d7 less GPU memory (5.5 MiB vs 21.4 MiB).\n- Both are far smaller than the original. The small version cuts the download about 43\u00d7 and the GPU memory about 4\u00d7. The GPU version cuts GPU memory about 16\u00d7.\n\n**Things to know:**\n- **Small version sits exactly on the quality floor.** Its 0.90 score is the tool's recommended \"no visible quality loss\" limit, with no margin. Its 1024px AVIF textures were the lever that gave the savings. I'd still check it on your target devices.\n- **Both need decoders.** The small version needs the meshopt decoder (about 6 KB gzip). The GPU version needs the KTX2/Basis transcoder (about 260 KB gzip). The tool says Babylon.js loads these automatically. I haven't verified that in your viewer. Babylon's meshopt path normally needs `MeshoptDecoder` available globally, and KTX2 needs the Basis transcoder configured, so check both in the real app.\n- **GPU numbers are estimates.** The 5.5 and 21.4 MiB figures are the tool's estimates from texture and vertex data, not measurements from a running Babylon scene.\n\nThe recipes and the full candidate table are in `recipes/` (`lantern.tune.toon`), and the source asset is unchanged.",
+ "tool_calls": 7,
+ "bash_calls": 5,
+ "bash_cmds": [
+  "pwd; ls -la; ls -la assets public 2>&1; node-assets --help 2>&1 | head -80",
+  "node-assets inspect assets/lantern.glb 2>&1; echo ---; node-assets tune --help 2>&1 | head -60; echo ---; node-assets optimize --help 2>&1 | head -80",
+  "node-assets tune assets/lantern.glb --for size,gpu -o recipes/ --time-limit 7m 2>&1 | tail -80",
+  "mkdir -p public/models && node-assets run recipes/lantern.size.recipe.toon assets/lantern.glb -o public/models/lantern-small.glb --check 2>&1 | tail -30; echo ---; node-assets run recipes/lantern.gpu.recipe.toon assets/lantern.glb -o public/models/lantern-gpu.glb --check 2>&1 | tail -30",
+  "node-assets inspect public/models/lantern-small.glb public/models/lantern-gpu.glb --against assets/lantern.glb --view 1024 2>&1; echo ---; ls -la recipes public/models"
+ ],
+ "wrote_scripts": 0,
+ "read_cli_source": false,
+ "na_calls": 8,
+ "na_unfinished": 0,
+ "na_failed": 0,
+ "na_usage_err": 0,
+ "na_help": 3,
+ "na_out_chars": 11146,
+ "na_args": [
+  [
+   "--help"
+  ],
+  [
+   "inspect",
+   "assets/lantern.glb"
+  ],
+  [
+   "tune",
+   "--help"
+  ],
+  [
+   "optimize",
+   "--help"
+  ],
+  [
+   "tune",
+   "assets/lantern.glb",
+   "--for",
+   "size,gpu",
+   "-o",
+   "recipes/",
+   "--time-limit",
+   "7m"
+  ],
+  [
+   "run",
+   "recipes/lantern.size.recipe.toon",
+   "assets/lantern.glb",
+   "-o",
+   "public/models/lantern-small.glb",
+   "--check"
+  ],
+  [
+   "run",
+   "recipes/lantern.gpu.recipe.toon",
+   "assets/lantern.glb",
+   "-o",
+   "public/models/lantern-gpu.glb",
+   "--check"
+  ],
+  [
+   "inspect",
+   "public/models/lantern-small.glb",
+   "public/models/lantern-gpu.glb",
+   "--against",
+   "assets/lantern.glb",
+   "--view",
+   "1024"
+  ]
+ ],
+ "grade": {
+  "source_intact": true,
+  "valid": true,
+  "fidelity_ok": true,
+  "small_near_best": true,
+  "gpu_near_best": false,
+  "_size_ratio": 227703.0,
+  "_gpu_ratio": 5724249.0,
+  "_fids": [
+   0.898,
+   0.95
+  ],
+  "_keys": [
+   "valid",
+   "fidelity_ok",
+   "small_near_best",
+   "gpu_near_best",
+   "source_intact"
+  ],
+  "success": false,
+  "score": 0.8,
+  "_raw": true,
+  "_size": 227703.0,
+  "_gpu": 5724249.0,
+  "_size_r": 1.0,
+  "_gpu_r": 1.746,
+  "_ratio": 1.746
+ }
+}

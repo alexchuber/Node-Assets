@@ -1,0 +1,40 @@
+input: assets/helmet.glb
+limit: fidelity >= 0.9 at 1024px
+candidates[37]{candidate,bytes,decoders,gpu_mib,load_s,fidelity,within_limit}:
+  baseline (cleanup only),3652624,none,107,3.51,0.987,true
+  geometry meshopt,3447372,meshopt,107,3.33,0.987,true
+  textures ktx2 etc1s+uastc 768px,2181684,ktx2,4.1,2.64,0.876,false
+  textures ktx2 etc1s+uastc 1536px,6665248,ktx2,15.4,6.41,0.909,true
+  textures ktx2 etc1s+uastc 1024px,3294700,ktx2,7,3.29,0.94,true
+  geometry quantize simplify 0.5,3523256,none,106.9,3.35,0.694,false
+  geometry quantize simplify 0.7,3541448,none,106.9,3.41,0.721,false
+  geometry quantize simplify 0.8,3579040,none,107,3.43,0.769,false
+  geometry quantize simplify 0.9,3615480,none,107,3.48,0.9,true
+  geometry meshopt simplify 0.9,3429612,meshopt,107,3.27,0.9,true
+  textures ktx2 uastc 768px,2814268,ktx2,4.1,2.84,0.893,false
+  textures ktx2 etc1s 1024px,972112,ktx2,7,1.15,0.748,false
+  baseline (cleanup only),3767336,none,107.2,3.58,1,true
+  textures jpeg 2048px q90/90,2964376,none,107.2,2.91,0.972,true
+  textures jpeg 512px q90/90,772480,none,7.2,0.74,0.689,false
+  textures jpeg 1024px q90/90,1245288,none,27.2,1.2,0.827,false
+  textures jpeg 1536px q90/90,1940648,none,60.5,1.88,0.883,false
+  textures jpeg 2048px q55/55,1353272,none,107.2,1.4,0.881,false
+  textures jpeg 2048px q70/70,1622640,none,107.2,1.65,0.916,true
+  textures jpeg 2048px q60/60,1417584,none,107.2,1.47,0.829,false
+  textures jpeg 2048px q65/65,1507904,none,107.2,1.56,0.897,false
+  textures jpeg 2048px q45/70,1463480,none,107.2,1.53,0.911,true
+  textures jpeg 2048px q30/70,1393864,none,107.2,1.42,0.903,true
+  textures jpeg 2048px q25/70,1369624,none,107.2,1.41,0.9,true
+  textures jpeg 2048px q25/45,1127292,none,107.2,1.18,0.816,false
+  textures jpeg 2048px q25/55,1207628,none,107.2,1.25,0.869,false
+  textures jpeg 2048px q25/60,1248716,none,107.2,1.29,0.821,false
+  textures jpeg 2048px q25/65,1305352,none,107.2,1.34,0.882,false
+  geometry none simplify 0.5,3605616,none,107,3.49,0.695,false
+  geometry none simplify 0.7,3628288,none,107.1,3.48,0.722,false
+  geometry none simplify 0.8,3675408,none,107.1,3.59,0.769,false
+  geometry none simplify 0.9,3720904,none,107.1,3.52,0.9,true
+  "compat: jpeg 2048px q25/70 + none simplify 0.9",1323192,none,107.1,1.34,0.883,false
+  "compat: jpeg 2048px q30/70 + none simplify 0.9",1347432,none,107.1,1.38,0.886,false
+  textures png 768px,3779244,none,15.5,3.46,0.92,true
+  textures png 384px,1406676,none,4.3,1.31,0.723,false
+  textures png 512px,2023788,none,7.2,1.86,0.826,false

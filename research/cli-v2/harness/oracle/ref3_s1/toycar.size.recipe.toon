@@ -1,0 +1,46 @@
+recipe: 1
+name: toycar.size
+goal: size
+stages:
+  cleanup:
+    prune: true
+    dedup: true
+    weld: true
+    metalRough: true
+    instance: true
+    flatten: true
+    palette: false
+  textures:
+    format: avif
+    quality: 55
+    dataQuality: 55
+    maxSize: 256
+    ktx2:
+      color: etc1s
+      data: uastc
+      etc1sQuality: 128
+      uastcQuality: 1
+      zstd: true
+  geometry:
+    mode: draco
+    simplify: 1
+    meshoptLevel: medium
+    dracoPosition: 11
+    dracoNormal: 8
+    dracoTexcoord: 10
+    dracoDecodeSpeed: 5
+check:
+  fidelity: 0.9
+  view: 1024
+  views: 4
+tuned:
+  input: assets/toycar.glb
+  date: 2026-10-22
+  network: 4g
+  amortized_over: 3
+  result:
+    bytes: 287792
+    decoders: draco
+    gpu_mib: 6.1
+    load_s: 0.35
+    fidelity: 0.911

@@ -1,0 +1,104 @@
+{
+ "id": "g2__M1__tune-json__sonnet__r2",
+ "task": "M1",
+ "variant": "tune-json",
+ "model": "sonnet",
+ "rep": 2,
+ "tag": "g2",
+ "wall_s": 317.4,
+ "timed_out": false,
+ "cost": 0.041583300000000004,
+ "turns": 5,
+ "duration_s": 315.3,
+ "in_tokens": 49169,
+ "out_tokens": 1299,
+ "is_error": false,
+ "n_results": 1,
+ "final": "Both files are written and pass the fidelity limit (worst-region SSIM \u2265 0.9, the tool's \"no visible quality loss\" threshold). I have not looked at the preview images or loaded either file in your viewer.\n\n| | original | `lantern-small.glb` | `lantern-gpu.glb` |\n|---|---|---|---|\n| Download | 9.56 MB | **0.22 MB** (\u221298%) | 2.43 MB (\u221275%) |\n| GPU memory | 85.6 MiB | 21.5 MiB (\u221275%) | **5.5 MiB** (\u221294%) |\n| Load on 4g (download + decode) | 8.9 s | **0.39 s** | 3.07 s |\n| Fidelity (SSIM) | 1.0 | 0.90 | 0.95 |\n| Textures | 4\u00d7 PNG 2048\u00b2 | 4\u00d7 AVIF 1024\u00b2 | 4\u00d7 KTX2 (UASTC) 1024\u00b2 |\n| Geometry | | meshopt | quantized only |\n| Decoder download | | 6 KB (meshopt) | 260 KB (KTX2) |\n\n**Trade-off:**\n- **Small vs GPU:** the GPU version uses about 4\u00d7 less GPU memory (5.5 vs 21.5 MiB). The small version is about 11\u00d7 smaller to download (0.22 vs 2.43 MB) and loads about 8\u00d7 faster.\n- **Why the difference:** AVIF is compressed for transfer, but the browser decompresses it to raw pixels in GPU memory. KTX2 stays compressed on the GPU, but UASTC files are larger on disk.\n- **Fidelity:** the small version sits right at the 0.90 limit, so it has the least margin. The GPU version is at 0.95. Both are fine by the tool's threshold, but glance at the previews in `recipes/` if you care about texture detail.\n- **Compatibility:** the small version needs AVIF texture support in the browser. Babylon.js loads the meshopt and KTX2 decoders automatically, so no viewer changes are needed.\n\nThe recipes and full candidate tables are in `recipes/` (`lantern.size.recipe.json`, `lantern.gpu.recipe.json`, `lantern.tune.json`), so you can re-run or tweak either one.\n\n**My lean:** pick `lantern-small.glb` unless you're targeting memory-constrained devices or showing many lanterns at once. A 21.5 MiB footprint is modest, and the download and load-time gap is much larger.",
+ "tool_calls": 4,
+ "bash_calls": 4,
+ "bash_cmds": [
+  "node-assets --help; ls -la assets public/models 2>&1",
+  "node-assets tune --help; node-assets inspect assets/lantern.glb",
+  "node-assets tune assets/lantern.glb --for size,gpu -o recipes/ 2>&1 | tail -60; ls recipes",
+  "node-assets run recipes/lantern.size.recipe.json assets/lantern.glb -o public/models/lantern-small.glb && node-assets run recipes/lantern.gpu.recipe.json assets/lantern.glb -o public/models/lantern-gpu.glb; node-assets inspect public/models/lantern-small.glb public/models/lantern-gpu.glb --against assets/lantern.glb"
+ ],
+ "wrote_scripts": 0,
+ "read_cli_source": false,
+ "na_calls": 7,
+ "na_unfinished": 0,
+ "na_failed": 0,
+ "na_usage_err": 0,
+ "na_help": 2,
+ "na_out_chars": 12151,
+ "na_args": [
+  [
+   "--help"
+  ],
+  [
+   "tune",
+   "--help"
+  ],
+  [
+   "inspect",
+   "assets/lantern.glb"
+  ],
+  [
+   "tune",
+   "assets/lantern.glb",
+   "--for",
+   "size,gpu",
+   "-o",
+   "recipes/"
+  ],
+  [
+   "run",
+   "recipes/lantern.size.recipe.json",
+   "assets/lantern.glb",
+   "-o",
+   "public/models/lantern-small.glb"
+  ],
+  [
+   "run",
+   "recipes/lantern.gpu.recipe.json",
+   "assets/lantern.glb",
+   "-o",
+   "public/models/lantern-gpu.glb"
+  ],
+  [
+   "inspect",
+   "public/models/lantern-small.glb",
+   "public/models/lantern-gpu.glb",
+   "--against",
+   "assets/lantern.glb"
+  ]
+ ],
+ "grade": {
+  "source_intact": true,
+  "valid": true,
+  "fidelity_ok": true,
+  "small_near_best": true,
+  "gpu_near_best": false,
+  "_size_ratio": 227703.0,
+  "_gpu_ratio": 5724249.0,
+  "_fids": [
+   0.898,
+   0.95
+  ],
+  "_keys": [
+   "valid",
+   "fidelity_ok",
+   "small_near_best",
+   "gpu_near_best",
+   "source_intact"
+  ],
+  "success": false,
+  "score": 0.8,
+  "_raw": true,
+  "_size": 227703.0,
+  "_gpu": 5724249.0,
+  "_size_r": 1.0,
+  "_gpu_r": 1.746,
+  "_ratio": 1.746
+ }
+}

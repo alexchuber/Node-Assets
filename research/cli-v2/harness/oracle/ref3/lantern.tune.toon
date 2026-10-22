@@ -1,0 +1,58 @@
+input: assets/lantern.glb
+limit: fidelity >= 0.9 at 1024px
+candidates[55]{candidate,bytes,decoders,gpu_mib,load_s,fidelity,within_limit}:
+  baseline (cleanup only),9481676,none,85.5,8.74,0.983,true
+  geometry draco,9372700,draco,85.6,8.71,0.984,true
+  geometry meshopt-high,9387072,meshopt,85.5,8.62,0.983,true
+  geometry meshopt,9413716,meshopt,85.5,8.64,0.983,true
+  textures avif 2048px q90/90,907680,none,85.5,1.04,0.981,true
+  "size: avif 2048px q90/90 + meshopt-high",813060,meshopt,85.5,0.94,0.981,true
+  textures avif 512px q90/90,213228,none,5.5,0.24,0.737,false
+  textures avif 1024px q90/90,361148,none,21.5,0.4,0.913,true
+  textures avif 768px q90/90,278332,none,12.1,0.31,0.845,false
+  textures ktx2 etc1s+uastc 768px,1058988,ktx2,3.1,1.54,0.823,false
+  textures ktx2 etc1s+uastc 1536px,3331568,ktx2,12.1,3.36,0.876,false
+  textures ktx2 etc1s+uastc 2048px,5265456,ktx2,21.5,5.1,0.886,false
+  "size: avif 1024px q90/90 + meshopt-high",266528,meshopt,21.5,0.33,0.913,true
+  textures avif 1024px q55/55,231252,none,21.5,0.3,0.759,false
+  textures avif 1024px q70/70,276396,none,21.5,0.32,0.849,false
+  textures avif 1024px q80/80,320644,none,21.5,0.35,0.887,false
+  textures avif 1024px q85/85,337060,none,21.5,0.38,0.904,true
+  textures avif 1024px q50/85,284532,none,21.5,0.33,0.774,false
+  textures avif 1024px q65/85,301196,none,21.5,0.34,0.835,false
+  textures avif 1024px q75/85,315844,none,21.5,0.41,0.874,false
+  textures avif 1024px q80/85,329228,none,21.5,0.38,0.888,false
+  textures avif 1024px q85/50,273916,none,21.5,0.34,0.883,false
+  textures avif 1024px q85/65,295860,none,21.5,0.34,0.894,false
+  textures avif 1024px q85/75,314356,none,21.5,0.34,0.899,false
+  textures avif 1024px q85/80,328476,none,21.5,0.38,0.903,true
+  geometry draco-low,9366756,draco,85.6,8.71,0.862,false
+  geometry draco-12,9367672,draco,85.6,8.68,0.891,false
+  geometry draco-10,9364204,draco,85.6,8.66,0.743,false
+  geometry quantize simplify 0.5,9432988,none,85.4,8.65,0.692,false
+  geometry quantize simplify 0.7,9452668,none,85.4,8.66,0.762,false
+  geometry quantize simplify 0.8,9462484,none,85.4,8.71,0.755,false
+  geometry quantize simplify 0.9,9472572,none,85.5,8.71,0.796,false
+  "size: avif 1024px q85/80 + meshopt-high",233856,meshopt,21.5,0.29,0.903,true
+  textures webp 2048px q90/90,1687908,none,85.5,1.69,0.98,true
+  textures webp 512px q90/90,270468,none,5.5,0.28,0.801,false
+  textures webp 1024px q90/90,564584,none,21.5,0.57,0.953,true
+  textures webp 768px q90/90,392660,none,12.1,0.41,0.889,false
+  textures webp 1024px q55/55,290580,none,21.5,0.32,0.824,false
+  textures webp 1024px q70/70,325900,none,21.5,0.36,0.867,false
+  textures webp 1024px q80/80,388988,none,21.5,0.42,0.914,true
+  textures webp 1024px q75/75,339708,none,21.5,0.36,0.873,false
+  textures webp 1024px q50/80,340180,none,21.5,0.37,0.841,false
+  textures webp 1024px q65/80,355892,none,21.5,0.38,0.862,false
+  textures webp 1024px q70/80,360332,none,21.5,0.39,0.879,false
+  textures webp 1024px q75/80,367740,none,21.5,0.38,0.886,false
+  textures webp 1024px q80/50,329956,none,21.5,0.37,0.895,false
+  textures webp 1024px q80/65,347692,none,21.5,0.38,0.9,true
+  textures webp 1024px q80/55,334508,none,21.5,0.37,0.897,false
+  textures webp 1024px q80/60,340380,none,21.5,0.36,0.9,true
+  textures ktx2 uastc 768px,1525824,ktx2,3.1,1.67,0.912,true
+  textures ktx2 uastc 384px,552172,ktx2,0.9,0.78,0.738,false
+  textures ktx2 uastc 512px,809916,ktx2,1.5,0.99,0.83,false
+  textures ktx2 etc1s 768px,341280,ktx2,3.1,0.57,0.783,false
+  textures ktx2 etc1s 1536px,751996,ktx2,12.1,0.97,0.84,false
+  textures ktx2 etc1s 2048px,1127252,ktx2,21.5,1.34,0.841,false

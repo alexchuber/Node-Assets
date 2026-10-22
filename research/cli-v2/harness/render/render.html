@@ -1,0 +1,65 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>render</title>
+<script type="importmap">
+{ "imports": { "three": "/node_modules/three/build/three.module.js", "three/addons/": "/node_modules/three/examples/jsm/" } }
+</script>
+</head>
+<body style="margin:0;background:#000">
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
+import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
+import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+let renderer, pmrem, envTex, loader;
+function init(size) {
+  renderer = new THREE.WebGLRenderer({ antialias: false, preserveDrawingBuffer: true, alpha: true });
+  renderer.setPixelRatio(1);
+  renderer.setSize(size, size);
+  renderer.setClearColor(0x000000, 0);
+  document.body.appendChild(renderer.domElement);
+  pmrem = new THREE.PMREMGenerator(renderer);
+  envTex = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+  const draco = new DRACOLoader().setDecoderPath('/node_modules/three/examples/jsm/libs/draco/gltf/');
+  const ktx2 = new KTX2Loader().setTranscoderPath('/node_modules/three/examples/jsm/libs/basis/').detectSupport(renderer);
+  loader = new GLTFLoader().setDRACOLoader(draco).setKTX2Loader(ktx2).setMeshoptDecoder(MeshoptDecoder);
+}
+
+// Render `views` azimuths. If `frame` (center, radius) is given, reuse it so every candidate is framed like the original.
+window.renderModel = async (url, opts) => {
+  const { size = 512, views = 4, frame = null } = opts;
+  if (!renderer) init(size);
+  const t0 = performance.now();
+  const gltf = await loader.loadAsync(url);
+  const tLoad = performance.now() - t0;
+  const scene = new THREE.Scene();
+  scene.environment = envTex;
+  scene.add(gltf.scene);
+  gltf.scene.updateMatrixWorld(true);
+  let f = frame;
+  if (!f) {
+    const box = new THREE.Box3().setFromObject(gltf.scene);
+    const s = box.getBoundingSphere(new THREE.Sphere());
+    f = { c: s.center.toArray(), r: s.radius };
+  }
+  const cam = new THREE.PerspectiveCamera(35, 1, f.r * 0.01, f.r * 20);
+  const images = [];
+  const t1 = performance.now();
+  for (let i = 0; i < views; i++) {
+    const az = (i / views) * Math.PI * 2 + 0.4, el = 0.35, d = f.r / Math.sin(THREE.MathUtils.degToRad(35 / 2)) * 1.05;
+    cam.position.set(f.c[0] + d * Math.cos(el) * Math.sin(az), f.c[1] + d * Math.sin(el), f.c[2] + d * Math.cos(el) * Math.cos(az));
+    cam.lookAt(f.c[0], f.c[1], f.c[2]);
+    renderer.render(scene, cam);
+    images.push(renderer.domElement.toDataURL('image/png'));
+  }
+  const tRender = performance.now() - t1;
+  scene.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) [].concat(o.material).forEach((m) => { for (const k in m) if (m[k]?.isTexture) m[k].dispose(); m.dispose(); }); });
+  return { frame: f, images, loadMs: tLoad, renderMs: tRender };
+};
+window.ready = true;
+</script>
+</body>
+</html>

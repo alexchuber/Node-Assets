@@ -1,0 +1,103 @@
+{
+ "id": "g2__L1__tune__sonnet__r2",
+ "task": "L1",
+ "variant": "tune",
+ "model": "sonnet",
+ "rep": 2,
+ "tag": "g2",
+ "wall_s": 564.2,
+ "timed_out": false,
+ "cost": 0.057985499999999995,
+ "turns": 8,
+ "duration_s": 562.8,
+ "in_tokens": 81363,
+ "out_tokens": 1927,
+ "is_error": false,
+ "n_results": 1,
+ "final": "`public/models/toycar.glb` is now 0.36 MB, down from 5.42 MB. I only checked it with `node-assets`. I haven't run the viewer, and the Draco decoder files aren't in `public/draco/` yet.\n\nOn the 4G profile, the tool's cold-load estimate drops from 5.28 s to 0.86 s. That figure includes the decoder download and decode time. Every figure here comes from `node-assets`.\n\n**What I changed:**\n- **Model:** I tuned for load time and applied the result with `node-assets run` (recipe in `recipes/toycar.load.recipe.toon`).\n  - Textures are AVIF at 256 px, down from 1024 px and 512 px PNGs.\n  - Geometry uses Draco compression with 25% fewer triangles (108,936 down to 81,699).\n  - GPU memory falls from 38.2 MiB to 5 MiB.\n- **Viewer:** `src/viewer.js` now sets up a `DRACOLoader` that reads the decoder from `/draco/`.\n\n**Quality:** Fidelity is 0.905 against the tool's 0.9 limit for no visible quality loss. That is a thin margin, so look at `recipes/toycar.load.preview.png` before shipping. A 1024 px AVIF version with meshopt reaches 0.983 fidelity at 0.94 MB. It is a bigger download but safer on quality, and I can switch to it if the preview looks soft.\n\n**Before it works:** `node_modules` isn't installed here, so I couldn't copy the decoder files. Run `npm install`, then copy `node_modules/three/examples/jsm/libs/draco/gltf/*` into `public/draco/`. I created that folder, but it's empty. Without those files the model won't load.\n\nThe model also needs the `EXT_texture_avif` extension, which three r170 handles. Browsers without AVIF support won't show the textures.",
+ "tool_calls": 7,
+ "bash_calls": 7,
+ "bash_cmds": [
+  "node-assets --help; ls -la . assets public/models src; cat src/viewer.js",
+  "node-assets tune --help; node-assets inspect assets/toycar.glb --network 4g",
+  "node-assets tune assets/toycar.glb --for load --network 4g -o recipes/ 2>&1 | tail -40; ls recipes",
+  "cat recipes/toycar.load.recipe.toon; node-assets run recipes/toycar.load.recipe.toon assets/toycar.glb -o public/models/toycar.glb --force && node-assets inspect public/models/toycar.glb --against assets/toycar.glb --network 4g",
+  "ls /tmp/claude-0/-home-claude/9686258e-93f4-5d54-bdd7-0b12331e2cff/scratchpad/ 2>/dev/null | head; ls node_modules 2>/dev/null | head",
+  "cat package.json; ls node_modules/three/examples/jsm/libs/draco/gltf 2>&1",
+  "python3 - <<'E'\np='src/viewer.js'\ns=open(p).read()\ns=s.replace(\"import { OrbitControls\",\"import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';\\nimport { OrbitControls\",1)\ns=s.replace(\"const loader = new GLTFLoader();\",\"// Draco decoder files must be served from public/draco/ (copy from node_modules/three/examples/jsm/libs/draco/gltf/).\\nconst draco = new DRACOLoader().setDecoderPath('/draco/');\\nconst loader = new GLTFLoader().setDRACOLoader(draco);\",1)\nopen(p,'w').write(s)\nE\nmkdir -p public/draco; grep -n -i draco src/viewer.js"
+ ],
+ "wrote_scripts": 0,
+ "read_cli_source": false,
+ "na_calls": 6,
+ "na_unfinished": 0,
+ "na_failed": 0,
+ "na_usage_err": 0,
+ "na_help": 2,
+ "na_out_chars": 7506,
+ "na_args": [
+  [
+   "--help"
+  ],
+  [
+   "tune",
+   "--help"
+  ],
+  [
+   "inspect",
+   "assets/toycar.glb",
+   "--network",
+   "4g"
+  ],
+  [
+   "tune",
+   "assets/toycar.glb",
+   "--for",
+   "load",
+   "--network",
+   "4g",
+   "-o",
+   "recipes/"
+  ],
+  [
+   "run",
+   "recipes/toycar.load.recipe.toon",
+   "assets/toycar.glb",
+   "-o",
+   "public/models/toycar.glb",
+   "--force"
+  ],
+  [
+   "inspect",
+   "public/models/toycar.glb",
+   "--against",
+   "assets/toycar.glb",
+   "--network",
+   "4g"
+  ]
+ ],
+ "grade": {
+  "source_intact": true,
+  "valid": true,
+  "fidelity_ok": true,
+  "viewer_compat": true,
+  "_net_s": 0.384,
+  "_fid": 0.905,
+  "_bytes": 357608,
+  "_dec": [
+   "draco"
+  ],
+  "near_best": true,
+  "_keys": [
+   "valid",
+   "fidelity_ok",
+   "viewer_compat",
+   "source_intact",
+   "near_best"
+  ],
+  "success": true,
+  "score": 1.0,
+  "_load_s": 0.567,
+  "_raw": true,
+  "_ratio": 1.155
+ }
+}

@@ -1,0 +1,46 @@
+recipe: 1
+name: helmet.compat
+goal: compat
+stages:
+  cleanup:
+    prune: true
+    dedup: true
+    weld: true
+    metalRough: true
+    instance: false
+    flatten: true
+    palette: false
+  textures:
+    format: jpeg
+    quality: 25
+    dataQuality: 70
+    maxSize: 2048
+    ktx2:
+      color: etc1s
+      data: uastc
+      etc1sQuality: 128
+      uastcQuality: 1
+      zstd: true
+  geometry:
+    mode: none
+    simplify: 1
+    meshoptLevel: medium
+    dracoPosition: 14
+    dracoNormal: 10
+    dracoTexcoord: 12
+    dracoDecodeSpeed: 5
+check:
+  fidelity: 0.9
+  view: 1024
+  views: 4
+tuned:
+  input: assets/helmet.glb
+  date: 2026-10-22
+  network: 4g
+  amortized_over: 1
+  result:
+    bytes: 1369624
+    decoders: none
+    gpu_mib: 107.2
+    load_s: 1.41
+    fidelity: 0.9

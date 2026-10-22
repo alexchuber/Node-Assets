@@ -1,0 +1,11 @@
+limits:
+  fidelity: ">= 0.9 (worst 64px-region SSIM vs original, 4 views at 1024px)"
+  network: 4g (9 Mbps)
+  decoders_amortized_over: 1 asset(s)
+originals[1]{input,bytes,gpu_mib,load_s}:
+  assets/lantern.glb,9564264,85.6,8.79
+results[2]{input,goal,recipe,bytes,decoder_bytes,gpu_mib,load_s,fidelity,textures,geometry,decoders,search,preview}:
+  assets/lantern.glb,size,ref3/lantern.size.recipe.toon,233856,6455,21.5,0.29,0.903,avif q85/80 (color/data maps) <=1024px,meshopt-high,meshopt,complete,ref3/lantern.size.preview.png
+  assets/lantern.glb,gpu,ref3/lantern.gpu.recipe.toon,1525824,260468,3.1,1.67,0.912,ktx2 uastc+uastc <=768px,quantize,ktx2,complete,ref3/lantern.gpu.preview.png
+warnings[2]: "lantern.size: output needs the meshopt decoder (6 KB gzip) in the viewer: three.js loader.setMeshoptDecoder(MeshoptDecoder); Babylon.js loads it automatically","lantern.gpu: output needs the ktx2 decoder (260 KB gzip) in the viewer: three.js loader.setKTX2Loader(new KTX2Loader().setTranscoderPath(...).detectSupport(renderer)); Babylon.js loads it automatically"
+help[2]: Run `node-assets run <recipe> <input> -o <out.glb>` to apply a recipe (add --check on other models to verify it suits them),"Edit a recipe file to mix stages from different goals, then `run` it; full candidate tables: ref3/<name>.tune.toon"

@@ -1,0 +1,9 @@
+help/home            n  102  json/toon chars 1.25  tokens(claude-legacy) 1.24  tokens(o200k) 1.24  mean toon tokens 350
+inspect              n   50  json/toon chars 1.65  tokens(claude-legacy) 1.57  tokens(o200k) 1.52  mean toon tokens 77
+optimize             n  234  json/toon chars 1.28  tokens(claude-legacy) 1.23  tokens(o200k) 1.25  mean toon tokens 171
+inspect --against    n  230  json/toon chars 1.25  tokens(claude-legacy) 1.23  tokens(o200k) 1.21  mean toon tokens 278
+tune                 n   28  json/toon chars 1.36  tokens(claude-legacy) 1.30  tokens(o200k) 1.34  mean toon tokens 453
+run                  n   30  json/toon chars 1.30  tokens(claude-legacy) 1.26  tokens(o200k) 1.30  mean toon tokens 152
+ALL                  n 674  json/toon chars 1.28  tokens(claude-legacy) 1.25  tokens(o200k) 1.25
+
+[exited with code 0]

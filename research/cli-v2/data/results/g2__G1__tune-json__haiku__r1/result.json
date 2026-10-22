@@ -1,0 +1,99 @@
+{
+ "id": "g2__G1__tune-json__haiku__r1",
+ "task": "G1",
+ "variant": "tune-json",
+ "model": "haiku",
+ "rep": 1,
+ "tag": "g2",
+ "wall_s": 235.3,
+ "timed_out": false,
+ "cost": 0.0031464300000000004,
+ "turns": 7,
+ "duration_s": 234.1,
+ "in_tokens": 56410,
+ "out_tokens": 1839,
+ "is_error": false,
+ "n_results": 1,
+ "final": "I've replaced `public/models/helmet.glb` with a recompressed version. GPU memory for the helmet drops from about 107 MiB to 7 MiB, and the file shrinks from 3.77 MB to 3.29 MB.\n\nThe tuner tried the candidate settings and kept the lowest-GPU option that stayed at or above the 0.9 fidelity limit. The result scored 0.94, measured as worst-case SSIM over four 1024px views. The side-by-side preview (original on the left, new on the right) looks the same to me. The source in `assets/helmet.glb` is untouched.\n\nWhat changed:\n- **Textures:** the five 2048\u00d72048 JPEGs became KTX2 at 1024\u00d71024 (ETC1S/UASTC). This accounts for almost all of the GPU saving.\n- **Geometry:** the mesh is quantized and meshopt-compressed. The triangle count is unchanged at 15,452.\n\nThe output needs the KTX2 decoder. Babylon.js loads it automatically, so nothing else is needed in your scene. The decoder adds about 260 KB to the download, which is included in the 3.29 MB figure.\n\nTwo things I did not verify:\n- The fidelity check is a headless render, not a device test. I'd still look at the helmet on a Quest before shipping it.\n- I didn't compare the other two models in `public/models/` (`boombox.glb`, `toycar.glb`). If they also cause memory problems, they can be tuned the same way.\n\nThe recipe and the candidate table are in `recipes/`, in case you want to try a different fidelity limit.",
+ "tool_calls": 5,
+ "bash_calls": 4,
+ "bash_cmds": [
+  "node-assets --help 2>&1 | head -80; echo \"---\"; ls -la assets public/models 2>&1; echo \"---\"; node-assets info assets/helmet.glb 2>&1 | head -80",
+  "node-assets inspect assets/helmet.glb 2>&1 | head -150; echo \"---\"; node-assets tune --help 2>&1 | head -80",
+  "mkdir -p recipes && node-assets tune assets/helmet.glb --for gpu -o recipes/ --fidelity 0.9 --view 1024 2>&1 | tail -150",
+  "node-assets run recipes/helmet.gpu.recipe.json assets/helmet.glb -o public/models/helmet.glb --force 2>&1 | tail -40; echo \"---\"; node-assets inspect public/models/helmet.glb --against assets/helmet.glb 2>&1 | head -80"
+ ],
+ "wrote_scripts": 0,
+ "read_cli_source": false,
+ "na_calls": 7,
+ "na_unfinished": 0,
+ "na_failed": 1,
+ "na_usage_err": 1,
+ "na_help": 2,
+ "na_out_chars": 7603,
+ "na_args": [
+  [
+   "--help"
+  ],
+  [
+   "info",
+   "assets/helmet.glb"
+  ],
+  [
+   "inspect",
+   "assets/helmet.glb"
+  ],
+  [
+   "tune",
+   "--help"
+  ],
+  [
+   "tune",
+   "assets/helmet.glb",
+   "--for",
+   "gpu",
+   "-o",
+   "recipes/",
+   "--fidelity",
+   "0.9",
+   "--view",
+   "1024"
+  ],
+  [
+   "run",
+   "recipes/helmet.gpu.recipe.json",
+   "assets/helmet.glb",
+   "-o",
+   "public/models/helmet.glb",
+   "--force"
+  ],
+  [
+   "inspect",
+   "public/models/helmet.glb",
+   "--against",
+   "assets/helmet.glb"
+  ]
+ ],
+ "grade": {
+  "source_intact": true,
+  "valid": true,
+  "fidelity_ok": true,
+  "near_best": true,
+  "_gpu": 7370339,
+  "_ratio": 1.0,
+  "_fid": 0.94,
+  "_bytes": 3294776,
+  "_dec": [
+   "ktx2"
+  ],
+  "_keys": [
+   "valid",
+   "fidelity_ok",
+   "near_best",
+   "source_intact"
+  ],
+  "success": true,
+  "score": 1.0,
+  "_raw": true
+ }
+}

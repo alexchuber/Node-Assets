@@ -1,0 +1,18 @@
+{
+ "best": {
+  "G1": 7370339,
+  "C1": 1369696,
+  "S1": 1243524,
+  "L1": 0.491,
+  "M1s": 227703.0,
+  "M1g": 3277572
+ },
+ "source": {
+  "G1": "oracle",
+  "C1": "oracle",
+  "S1": "g2__S1__tune__sonnet__r1",
+  "L1": "oracle",
+  "M1s": "g2__M1__tune-json__sonnet__r2",
+  "M1g": "oracle"
+ }
+}

@@ -1,0 +1,95 @@
+{
+ "id": "g2__L1__tune__sonnet__r1",
+ "task": "L1",
+ "variant": "tune",
+ "model": "sonnet",
+ "rep": 1,
+ "tag": "g2",
+ "wall_s": 531.1,
+ "timed_out": false,
+ "cost": 0.0494551,
+ "turns": 7,
+ "duration_s": 530.0,
+ "in_tokens": 52712,
+ "out_tokens": 1495,
+ "is_error": false,
+ "n_results": 1,
+ "final": "`public/models/toycar.glb` is now 0.95 MB, down from 5.42 MB. That is about 82% smaller, and the tool estimated the 4G load time at about 5.2 s before and well under 1 s after. I haven't opened the page to check it renders, and I didn't re-run `inspect --against` on the written file. The fidelity figure below comes from the tuner's trial of the same settings.\n\n- **Textures:** converted to AVIF at quality 90 and kept at up to 1024px.\n- **Geometry:** compressed with meshopt at its high setting. The mesh itself is unchanged, with no triangles removed.\n- **Fidelity:** the tuner scored this combination at 0.983 against the original, where 1.0 means identical.\n- **Decoder:** meshopt output needs a decoder, so I updated `src/viewer.js` to import `MeshoptDecoder` and call `loader.setMeshoptDecoder(MeshoptDecoder)`. The decoder is about 6 KB gzipped.\n\nThe tuner's smallest option was 0.66 MB, using 256px textures and 25% fewer triangles. It scored only 0.903 against a 0.9 limit, so I didn't use it. Saving roughly 0.3 MB wasn't worth risking visible softening.\n\nThe tuner's recipes are in `recipes/`.",
+ "tool_calls": 6,
+ "bash_calls": 4,
+ "bash_cmds": [
+  "node-assets --help; ls -la assets public/models src; cat src/viewer.js",
+  "node-assets tune assets/toycar.glb --for load -o recipes/ --network 4g 2>&1 | tail -40",
+  "cat recipes/toycar.load.recipe.toon; node-assets optimize --help",
+  "node-assets optimize assets/toycar.glb -o public/models/toycar.glb --force --texture-format avif --texture-quality 90 --texture-size 1024 --geometry meshopt --meshopt-level high 2>&1 | tail -15; ls -l public/models/toycar.glb"
+ ],
+ "wrote_scripts": 2,
+ "read_cli_source": false,
+ "na_calls": 4,
+ "na_unfinished": 0,
+ "na_failed": 0,
+ "na_usage_err": 0,
+ "na_help": 2,
+ "na_out_chars": 6028,
+ "na_args": [
+  [
+   "--help"
+  ],
+  [
+   "tune",
+   "assets/toycar.glb",
+   "--for",
+   "load",
+   "-o",
+   "recipes/",
+   "--network",
+   "4g"
+  ],
+  [
+   "optimize",
+   "--help"
+  ],
+  [
+   "optimize",
+   "assets/toycar.glb",
+   "-o",
+   "public/models/toycar.glb",
+   "--force",
+   "--texture-format",
+   "avif",
+   "--texture-quality",
+   "90",
+   "--texture-size",
+   "1024",
+   "--geometry",
+   "meshopt",
+   "--meshopt-level",
+   "high"
+  ]
+ ],
+ "grade": {
+  "source_intact": true,
+  "valid": true,
+  "fidelity_ok": true,
+  "viewer_compat": true,
+  "_net_s": 0.852,
+  "_fid": 0.983,
+  "_bytes": 951880,
+  "_dec": [
+   "meshopt"
+  ],
+  "near_best": false,
+  "_keys": [
+   "valid",
+   "fidelity_ok",
+   "viewer_compat",
+   "source_intact",
+   "near_best"
+  ],
+  "success": false,
+  "score": 0.8,
+  "_load_s": 0.965,
+  "_raw": true,
+  "_ratio": 1.965
+ }
+}

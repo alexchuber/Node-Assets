@@ -1,0 +1,11 @@
+limits:
+  fidelity: ">= 0.9 (worst 64px-region SSIM vs original, 4 views at 1024px)"
+  network: 4g (9 Mbps)
+  decoders_amortized_over: 1 asset(s)
+originals[1]{input,bytes,gpu_mib,load_s}:
+  assets/helmet.glb,3773916,107.2,3.61
+results[2]{input,goal,recipe,bytes,decoder_bytes,gpu_mib,load_s,fidelity,textures,geometry,decoders,search,preview}:
+  assets/helmet.glb,gpu,ref3/helmet.gpu.recipe.toon,3294700,260468,7,3.29,0.94,ktx2 etc1s+uastc <=1024px,quantize,ktx2,complete,ref3/helmet.gpu.preview.png
+  assets/helmet.glb,compat,ref3/helmet.compat.recipe.toon,1369624,0,107.2,1.41,0.9,jpeg q25/70 (color/data maps) <=2048px,none,none,complete,ref3/helmet.compat.preview.png
+warnings[1]: "helmet.gpu: output needs the ktx2 decoder (260 KB gzip) in the viewer: three.js loader.setKTX2Loader(new KTX2Loader().setTranscoderPath(...).detectSupport(renderer)); Babylon.js loads it automatically"
+help[2]: Run `node-assets run <recipe> <input> -o <out.glb>` to apply a recipe (add --check on other models to verify it suits them),"Edit a recipe file to mix stages from different goals, then `run` it; full candidate tables: ref3/<name>.tune.toon"

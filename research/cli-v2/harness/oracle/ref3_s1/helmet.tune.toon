@@ -1,0 +1,51 @@
+input: assets/helmet.glb
+limit: fidelity >= 0.9 at 1024px
+candidates[48]{candidate,bytes,decoders,gpu_mib,load_s,fidelity,within_limit}:
+  baseline (cleanup only),3652624,none,107,3.48,0.987,true
+  geometry draco,3293532,draco,107.2,3.19,0.983,true
+  geometry meshopt-high,3398072,meshopt,107.1,3.28,0.982,true
+  textures avif 2048px q90/90,1670888,none,107,1.75,0.956,true
+  "size: avif 2048px q90/90 + draco",1311796,draco,107.2,1.53,0.955,true
+  textures avif 512px q90/90,549700,none,7,0.54,0.71,false
+  textures avif 1024px q90/90,767048,none,27,0.77,0.872,false
+  textures avif 1536px q90/90,1095484,none,60.4,1.17,0.893,false
+  textures avif 2048px q55/55,837240,none,107,0.96,0.9,true
+  textures avif 2048px q35/35,656260,none,107,0.78,0.8,false
+  textures avif 2048px q45/45,713608,none,107,0.85,0.842,false
+  textures avif 2048px q50/50,780720,none,107,0.9,0.875,false
+  textures avif 2048px q35/55,758008,none,107,0.89,0.875,false
+  textures avif 2048px q45/55,783424,none,107,0.92,0.889,false
+  textures avif 2048px q50/55,812512,none,107,0.96,0.896,false
+  textures avif 2048px q55/35,735496,none,107,0.86,0.826,false
+  textures avif 2048px q55/45,767424,none,107,0.89,0.856,false
+  textures avif 2048px q55/50,805448,none,107,0.96,0.881,false
+  geometry draco-low,3272864,draco,107.2,3.18,0.918,true
+  geometry draco-12,3275844,draco,107.2,3.18,0.936,true
+  geometry draco-10,3264792,draco,107.2,3.15,0.828,false
+  geometry meshopt,3447372,meshopt,107,3.33,0.987,true
+  geometry quantize simplify 0.5,3523256,none,106.9,3.39,0.694,false
+  geometry quantize simplify 0.7,3541448,none,106.9,3.35,0.721,false
+  geometry quantize simplify 0.8,3579040,none,107,3.39,0.769,false
+  geometry quantize simplify 0.9,3615480,none,107,3.45,0.9,true
+  geometry draco simplify 0.9,3288832,draco,107.1,3.18,0.899,false
+  geometry meshopt-high simplify 0.9,3384236,meshopt,107.1,3.24,0.899,false
+  "size: avif 2048px q55/55 + draco-low",457480,draco,107.2,0.67,0.877,false
+  "size: avif 2048px q55/55 + draco-12",460460,draco,107.2,0.7,0.874,false
+  "size: avif 2048px q55/55 + draco",478148,draco,107.2,0.68,0.892,false
+  "size: avif 2048px q55/55 + meshopt",631984,meshopt,107,0.77,0.9,true
+  textures webp 2048px q90/90,2537112,none,107,2.5,0.948,true
+  textures webp 512px q90/90,641076,none,7,0.63,0.722,false
+  textures webp 1024px q90/90,1056992,none,27,1.03,0.863,false
+  textures webp 1536px q90/90,1680440,none,60.4,1.64,0.886,false
+  textures webp 2048px q55/55,1202956,none,107,1.24,0.857,false
+  textures webp 2048px q70/70,1388500,none,107,1.41,0.876,false
+  textures webp 2048px q80/80,1699856,none,107,1.72,0.909,true
+  textures webp 2048px q75/75,1452900,none,107,1.49,0.881,false
+  textures webp 2048px q50/80,1425376,none,107,1.48,0.902,true
+  textures webp 2048px q35/80,1339048,none,107,1.38,0.898,false
+  textures webp 2048px q40/80,1373328,none,107,1.42,0.899,false
+  textures webp 2048px q45/80,1398136,none,107,1.44,0.901,true
+  textures webp 2048px q45/50,1123596,none,107,1.18,0.85,false
+  textures webp 2048px q45/65,1205204,none,107,1.22,0.87,false
+  textures webp 2048px q45/70,1241212,none,107,1.32,0.872,false
+  textures webp 2048px q45/75,1270988,none,107,1.29,0.875,false

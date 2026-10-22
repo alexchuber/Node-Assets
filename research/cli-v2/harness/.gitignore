@@ -1,0 +1,9 @@
+# outputs of harness runs
+trials/
+trials2/
+trials2_outputs/
+oracle/refout/
+oracle/assets
+oracle/*.err
+best_known_*.json
+__pycache__/

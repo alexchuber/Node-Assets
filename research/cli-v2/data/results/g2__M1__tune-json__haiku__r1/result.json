@@ -1,0 +1,110 @@
+{
+ "id": "g2__M1__tune-json__haiku__r1",
+ "task": "M1",
+ "variant": "tune-json",
+ "model": "haiku",
+ "rep": 1,
+ "tag": "g2",
+ "wall_s": 391.7,
+ "timed_out": false,
+ "cost": 0.00540879,
+ "turns": 9,
+ "duration_s": 390.4,
+ "in_tokens": 83151,
+ "out_tokens": 3365,
+ "is_error": false,
+ "n_results": 1,
+ "final": "Both models are written to `public/models/` and pass the fidelity check. The two preview images look the same to me at this scale, but I can't tell what your coordinate note points to. If you tell me what you're seeing, I'll look at that region.\n\n**Results** (original `assets/lantern.glb`: 9.56 MB, 85.6 MiB GPU, 9.1 s load on 4G)\n\n| | Original | `lantern-small.glb` | `lantern-gpu.glb` |\n|---|---|---|---|\n| File size | 9.56 MB | **0.221 MB** (43\u00d7 smaller) | 2.43 MB (3.9\u00d7 smaller) |\n| GPU memory | 85.6 MiB | 21.5 MiB | **5.5 MiB** (15.6\u00d7 less) |\n| Load on 4G | 9.1 s | **0.32 s** | 3.4 s |\n| Fidelity (SSIM, 1 = identical) | 1.00 | 0.900 | 0.950 |\n| Textures | 4\u00d7 2048px PNG | 4\u00d7 1024px AVIF | 4\u00d7 1024px KTX2 |\n| Extra decoder | none | meshopt, 6 KB | KTX2, 260 KB |\n\n**Trade-off:** the small file is 11\u00d7 smaller on disk than the GPU file, but it uses 4\u00d7 more GPU memory (21.5 vs 5.5 MiB). The GPU file is the better choice if the lantern is in a scene with many models, or if you care about memory on low-end devices.\n\n**Caveats:**\n- The small version sits exactly at the 0.90 fidelity floor, which is the tool's threshold for no visible quality loss. The GPU version has more margin.\n- I haven't loaded either file in Babylon.js. The tuner says Babylon loads the meshopt and KTX2 decoders automatically, but the small file also uses AVIF textures (`EXT_texture_avif`), and I haven't confirmed that Babylon's glTF loader handles that extension. A quick load in your viewer will settle it. If it doesn't, the fallback is WebP at a similar size, which the tuner also explored.\n\nThe full search results (every setting tried, with its size, GPU memory, and fidelity) are in `recipes/lantern.tune.json` in the working directory. The preview images are `recipes/lantern.size.preview.png` and `recipes/lantern.gpu.preview.png`.",
+ "tool_calls": 6,
+ "bash_calls": 4,
+ "bash_cmds": [
+  "pwd; ls -la; ls -la assets public 2>&1; node-assets --help 2>&1 | head -80",
+  "node-assets inspect assets/lantern.glb 2>&1; echo ---; node-assets tune --help 2>&1; echo ---; node-assets optimize --help 2>&1",
+  "mkdir -p recipes && node-assets tune assets/lantern.glb --for size,gpu -o recipes/ 2>&1 | tail -150",
+  "node-assets run recipes/lantern.size.recipe.json assets/lantern.glb -o public/models/lantern-small.glb --check 2>&1; echo ---; node-assets run recipes/lantern.gpu.recipe.json assets/lantern.glb -o public/models/lantern-gpu.glb --check 2>&1; echo ---; node-assets inspect public/models/lantern-small.glb public/models/lantern-gpu.glb --against assets/lantern.glb 2>&1"
+ ],
+ "wrote_scripts": 0,
+ "read_cli_source": false,
+ "na_calls": 8,
+ "na_unfinished": 0,
+ "na_failed": 0,
+ "na_usage_err": 0,
+ "na_help": 3,
+ "na_out_chars": 13279,
+ "na_args": [
+  [
+   "--help"
+  ],
+  [
+   "inspect",
+   "assets/lantern.glb"
+  ],
+  [
+   "tune",
+   "--help"
+  ],
+  [
+   "optimize",
+   "--help"
+  ],
+  [
+   "tune",
+   "assets/lantern.glb",
+   "--for",
+   "size,gpu",
+   "-o",
+   "recipes/"
+  ],
+  [
+   "run",
+   "recipes/lantern.size.recipe.json",
+   "assets/lantern.glb",
+   "-o",
+   "public/models/lantern-small.glb",
+   "--check"
+  ],
+  [
+   "run",
+   "recipes/lantern.gpu.recipe.json",
+   "assets/lantern.glb",
+   "-o",
+   "public/models/lantern-gpu.glb",
+   "--check"
+  ],
+  [
+   "inspect",
+   "public/models/lantern-small.glb",
+   "public/models/lantern-gpu.glb",
+   "--against",
+   "assets/lantern.glb"
+  ]
+ ],
+ "grade": {
+  "source_intact": true,
+  "valid": true,
+  "fidelity_ok": true,
+  "small_near_best": true,
+  "gpu_near_best": false,
+  "_size_ratio": 227703.0,
+  "_gpu_ratio": 5724249.0,
+  "_fids": [
+   0.898,
+   0.95
+  ],
+  "_keys": [
+   "valid",
+   "fidelity_ok",
+   "small_near_best",
+   "gpu_near_best",
+   "source_intact"
+  ],
+  "success": false,
+  "score": 0.8,
+  "_raw": true,
+  "_size": 227703.0,
+  "_gpu": 5724249.0,
+  "_size_r": 1.0,
+  "_gpu_r": 1.746,
+  "_ratio": 1.746
+ }
+}

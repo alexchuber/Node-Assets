@@ -1,0 +1,14 @@
+limits:
+  fidelity: ">= 0.9 (worst 64px-region SSIM vs original, 4 views at 1024px)"
+  network: 4g (9 Mbps)
+  decoders_amortized_over: 3 asset(s)
+originals[3]{input,bytes,gpu_mib,load_s}:
+  assets/boombox.glb,10614184,85.5,9.71
+  assets/helmet.glb,3773916,107.2,3.62
+  assets/toycar.glb,5422412,38.2,4.97
+results[3]{input,goal,recipe,bytes,decoder_bytes,gpu_mib,load_s,fidelity,textures,geometry,decoders,search,preview}:
+  assets/boombox.glb,size,ref3_s1/boombox.size.recipe.toon,309548,24921,85.5,0.46,0.9,avif q25/90 (color/data maps) <=2048px,draco,draco,complete,ref3_s1/boombox.size.preview.png
+  assets/helmet.glb,size,ref3_s1/helmet.size.recipe.toon,631984,2152,107,0.77,0.9,avif q55/55 (color/data maps) <=2048px,meshopt-medium,meshopt,complete,ref3_s1/helmet.size.preview.png
+  assets/toycar.glb,size,ref3_s1/toycar.size.recipe.toon,287792,24921,6.1,0.35,0.911,avif q55/55 (color/data maps) <=256px,draco,draco,complete,ref3_s1/toycar.size.preview.png
+warnings[3]: "boombox.size: output needs the draco decoder (75 KB gzip) in the viewer: three.js loader.setDRACOLoader(new DRACOLoader().setDecoderPath(...)); Babylon.js loads it automatically","helmet.size: output needs the meshopt decoder (6 KB gzip) in the viewer: three.js loader.setMeshoptDecoder(MeshoptDecoder); Babylon.js loads it automatically","toycar.size: output needs the draco decoder (75 KB gzip) in the viewer: three.js loader.setDRACOLoader(new DRACOLoader().setDecoderPath(...)); Babylon.js loads it automatically"
+help[2]: Run `node-assets run <recipe> <input> -o <out.glb>` to apply a recipe (add --check on other models to verify it suits them),"Edit a recipe file to mix stages from different goals, then `run` it; full candidate tables: ref3_s1/<name>.tune.toon"
