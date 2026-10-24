@@ -10,12 +10,16 @@ export default defineConfig({
         minify: false,
         sourcemap: true,
         lib: {
-            entry: "src/cli.ts",
+            entry: { cli: "src/cli.ts", render: "src/render/index.ts" },
             formats: ["es"],
-            fileName: () => "cli.js",
+            fileName: (_format, name) => `${name}.js`,
         },
         rollupOptions: {
-            external: (id) => isBuiltin(id) || id === "@babylonjs/node-assets",
+            external: (id) =>
+                isBuiltin(id) ||
+                ["@babylonjs/node-assets", "@gltf-transform/core", "@gltf-transform/extensions", "draco3dgltf", "meshoptimizer", "playwright-core"].some(
+                    (name) => id === name || id.startsWith(`${name}/`)
+                ),
         },
     },
 });
