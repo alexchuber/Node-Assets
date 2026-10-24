@@ -3,8 +3,16 @@ import type { ResourceDependencies, ResourceValues } from "../resources/resource
 
 declare const configType: unique symbol;
 
+/** Validation metadata for a block configuration value. */
+export type ConfigDescriptor =
+    | { readonly kind: "boolean" }
+    | { readonly kind: "integer" | "number"; readonly min?: number; readonly max?: number }
+    | { readonly kind: "enum"; readonly values: readonly string[] }
+    | { readonly kind: "custom" };
+
 export interface ConfigValue<TValue> {
     readonly defaultValue: TValue;
+    readonly descriptor: ConfigDescriptor;
     readonly [configType]: TValue;
     is(value: unknown): value is TValue;
 }
@@ -21,13 +29,54 @@ export type AuxiliaryInputValues<TInputs extends AuxiliaryInputDefinition> = {
 };
 
 export function value<TValue>(type: ConnectionPointType<TValue>, defaultValue: TValue): ConfigValue<TValue> {
-    return Object.freeze({ defaultValue, is: type.is }) as ConfigValue<TValue>;
+    return Object.freeze({ defaultValue, descriptor: Object.freeze({ kind: "custom" }), is: type.is }) as ConfigValue<TValue>;
+}
+
+/** Describes a boolean configuration value. */
+export function booleanValue(defaultValue: boolean): ConfigValue<boolean> {
+    return Object.freeze({
+        defaultValue,
+        descriptor: Object.freeze({ kind: "boolean" }),
+        is: (value: unknown): value is boolean => typeof value === "boolean",
+    }) as ConfigValue<boolean>;
+}
+
+/** Inclusive bounds for numeric configuration values. */
+export interface ConfigRange {
+    readonly min?: number;
+    readonly max?: number;
+}
+
+/** Describes a finite integer configuration value with optional inclusive bounds. */
+export function integerValue(defaultValue: number, range: ConfigRange = {}): ConfigValue<number> {
+    return numericValue("integer", defaultValue, range);
+}
+
+/** Describes a finite numeric configuration value with optional inclusive bounds. */
+export function numberValue(defaultValue: number, range: ConfigRange = {}): ConfigValue<number> {
+    return numericValue("number", defaultValue, range);
+}
+
+function numericValue(kind: "integer" | "number", defaultValue: number, range: ConfigRange): ConfigValue<number> {
+    const descriptor = Object.freeze({ kind, ...range });
+    return Object.freeze({
+        defaultValue,
+        descriptor,
+        is: (value: unknown): value is number =>
+            typeof value === "number" &&
+            Number.isFinite(value) &&
+            (kind !== "integer" || Number.isInteger(value)) &&
+            (descriptor.min === undefined || value >= descriptor.min) &&
+            (descriptor.max === undefined || value <= descriptor.max),
+    }) as ConfigValue<number>;
 }
 
 export function enumValue<const TValues extends readonly [string, ...string[]]>(values: TValues, defaultValue: TValues[number] = values[0]): ConfigValue<TValues[number]> {
+    const choices = Object.freeze([...values]);
     return Object.freeze({
         defaultValue,
-        is: (value: unknown): value is TValues[number] => typeof value === "string" && values.includes(value),
+        descriptor: Object.freeze({ kind: "enum", values: choices }),
+        is: (value: unknown): value is TValues[number] => typeof value === "string" && choices.includes(value),
     }) as ConfigValue<TValues[number]>;
 }
 

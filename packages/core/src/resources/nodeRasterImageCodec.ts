@@ -1,7 +1,7 @@
 import type sharpFactory from "sharp";
 
 import { fitImageSize } from "../helpers/fitImageSize";
-import { validateDecodedRasterImage, type DecodedRasterImage, type RasterImageCodec, type RasterImageMimeType } from "./rasterImageCodec";
+import { validateDecodedRasterImage, type DecodedRasterImage, type RasterImageCodec, type RasterImageEncodeOptions, type RasterImageMimeType } from "./rasterImageCodec";
 
 export class NodeRasterImageCodec implements RasterImageCodec {
     #sharpPromise: Promise<typeof sharpFactory> | undefined;
@@ -17,11 +17,11 @@ export class NodeRasterImageCodec implements RasterImageCodec {
         };
     }
 
-    public async encodeAsync(image: DecodedRasterImage, mimeType: RasterImageMimeType): Promise<Uint8Array> {
+    public async encodeAsync(image: DecodedRasterImage, mimeType: RasterImageMimeType, options?: RasterImageEncodeOptions): Promise<Uint8Array> {
         validateDecodedRasterImage(image);
         const sharp = await this.#getSharpAsync();
         return sharp(image.data, { raw: { channels: 4, height: image.height, width: image.width } })
-            .toFormat(toSharpFormat(mimeType))
+            .toFormat(toSharpFormat(mimeType), mimeType === "image/png" ? {} : options)
             .toBuffer();
     }
 
@@ -56,8 +56,8 @@ export class NodeRasterImageCodec implements RasterImageCodec {
     }
 }
 
-function toSharpFormat(mimeType: RasterImageMimeType): "jpeg" | "png" | "webp" {
-    return mimeType === "image/jpeg" ? "jpeg" : mimeType === "image/png" ? "png" : "webp";
+function toSharpFormat(mimeType: RasterImageMimeType): "jpeg" | "png" | "webp" | "avif" {
+    return mimeType === "image/jpeg" ? "jpeg" : mimeType === "image/png" ? "png" : mimeType === "image/avif" ? "avif" : "webp";
 }
 
 async function loadSharpAsync(): Promise<typeof sharpFactory> {

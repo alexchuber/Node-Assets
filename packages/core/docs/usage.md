@@ -24,28 +24,70 @@ Relative paths use the working directory.
 USD input requires a global `Worker`. On Node versions that offer it behind a flag,
 such as Node 26, run with `--experimental-web-worker`.
 
-# Example: CLI run reports
+See the [CLI guide](../../cli/README.md) for command syntax and run reports.
 
-```sh
-node-assets pipeline input.glb draco output.glb --stats --benchmark
+# Serializing graphs
+
+`parseGraph(value: unknown): Graph` reads plain objects with `graph: 1` and a
+nonempty `blocks` array. Only built-in transform blocks are accepted; callers
+supply input and output blocks. Each transform takes its input from the previous
+block unless `input` names an earlier block's `id`. There must be one external
+input and one sink. Auxiliary inputs are not supported in version 1.
+
+```ts
+const graph = parseGraph({
+    graph: 1,
+    blocks: [{ type: "transform.dedup" }, { type: "transform.quantize" }],
+});
+const source = new GltfInputBlock({ input: "box.glb" });
+const destination = new GltfOutputBlock();
+source.output.connectTo(graph.head.input);
+graph.tail.output.connectTo(destination.input);
+const asset = new NodeAsset({ name: "serialized-graph", outputBlock: destination });
+const result = await asset.executeAsync();
+const saved = serializeGraph(graph.blocks);
 ```
 
-Both flags are optional and can be used independently. `--stats` reports the total
-size before and after, comparing the named input file with the written
-output file. External buffers and images referenced by a glTF input are not
-included in the input file size.
+To supply an existing glTF Transform `Document`, leave `head.input` unconnected:
 
-`--benchmark` reports elapsed time and CPU time for pipeline creation, execution,
-output writing, and disposal. It also reports process RSS and heap usage at
-completion, plus peak RSS over the process lifetime. Reports are printed only
-after a successful run. The total size before selects the unit for both size
-totals, using 1024-based units (B, KiB, MiB, GiB, TiB, PiB). Completion time selects
-the unit for all timing rows (ms, s, min, h). Memory values scale independently.
-Times and sizes above bytes use two decimal places; bytes remain whole numbers.
-Unit selection advances to the next unit when rounding reaches its boundary.
-The CLI does not overwrite an existing output file. To repeat a run, such as a
-benchmark, add `--force` to replace the output.
-See the [CLI guide](../../cli/README.md) for command syntax.
+```ts
+const graph = parseGraph({ graph: 1, blocks: [{ type: "transform.dedup" }] });
+const destination = new GltfOutputBlock();
+graph.tail.output.connectTo(destination.input);
+const asset = new NodeAsset({ name: "document-graph", outputBlock: destination });
+const context = new NodeAssetContext(asset);
+context.setInput(graph.head, document);
+const result = await asset.executeAsync(context);
+```
+
+`serializeGraph(blocks, { defaults: true })` includes every configuration key;
+by default it omits keys whose values equal their defaults. Blocks must be in
+dependency order. Serialization preserves connections, not block names or
+caller-assigned IDs; IDs and input references are emitted only for non-previous
+sources. Input/output blocks outside the supplied array are not serialized.
+
+Invalid objects, unknown keys/types/versions, invalid configuration, duplicate
+IDs, forward/missing references, and graphs with multiple sinks throw
+`GraphError`. Its `path` locates the problem (for example,
+`blocks[3].config.quality`) and its optional `hint` describes valid values.
+
+# Encoding textures
+
+Use `ResizeTexturesBlock({ maxSize: 2048, slots: "all" })` before
+`EncodeTexturesBlock({ format: "webp", quality: 80, slots: "all" })`.
+Resizing fits the longer side without upscaling and preserves JPEG, PNG, or
+WebP format. Encoding accepts JPEG, PNG, WebP, and AVIF, with targets `webp`,
+`avif`, `jpeg`, or `png`. Quality is an integer from 1 to 100, passed unchanged
+to the encoder and ignored for PNG. JPEG falls back to PNG for non-opaque alpha.
+
+`slots` selects `all`, `color`, or `data`. Slots that hold sRGB color (base color,
+emissive, diffuse, specular-glossiness, sheen color, and specular color) count as
+color; all other slots count as data.
+Textures shared by color and data slots remain unchanged. `all` also includes
+unused textures. Larger encodes are discarded, except when converting WebP or
+AVIF to JPEG/PNG for compatibility. Image URI extensions and required
+`EXT_texture_webp`/`EXT_texture_avif` declarations follow the resulting formats.
+AVIF processing requires the Node codec (Sharp); the browser codec rejects it.
 
 # Example: Compressing GLB
 
@@ -71,12 +113,21 @@ const result = await asset.executeAsync();
 
 # Encoding KTX2 textures
 
-`EncodeKTX2Block` infers encoding from material usage:
+`EncodeKTX2Block` defaults to `mode: "auto"`, `slots: "all"`,
+`etc1sQuality: 150`, `uastcQuality: 2`, and `zstd: true`. Auto mode infers encoding
+from material usage for JPEG/PNG/WebP inputs (AVIF remains unchanged):
 
 - Color textures use ETC1S with an sRGB transfer function.
 - Normal and other data textures use UASTC with a linear transfer function.
 - Unused textures default to UASTC and linear.
+- Legacy specular/glossiness slots retain their existing data-texture treatment;
+  use `MetalRoughBlock` first to convert those materials.
 - Textures shared across color, normal, or other data categories remain unchanged.
+
+Set `mode: "etc1s"` or `"uastc"` to override the compression mode without changing
+the inferred transfer function. `slots` selects `all`, `color`, or `data`.
+`etc1sQuality` ranges from 1 to 255, `uastcQuality` from 0 to 4, and `zstd`
+controls supercompression only for UASTC.
 
 # Creating blocks
 

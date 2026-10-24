@@ -1,5 +1,5 @@
 import { fitImageSize } from "../helpers/fitImageSize";
-import { validateDecodedRasterImage, type DecodedRasterImage, type RasterImageCodec, type RasterImageMimeType } from "./rasterImageCodec";
+import { validateDecodedRasterImage, type DecodedRasterImage, type RasterImageCodec, type RasterImageEncodeOptions, type RasterImageMimeType } from "./rasterImageCodec";
 
 type RasterCanvas = HTMLCanvasElement | OffscreenCanvas;
 type RasterCanvasContext = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
@@ -15,6 +15,7 @@ export class WebRasterImageCodec implements RasterImageCodec {
 
     public decodeAsync(image: Uint8Array, mimeType: RasterImageMimeType): Promise<DecodedRasterImage> {
         return this.#acceptAsync(async () => {
+            rejectAvif(mimeType);
             if (isWebP(image) && typeof globalThis.document !== "undefined" && typeof globalThis.Image !== "undefined") {
                 const source = await decodeImageElementAsync(image, mimeType);
                 return await this.#withCanvasAsync(source.width, source.height, (context) => {
@@ -39,18 +40,20 @@ export class WebRasterImageCodec implements RasterImageCodec {
         });
     }
 
-    public encodeAsync(image: DecodedRasterImage, mimeType: RasterImageMimeType): Promise<Uint8Array> {
+    public encodeAsync(image: DecodedRasterImage, mimeType: RasterImageMimeType, options?: RasterImageEncodeOptions): Promise<Uint8Array> {
         return this.#acceptAsync(async () => {
+            rejectAvif(mimeType);
             validateDecodedRasterImage(image);
             return this.#withCanvasAsync(image.width, image.height, async (context, canvas) => {
                 context.putImageData(new ImageData(new Uint8ClampedArray(image.data), image.width, image.height), 0, 0);
-                return encodeCanvasAsync(canvas, mimeType);
+                return encodeCanvasAsync(canvas, mimeType, options?.quality);
             });
         });
     }
 
     public resizeAsync(image: Uint8Array, mimeType: RasterImageMimeType, maxSize: number): Promise<Uint8Array | null> {
         return this.#acceptAsync(async () => {
+            rejectAvif(mimeType);
             if (typeof createImageBitmap !== "function") {
                 throw new Error("Texture resizing requires createImageBitmap in this browser.");
             }
@@ -204,19 +207,26 @@ function toBlobPart(image: Uint8Array): BlobPart {
     return image.buffer instanceof ArrayBuffer ? new Uint8Array(image.buffer, image.byteOffset, image.byteLength) : Uint8Array.from(image);
 }
 
-async function encodeCanvasAsync(canvas: RasterCanvas, mimeType: RasterImageMimeType): Promise<Uint8Array> {
+async function encodeCanvasAsync(canvas: RasterCanvas, mimeType: RasterImageMimeType, quality?: number): Promise<Uint8Array> {
+    const canvasQuality = mimeType === "image/png" || quality === undefined ? undefined : quality / 100;
     let blob: Blob;
     if (typeof OffscreenCanvas !== "undefined" && canvas instanceof OffscreenCanvas) {
-        blob = await canvas.convertToBlob({ type: mimeType });
+        blob = await canvas.convertToBlob({ type: mimeType, ...(canvasQuality === undefined ? {} : { quality: canvasQuality }) });
     } else {
         blob = await new Promise<Blob>((resolve, reject) => {
-            (canvas as HTMLCanvasElement).toBlob((result) => (result === null ? reject(new Error("Unable to encode raster texture.")) : resolve(result)), mimeType);
+            (canvas as HTMLCanvasElement).toBlob((result) => (result === null ? reject(new Error("Unable to encode raster texture.")) : resolve(result)), mimeType, canvasQuality);
         });
     }
     if (blob.type !== mimeType) {
         throw new Error(`This browser cannot encode ${mimeType} textures.`);
     }
     return new Uint8Array(await blob.arrayBuffer());
+}
+
+function rejectAvif(mimeType: RasterImageMimeType): void {
+    if (mimeType === "image/avif") {
+        throw new Error("AVIF texture processing requires the Node raster image codec (Sharp).");
+    }
 }
 
 function isWebP(image: Uint8Array): boolean {

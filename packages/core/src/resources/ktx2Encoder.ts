@@ -10,6 +10,8 @@ export interface KTX2EncodeOptions {
     readonly isSetKTX2SRGBTransferFunc: boolean;
     readonly isUASTC?: boolean;
     readonly useZstdSupercompression?: boolean;
+    readonly etc1sQuality?: number;
+    readonly uastcQuality?: number;
 }
 
 export class KTX2Encoder {
@@ -58,6 +60,12 @@ export class KTX2Encoder {
         }
         if (useZstdSupercompression !== undefined) {
             encodeOptions.needSupercompression = useZstdSupercompression;
+        }
+        if (options.etc1sQuality !== undefined) {
+            encodeOptions.qualityLevel = options.etc1sQuality;
+        }
+        if (options.uastcQuality !== undefined) {
+            encodeOptions.uastcLDRQualityLevel = options.uastcQuality;
         }
         const encoded = await encodeToKTX2(new Uint8Array(), encodeOptions);
         return encoded.byteOffset === 0 && encoded.byteLength === encoded.buffer.byteLength ? encoded : Uint8Array.from(encoded);

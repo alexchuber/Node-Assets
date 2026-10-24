@@ -33,7 +33,7 @@ export type BlockOptions<TDefinition extends _AnyBlockDefinition> = Partial<Conf
 };
 
 /** A typed processing step in a node asset graph. */
-export class Block<TDefinition extends _AnyBlockDefinition> {
+export class Block<TDefinition extends _AnyBlockDefinition = _AnyBlockDefinition> {
     public readonly name: string;
     public readonly input: BlockInputPort<TDefinition>;
     public readonly auxiliaryInputs: AuxiliaryInputPorts<TDefinition["auxiliaryInputs"]>;
@@ -53,11 +53,9 @@ export class Block<TDefinition extends _AnyBlockDefinition> {
     }
 }
 
-type BlockInputPort<TDefinition extends _AnyBlockDefinition> = [TDefinition["input"]] extends [undefined]
-    ? undefined
-    : undefined extends TDefinition["input"]
-      ? InputPort<Extract<TDefinition["input"], ConnectionPointType<unknown>>> | undefined
-      : InputPort<Extract<TDefinition["input"], ConnectionPointType<unknown>>>;
+type BlockInputPort<TDefinition extends _AnyBlockDefinition> = InputPortForType<TDefinition["input"]>;
+
+type InputPortForType<TType> = TType extends ConnectionPointType<unknown> ? InputPort<TType> : undefined;
 
 export type AuxiliaryInputPorts<TInputs extends AuxiliaryInputDefinition> = {
     readonly [TName in keyof TInputs]: InputPort<TInputs[TName]>;

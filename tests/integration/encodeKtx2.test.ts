@@ -1,5 +1,5 @@
 import { Document } from "@gltf-transform/core";
-import { EXTTextureWebP } from "@gltf-transform/extensions";
+import { EXTTextureWebP, KHRMaterialsPBRSpecularGlossiness } from "@gltf-transform/extensions";
 import { describe, expect, it, vi } from "vitest";
 
 import { EncodeKTX2Block, FbxInputBlock, GltfInputBlock, GltfOutputBlock, NodeAsset, ObjInputBlock } from "../../packages/core/src/index";
@@ -8,8 +8,63 @@ import { expectKtx2Image, getTextureImageIndex, parseGlbAsync } from "../helpers
 import { generateTexturedGltfJson } from "../helpers/gltf";
 import { withHttpInputsAsync } from "../helpers/input";
 import { generateMtlData, generateTexturedObjData, generateTextureData } from "../helpers/obj";
+import { KTX2Encoder } from "../../packages/core/src/resources/ktx2Encoder";
+import { NodeRasterImageCodec } from "../../packages/core/src/resources/nodeRasterImageCodec";
+import { createRasterImageAsync } from "../helpers/document";
 
 describe("KTX2 encoding", () => {
+    it("retains legacy handling of specular/glossiness slots and AVIF inputs", async () => {
+        const document = new Document();
+        const extension = document.createExtension(KHRMaterialsPBRSpecularGlossiness);
+        const texture = document.createTexture().setImage(generateTextureData()).setMimeType("image/png");
+        document.createMaterial().setExtension(extension.extensionName, extension.createPBRSpecularGlossiness().setSpecularGlossinessTexture(texture));
+        const image = await createRasterImageAsync("avif");
+        const avif = document.createTexture().setImage(image).setMimeType("image/avif");
+        await new NodeAsset({ name: "legacy-ktx2", outputBlock: new EncodeKTX2Block({ input: document }) }).executeAsync();
+        expect(readKtx2Encoding(texture.getImage()!)).toEqual({ mode: 166, transfer: 1, supercompression: 2 });
+        expect(avif.getImage()).toBe(image);
+        expect(avif.getMimeType()).toBe("image/avif");
+    });
+
+    it("uses UASTC for color when requested and filters selected slots", async () => {
+        const document = new Document();
+        const image = generateTextureData();
+        const color = document.createTexture().setImage(image).setMimeType("image/png");
+        const data = document.createTexture().setImage(image).setMimeType("image/png");
+        document.createMaterial().setBaseColorTexture(color).setOcclusionTexture(data);
+        await new NodeAsset({ name: "color-uastc", outputBlock: new EncodeKTX2Block({ input: document, mode: "uastc", slots: "color", zstd: false }) }).executeAsync();
+        expect(readKtx2Encoding(color.getImage()!)).toEqual({ mode: 166, transfer: 2, supercompression: 0 });
+        expect(data.getImage()).toBe(image);
+    });
+
+    it.each(["color", "data"] as const)("preserves the previous %s encoding byte for byte with default config", async (usage) => {
+        const document = new Document();
+        const image = generateTextureData();
+        const texture = document.createTexture().setMimeType("image/png").setImage(image);
+        const material = document.createMaterial();
+        if (usage === "color") {
+            material.setBaseColorTexture(texture);
+        } else {
+            material.setOcclusionTexture(texture);
+        }
+        const codec = new NodeRasterImageCodec();
+        try {
+            const decoded = await codec.decodeAsync(image, "image/png");
+            const color = usage === "color";
+            const baseline = await new KTX2Encoder().encodeAsync(decoded, {
+                ...(color ? {} : { isNormalMap: false }),
+                isPerceptual: color,
+                isSetKTX2SRGBTransferFunc: color,
+                isUASTC: !color,
+                useZstdSupercompression: !color,
+            });
+            await new NodeAsset({ name: "default-ktx2", outputBlock: new EncodeKTX2Block({ input: document }) }).executeAsync();
+            expect(texture.getImage()).toEqual(baseline);
+        } finally {
+            await codec.disposeAsync();
+        }
+    });
+
     it("exports embedded KTX2 textures", async () => {
         const url = "https://example.com/model.gltf";
         vi.stubGlobal(

@@ -1,10 +1,38 @@
+import { createHash } from "node:crypto";
+
 import { describe, expect, it, vi } from "vitest";
 
 import { EncodeDracoBlock, GltfInputBlock, GltfOutputBlock, NodeAsset } from "../../packages/core/src/index";
 import { parseGlbAsync } from "../helpers/glb";
 import { generateGltfJson } from "../helpers/gltf";
+import { createGridDocument } from "../helpers/document";
 
 describe("Draco encoding", () => {
+    it("preserves legacy draco() output byte for byte with default config", async () => {
+        const block = new EncodeDracoBlock({ input: createGridDocument() });
+        const output = new GltfOutputBlock();
+        block.output.connectTo(output.input);
+        const result = await new NodeAsset({ name: "legacy-draco", outputBlock: output }).executeAsync();
+        // Captured from glTF Transform 4.5.0 draco() without configuration.
+        expect(
+            createHash("sha256")
+                .update(new Uint8Array(await result.arrayBuffer()))
+                .digest("hex")
+        ).toBe("1d58058301ea95582885a3e683ce7029bdfb8a9caa1e6cbd52ff204d231fc439");
+    });
+
+    it("changes encoded bytes with non-default position quantization", async () => {
+        const encode = async (quantizePosition: number): Promise<File> => {
+            const block = new EncodeDracoBlock({ input: createGridDocument(), quantizePosition });
+            const output = new GltfOutputBlock();
+            block.output.connectTo(output.input);
+            return new NodeAsset({ name: "draco-quantization", outputBlock: output }).executeAsync();
+        };
+        const fine = await encode(14);
+        const coarse = await encode(6);
+        expect(coarse.size).toBeLessThan(fine.size);
+    });
+
     it("encodes connected glTF output", async () => {
         const parsed = await withGltfFetchAsync(async (url) => {
             const source = new GltfInputBlock({ input: url });
