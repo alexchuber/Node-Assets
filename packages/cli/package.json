@@ -26,7 +26,8 @@
         "node": "^20.19.0 || ^22.13.0 || >=24"
     },
     "scripts": {
-        "build": "vite build && vite build --config vite.render.config.ts"
+        "build": "vite build && vite build --config vite.render.config.ts",
+        "calibrate:build": "vite build --config vite.calibrate.config.ts"
     },
     "dependencies": {
         "@babylonjs/core": "^9.27.1",

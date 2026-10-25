@@ -63,7 +63,18 @@ const internalNamingPlugin = {
 
 export default tseslint.config(
     {
-        ignores: ["**/dist/**", "**/node_modules/**", "test-results/**", "docs/**", "research/**", "packages/core/docs/typedocs/**", "packages/core/.cache/**", "**/*.md"],
+        ignores: [
+            "**/dist/**",
+            "**/node_modules/**",
+            "test-results/**",
+            "docs/**",
+            "research/**",
+            "packages/core/docs/typedocs/**",
+            "packages/core/.cache/**",
+            "packages/cli/.cache/**",
+            "packages/cli/.dev/**",
+            "**/*.md",
+        ],
     },
 
     js.configs.recommended,

@@ -1,5 +1,7 @@
 import { ImageUtils, type Document } from "@gltf-transform/core";
 
+import calibration from "./loadModel.coefficients.json";
+
 export interface LoadFeatures {
     readonly [feature: string]: number;
 }
@@ -35,22 +37,8 @@ export function features(doc: Document, totalBytes: number): LoadFeatures {
     return result;
 }
 
-// Provisional coefficients in milliseconds, retained from the prototype's cold Chromium load model.
-export const COEF = {
-    c0: 38.28,
-    draco: 39.84,
-    meshopt: 0,
-    ktx2: 271.48,
-    draco_mb: 180.93,
-    meshopt_mb: 19.58,
-    plain_mb: 7.53,
-    mp_avif: 9,
-    mp_webp: 8.77,
-    mp_jpeg: 8.41,
-    mp_png: 13.27,
-    mp_ktx2: 22.03,
-};
-export const COEF_SOURCE = "provisional: calib_load.json (headless Chromium, SwiftShader, 2 CPUs)";
+export const COEF = calibration.coefficients;
+export const COEF_SOURCE = calibration.source;
 
 export function decodeMs(value: LoadFeatures): number {
     let ms = COEF.c0;

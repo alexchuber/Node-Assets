@@ -15,3 +15,5 @@ packages/core/.cache/usd/
 
 .obsidian/
 .worktrees/
+packages/cli/.cache/
+packages/cli/.dev/

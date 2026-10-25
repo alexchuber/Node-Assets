@@ -3,3 +3,5 @@ node_modules/
 test-results/
 packages/core/docs/typedocs
 pnpm-lock.yaml
+packages/cli/.cache/
+packages/cli/.dev/

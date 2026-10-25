@@ -1,0 +1,18 @@
+{
+    "coefficients": {
+        "c0": 38.28,
+        "draco": 39.84,
+        "meshopt": 0,
+        "ktx2": 271.48,
+        "draco_mb": 180.93,
+        "meshopt_mb": 19.58,
+        "plain_mb": 7.53,
+        "mp_avif": 9,
+        "mp_webp": 8.77,
+        "mp_jpeg": 8.41,
+        "mp_png": 13.27,
+        "mp_ktx2": 22.03
+    },
+    "source": "provisional (research prototype)",
+    "fitted": null
+}
