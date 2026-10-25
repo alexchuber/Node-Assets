@@ -84,6 +84,20 @@ export function codecBuildPlugin(): Plugin {
             return { code: transformed, map: null };
         },
         async generateBundle() {
+            const encoderEntry = await resolvePackage?.("babylonpress-ktx2-encoder", fileURLToPath(import.meta.url));
+            if (encoderEntry === undefined) {
+                throw new Error("Unable to resolve the KTX2 encoder package.");
+            }
+            const encoderRoot = await findPackageRootAsync(encoderEntry, "babylonpress-ktx2-encoder");
+            const decoderRoot = resolve(dirname(createRequire(import.meta.url).resolve("@babylonjs/ktx2decoder/wasm/msc_basis_transcoder.js")), "..");
+            const notices = [
+                { source: resolve(encoderRoot, "LICENSE"), fileName: "licenses/babylonpress-ktx2-encoder/LICENSE" },
+                { source: resolve(decoderRoot, "license.md"), fileName: "licenses/@babylonjs/ktx2decoder/license.md" },
+                { source: resolve(decoderRoot, "NOTICE.md"), fileName: "licenses/@babylonjs/ktx2decoder/NOTICE.md" },
+            ];
+            for (const { source, fileName } of notices) {
+                this.emitFile({ type: "asset", fileName, source: await readFile(source) });
+            }
             if (!usdFiles) {
                 return;
             }
@@ -97,4 +111,14 @@ export function codecBuildPlugin(): Plugin {
             }
         },
     };
+}
+
+async function findPackageRootAsync(entry: string, name: string): Promise<string> {
+    for (let directory = dirname(entry); directory !== dirname(directory); directory = dirname(directory)) {
+        const manifest = await readFile(resolve(directory, "package.json"), "utf8").catch(() => undefined);
+        if (manifest !== undefined && (JSON.parse(manifest) as { name?: string }).name === name) {
+            return directory;
+        }
+    }
+    throw new Error(`Unable to locate the "${name}" package root.`);
 }
