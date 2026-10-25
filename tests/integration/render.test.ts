@@ -1,3 +1,6 @@
+import { readFile } from "node:fs/promises";
+import { createRequire } from "node:module";
+import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { Document, NodeIO } from "@gltf-transform/core";
@@ -35,6 +38,21 @@ describe.skipIf(!browser)("offline fidelity renderer", () => {
     afterAll(async () => {
         await renderer.stop();
         console.info("Renderer scores:", scores);
+    });
+
+    it("ships licenses and notices for the bundled browser packages", async () => {
+        const require = createRequire(import.meta.url);
+        const renderRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../packages/cli/dist/render");
+        for (const [packageName, names] of [
+            ["@babylonjs/core", ["license.md", "NOTICE.md"]],
+            ["@babylonjs/loaders", ["license.md"]],
+            ["@babylonjs/ktx2decoder", ["license.md", "NOTICE.md"]],
+        ] as const) {
+            const sourceRoot = dirname(require.resolve(`${packageName}/package.json`, { paths: [resolve(renderRoot, "../..")] }));
+            for (const name of names) {
+                expect(await readFile(resolve(renderRoot, "licenses", packageName, name), "utf8")).toBe(await readFile(resolve(sourceRoot, name), "utf8"));
+            }
+        }
     });
 
     it("scores an identical model and creates a side-by-side PNG", async () => {

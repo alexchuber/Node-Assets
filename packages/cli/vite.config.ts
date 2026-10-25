@@ -1,16 +1,17 @@
 import { isBuiltin } from "node:module";
 import { cp } from "node:fs/promises";
+import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { defineConfig } from "vite";
 
 export default defineConfig({
-    root: fileURLToPath(new URL(".", import.meta.url)),
+    root: dirname(fileURLToPath(import.meta.url)),
     plugins: [
         {
             name: "bundled-node-assets-core",
             async writeBundle(options) {
-                await cp(new URL("../core/dist/", import.meta.url), `${options.dir}/core`, { recursive: true });
+                await cp(resolve(dirname(fileURLToPath(import.meta.url)), "../core/dist"), `${options.dir}/core`, { recursive: true });
             },
         },
     ],

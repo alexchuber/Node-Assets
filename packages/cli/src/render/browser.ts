@@ -1,38 +1,69 @@
-import { access } from "node:fs/promises";
+import { access, stat } from "node:fs/promises";
 import { constants } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { posix, win32 } from "node:path";
 
 export interface BrowserLocation {
     readonly executablePath: string;
     readonly name: string;
 }
 
-/** Finds a browser without launching it. Throws an actionable NO_BROWSER error if none is installed. */
-export async function findBrowser(): Promise<BrowserLocation> {
+/** Lists installed-browser candidates in discovery order, without filesystem probes or browser launches. */
+export function browserCandidates({ platform, env, home }: { readonly platform: NodeJS.Platform; readonly env: NodeJS.ProcessEnv; readonly home: string }): BrowserLocation[] {
     const candidates: BrowserLocation[] = [];
-    if (process.env.NODE_ASSETS_CHROMIUM) candidates.push({ executablePath: process.env.NODE_ASSETS_CHROMIUM, name: "Chromium" });
-    if (process.platform === "darwin") {
-        for (const root of ["/Applications", join(homedir(), "Applications")]) {
-            candidates.push({ executablePath: join(root, "Google Chrome.app/Contents/MacOS/Google Chrome"), name: "Chrome" });
+    if (env.NODE_ASSETS_CHROMIUM) candidates.push({ executablePath: env.NODE_ASSETS_CHROMIUM, name: "Chromium" });
+    if (platform === "darwin") {
+        for (const root of ["/Applications", posix.join(home, "Applications")]) {
+            candidates.push({ executablePath: posix.join(root, "Google Chrome.app/Contents/MacOS/Google Chrome"), name: "Chrome" });
         }
-        for (const root of ["/Applications", join(homedir(), "Applications")]) {
-            candidates.push({ executablePath: join(root, "Microsoft Edge.app/Contents/MacOS/Microsoft Edge"), name: "Edge" });
+        for (const root of ["/Applications", posix.join(home, "Applications")]) {
+            candidates.push({ executablePath: posix.join(root, "Microsoft Edge.app/Contents/MacOS/Microsoft Edge"), name: "Edge" });
         }
-    } else if (process.platform === "win32") {
-        const roots = [process.env.PROGRAMFILES, process.env["PROGRAMFILES(X86)"], process.env.LOCALAPPDATA].filter((root): root is string => !!root);
-        for (const root of roots) candidates.push({ executablePath: join(root, "Google/Chrome/Application/chrome.exe"), name: "Chrome" });
-        for (const root of roots) candidates.push({ executablePath: join(root, "Microsoft/Edge/Application/msedge.exe"), name: "Edge" });
+    } else if (platform === "win32") {
+        const roots = [env.ProgramFiles ?? env.PROGRAMFILES, env["ProgramFiles(x86)"] ?? env["PROGRAMFILES(X86)"], env.LocalAppData ?? env.LOCALAPPDATA].filter(
+            (root): root is string => !!root
+        );
+        for (const root of roots) candidates.push({ executablePath: win32.join(root, "Google/Chrome/Application/chrome.exe"), name: "Chrome" });
+        for (const root of roots) candidates.push({ executablePath: win32.join(root, "Microsoft/Edge/Application/msedge.exe"), name: "Edge" });
     } else {
-        for (const executablePath of ["/opt/google/chrome/chrome", "/usr/bin/google-chrome", "/usr/bin/google-chrome-stable"]) {
+        const onPath = (commands: readonly string[]) => commands.flatMap((command) => (env.PATH ? env.PATH.split(":").map((root) => posix.join(root || ".", command)) : []));
+        for (const executablePath of new Set([
+            ...onPath(["google-chrome", "google-chrome-stable"]),
+            "/opt/google/chrome/chrome",
+            "/usr/bin/google-chrome",
+            "/usr/bin/google-chrome-stable",
+        ])) {
             candidates.push({ executablePath, name: "Chrome" });
         }
-        for (const executablePath of ["/opt/microsoft/msedge/msedge", "/usr/bin/microsoft-edge", "/usr/bin/microsoft-edge-stable"]) {
+        for (const executablePath of new Set([
+            ...onPath(["microsoft-edge", "microsoft-edge-stable"]),
+            "/opt/microsoft/msedge/msedge",
+            "/usr/bin/microsoft-edge",
+            "/usr/bin/microsoft-edge-stable",
+        ])) {
             candidates.push({ executablePath, name: "Edge" });
         }
+        for (const executablePath of new Set([...onPath(["chromium", "chromium-browser"]), "/usr/bin/chromium", "/usr/bin/chromium-browser", "/snap/bin/chromium"])) {
+            candidates.push({ executablePath, name: "Chromium" });
+        }
     }
+    return candidates.filter((candidate, index) => candidates.findIndex(({ executablePath }) => executablePath === candidate.executablePath) === index);
+}
+
+/** Finds a browser without launching it. Invalid overrides and missing browsers throw actionable NO_BROWSER errors. */
+export async function findBrowser(): Promise<BrowserLocation> {
+    const override = process.env.NODE_ASSETS_CHROMIUM;
+    const candidates = browserCandidates({ platform: process.platform, env: process.env, home: homedir() });
     for (const candidate of candidates) {
         if (await executableExists(candidate.executablePath)) return candidate;
+        if (candidate.executablePath === override) {
+            const message = `NODE_ASSETS_CHROMIUM is not an executable file: ${override}`;
+            throw Object.assign(new Error(message), {
+                error: message,
+                code: "NO_BROWSER",
+                help: ["Set NODE_ASSETS_CHROMIUM to an executable browser file, or unset it to enable browser discovery."],
+            });
+        }
     }
     const { chromium } = await import("playwright-core");
     const executablePath = chromium.executablePath();
@@ -45,8 +76,11 @@ export async function findBrowser(): Promise<BrowserLocation> {
 }
 
 async function executableExists(path: string): Promise<boolean> {
-    return access(path, constants.X_OK).then(
-        () => true,
-        () => false
-    );
+    try {
+        if (!(await stat(path)).isFile()) return false;
+        await access(path, constants.X_OK);
+        return true;
+    } catch {
+        return false;
+    }
 }

@@ -1,10 +1,11 @@
 import { isBuiltin } from "node:module";
+import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { build, defineConfig } from "vite";
 
 export default defineConfig({
-    root: fileURLToPath(new URL(".", import.meta.url)),
+    root: dirname(fileURLToPath(import.meta.url)),
     publicDir: false,
     plugins: [
         {
@@ -12,7 +13,7 @@ export default defineConfig({
             async writeBundle() {
                 await build({
                     configFile: false,
-                    root: fileURLToPath(new URL("./dev/calibrate/", import.meta.url)),
+                    root: resolve(dirname(fileURLToPath(import.meta.url)), "./dev/calibrate"),
                     publicDir: false,
                     build: {
                         outDir: "../../.dev/page",

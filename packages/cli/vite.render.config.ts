@@ -1,12 +1,12 @@
 import { readFile, readdir } from "node:fs/promises";
 import { createRequire } from "node:module";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { build, defineConfig } from "vite";
 
 export default defineConfig({
-    root: fileURLToPath(new URL("./src/render/", import.meta.url)),
+    root: resolve(dirname(fileURLToPath(import.meta.url)), "./src/render"),
     publicDir: false,
     plugins: [
         {
@@ -37,6 +37,14 @@ export default defineConfig({
                 }
                 for (const name of ["license.md", "NOTICE.md"]) {
                     this.emitFile({ type: "asset", fileName: `codecs/${name}`, source: await readFile(join(root, name)) });
+                }
+                for (const packageName of ["@babylonjs/core", "@babylonjs/loaders", "@babylonjs/ktx2decoder"]) {
+                    const packageRoot = dirname(require.resolve(`${packageName}/package.json`));
+                    for (const entry of await readdir(packageRoot, { withFileTypes: true })) {
+                        if (entry.isFile() && /^(license|notice)(?:[.-]|$)/i.test(entry.name)) {
+                            this.emitFile({ type: "asset", fileName: `licenses/${packageName}/${entry.name}`, source: await readFile(join(packageRoot, entry.name)) });
+                        }
+                    }
                 }
             },
         },

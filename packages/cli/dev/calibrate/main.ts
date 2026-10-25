@@ -1,5 +1,5 @@
 import { stat } from "node:fs/promises";
-import { extname, resolve } from "node:path";
+import { dirname, extname, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { fileURLToPath } from "node:url";
 
@@ -77,7 +77,7 @@ async function main(): Promise<void> {
     const allVariants = calibrationVariants();
     const limit = positiveInteger(values.variants, allVariants.length, "--variants");
     if (limit > allVariants.length) throw new CliError("USAGE", `--variants: at most ${allVariants.length}`);
-    const cliRoot = fileURLToPath(new URL("../", import.meta.url));
+    const cliRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
     const coefficientsPath = resolve(cliRoot, "src/loadModel.coefficients.json");
     if (resolve(values.out) === coefficientsPath || inputs.some((input) => resolve(input) === resolve(values.out!))) {
         throw new CliError("USAGE", "--out must not replace an input or the coefficients source");

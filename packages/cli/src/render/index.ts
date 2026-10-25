@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { access, mkdir, readFile, rm } from "node:fs/promises";
 import { createServer } from "node:http";
 import { createRequire } from "node:module";
-import { extname, join, resolve, sep } from "node:path";
+import { dirname, extname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import type { NodeIO } from "@gltf-transform/core";
@@ -217,8 +217,8 @@ async function callPage(page: Page, url: string, options?: Required<ReferenceOpt
 }
 
 async function renderDirectory(): Promise<string> {
-    for (const url of [new URL("./render/", import.meta.url), new URL("../../dist/render/", import.meta.url)]) {
-        const root = fileURLToPath(url);
+    const directory = dirname(fileURLToPath(import.meta.url));
+    for (const root of [resolve(directory, "render"), resolve(directory, "../../dist/render")]) {
         if (
             await access(join(root, "index.html")).then(
                 () => true,
