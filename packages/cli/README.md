@@ -3,9 +3,10 @@
 > **Preview (v0.1.0).** Expect rough edges and breaking changes. Not published to npm.
 
 `node-assets` makes 3D models small and web-ready. Pick a goal: download size, GPU memory, load time or
-compatibility. `tune` then searches the optimization settings for the best result that still looks the same.
-Fidelity is checked by rendering the model with Babylon.js. The winning settings are saved as a small, editable graph
-file that `run` applies to any number of models.
+compatibility. `tune` then searches the optimization settings for the best result that stays within a fidelity
+limit: each candidate and the original are rendered with Babylon.js from 4 views and compared (worst-region SSIM,
+0.9 or higher at 1024 px by default). The winning settings are saved as a small, editable graph file that `run`
+applies to any number of models.
 
 The CLI is built for coding agents as well as people: output is [TOON](https://toonformat.dev) on stdout, errors carry
 a code and a fix, and nothing prompts.
@@ -54,7 +55,7 @@ view that changed most). `run` applies the graph and writes the optimized model.
 |---|---|---|
 | See what's here | `node-assets` | Lists the models and graphs under the current directory, the built-in graphs, and next steps. |
 | Measure models | `node-assets inspect assets/` | Bytes, GPU memory estimate, load time estimate, triangles, textures and required decoders, one row per model. |
-| Tune for one goal | `node-assets tune assets/helmet.glb --for size -o graphs/` | Finds the smallest download that looks the same at 1024 px, and writes `helmet.size.toon` + `helmet.size.png`. |
+| Tune for one goal | `node-assets tune assets/helmet.glb --for size -o graphs/` | Finds the smallest download within the fidelity limit at 1024 px, and writes `helmet.size.toon` + `helmet.size.png`. |
 | Tune for several goals | `node-assets tune assets/helmet.glb --for size,gpu,load,compat -o graphs/` | One search, one graph per goal, so you can compare and pick. |
 | Name the graph yourself | `node-assets tune assets/helmet.glb --for gpu -o graphs/helmet-quest.toon` | Writes to the given file (one input and one goal). |
 | Tune for close-ups or VR | `node-assets tune assets/helmet.glb --for gpu --view 2048 -o graphs/` | Holds fidelity at 2048 px instead of 1024 px. |
@@ -91,17 +92,24 @@ code: USAGE
 help[1]: "goals: size, gpu, load, compat"
 ```
 
-## Why `tune`
+## Why `tune` (prototype research)
 
-In 54 graded runs of coding agents on a research prototype of this CLI, agents that used `tune` landed at a median
-**1.09×** the best known result. Agents that set the same options by hand landed at **2.11×**. Near-best results:
-11/20 with `tune`, 4/20 without. Every result in both groups passed an independent fidelity check. Details, method and
-caveats: [research/cli-v2/docs/node-assets.2.md](../../research/cli-v2/docs/node-assets.2.md).
+These results come from the research prototype that this CLI was ported from (plain JavaScript, with a different
+renderer for its fidelity check), not from this release. The Babylon.js port keeps the same search but has not been
+re-graded yet.
+
+In 54 graded runs of coding agents on that prototype, agents that used `tune` landed at a median **1.09×** the best
+known result. Agents that set the same options by hand landed at **2.11×**. Near-best results: 11/20 with `tune`, 4/20
+without. Every result in both groups passed an independent fidelity check. Details, method and caveats:
+[research/cli-v2/docs/node-assets.2.md](../../research/cli-v2/docs/node-assets.2.md).
 
 ## Known limits
 
 - **Preview.** The CLI is a TypeScript port of the research prototype. It renders fidelity with Babylon.js, so its
   results have not been re-graded against the research numbers yet.
+- The 0.9 fidelity default was chosen with the prototype's renderer and has not been re-validated on the Babylon.js
+  renderer. Look at the preview images, and raise `--fidelity` or `--view` if you need more margin.
+- Tested on macOS so far. Windows and Linux paths are covered by unit tests only.
 - The `load` goal estimates decode time with a model whose coefficients are provisional until they are refit on
   Babylon.js cold loads (see [docs/calibration.md](docs/calibration.md)).
 - Fidelity is checked on the static pose only; animated and skinned models are not posed.
@@ -124,9 +132,11 @@ pnpm cli --help
 pnpm vitest run tests/e2e/cli.test.ts
 ```
 
-To build the installable tarball:
+To build the installable tarball, commit your changes first, then:
 
 ```sh
-pnpm build
 cd packages/cli && npm pack
 ```
+
+`npm pack` refuses uncommitted changes in the build inputs, rebuilds core and the CLI, and records the commit in
+`dist/build-info.json` inside the tarball.
