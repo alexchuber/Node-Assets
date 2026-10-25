@@ -211,15 +211,17 @@ DECODERS
 BROWSER
      tune, run --check and inspect --against render in a headless browser,
      using the first of: $NODE_ASSETS_CHROMIUM, Google Chrome, Microsoft Edge,
-     Playwright's Chromium. If none is found, the error code is NO_BROWSER;
-     fix it with: npx playwright install chromium
+     an installed Chromium (Linux), Playwright's Chromium. If none is found,
+     the error code is NO_BROWSER; fix it with: npx playwright install chromium
      The other commands need no browser.
 
 ENVIRONMENT
-     NODE_ASSETS_CHROMIUM   path to a Chrome or Chromium executable
+     NODE_ASSETS_CHROMIUM   path to a Chrome or Chromium executable; if it is
+                            not an executable file, rendering commands fail
+                            with NO_BROWSER instead of trying other browsers
 
 ERRORS
-        error: unknown goal "speed"
+        error: "unknown goal \"speed\""
         code: USAGE
         help[1]: "goals: size, gpu, load, compat"
      Codes: USAGE (exit 2); INPUT_NOT_FOUND, UNSUPPORTED_FORMAT,

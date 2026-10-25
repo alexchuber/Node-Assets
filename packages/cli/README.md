@@ -28,7 +28,8 @@ Chromium if one is installed. If none is found, install one with:
 npx playwright install chromium
 ```
 
-To use a specific browser, set `NODE_ASSETS_CHROMIUM` to its executable path.
+To use a specific browser, set `NODE_ASSETS_CHROMIUM` to its executable path. If that path isn't an executable file,
+rendering commands fail with `NO_BROWSER` rather than falling back to another browser.
 
 ### Agent skill
 
@@ -88,7 +89,7 @@ image. `warnings` names any decoder the result needs; `help` suggests next comma
 (or 2 for usage errors):
 
 ```text
-error: unknown goal "speed"
+error: "unknown goal \"speed\""
 code: USAGE
 help[1]: "goals: size, gpu, load, compat"
 ```
