@@ -15,12 +15,15 @@ pnpm build
 ```
 
 The `packages/core` workspace contains the `@babylonjs/node-assets` library.
-`packages/cli` contains the command-line package and depends on the core package.
+`packages/cli` contains the private `node-assets-cli` package. Its build copies
+the core distribution into its own distribution so packed installs are standalone.
 Build both before running the local CLI:
 
 ```sh
-pnpm cli pipeline input.gltf ktx2 draco output.glb
-pnpm cli --help
+pnpm cli inspect model.glb
+pnpm cli run optimize model.glb -o public/model.glb
+pnpm cli show optimize
+pnpm cli help
 ```
 
 ## Scripts
@@ -33,15 +36,22 @@ pnpm test          # Run Vitest
 pnpm test:watch    # Run Vitest in watch mode
 pnpm build         # Build the library, then the CLI
 pnpm build:core    # Build only the library into packages/core/dist/
-pnpm cli           # Run the built CLI (append pipeline arguments)
+pnpm cli           # Show models and graphs under the current directory
 pnpm typedocs      # Generate the TypeDoc API reference
 ```
 
 The shared lint, format, and typecheck commands cover both packages. CLI tests
-live in `tests/e2e/cli.test.ts` and build isolated package fixtures:
+live in `tests/e2e/cli.test.ts` and build isolated package fixtures. Build first,
+then run only the focused file:
 
 ```sh
-pnpm test tests/e2e/cli.test.ts
+pnpm vitest run tests/e2e/cli.test.ts
 ```
+
+The [node-assets manual](packages/cli/docs/node-assets.1.md) defines commands,
+flags, TOON output, graph files and error codes. `pnpm cli <command> --help`
+prints a concise command reference. `run --check` and `inspect --against` need
+a Chromium browser; other implemented commands do not. `tune` is currently a
+help-complete stub pending the search implementation.
 
 Make sure you've run `pnpm lint`, `pnpm test`, and `pnpm build` before opening a pull request.

@@ -1,0 +1,23 @@
+graph: 1
+name: optimize
+blocks[9]:
+  - type: transform.metal-rough
+  - type: transform.dedup
+  - type: transform.cull-unused
+  - type: transform.weld
+  - type: transform.resize-textures
+    config:
+      maxSize: 2048
+      slots: all
+  - type: transform.encode-textures
+    config:
+      format: webp
+      quality: 90
+      slots: color
+  - type: transform.encode-textures
+    config:
+      format: webp
+      quality: 95
+      slots: data
+  - type: transform.quantize
+  - type: transform.cull-unused

@@ -1,8 +1,8 @@
 {
-    "name": "@babylonjs/node-assets-cli",
+    "name": "node-assets-cli",
     "private": true,
-    "version": "0.0.0",
-    "description": "Build and run Node Assets pipelines from the command line.",
+    "version": "0.1.0",
+    "description": "Make 3D models small and web-ready with reusable processing graphs.",
     "license": "Apache-2.0",
     "type": "module",
     "sideEffects": false,
@@ -11,7 +11,8 @@
     },
     "files": [
         "bin",
-        "dist"
+        "dist",
+        "graphs"
     ],
     "repository": {
         "type": "git",
@@ -28,17 +29,21 @@
         "build": "vite build && vite build --config vite.render.config.ts"
     },
     "dependencies": {
-        "@babylonjs/node-assets": "workspace:*",
+        "@babylonjs/core": "^9.27.1",
+        "@babylonjs/ktx2decoder": "9.27.1",
+        "@babylonjs/loaders": "^9.27.1",
+        "@babylonjs/serializers": "^9.27.1",
         "@gltf-transform/core": "4.5.0",
         "@gltf-transform/extensions": "4.5.0",
+        "@gltf-transform/functions": "4.5.0",
+        "@toon-format/toon": "4.4.0",
+        "@types/draco3dgltf": "1.4.3",
+        "babylonpress-ktx2-encoder": "0.6.0",
         "draco3dgltf": "1.5.7",
+        "gltf-validator": "2.0.0-dev.3.10",
         "meshoptimizer": "1.2.0",
-        "playwright-core": "1.64.1"
-    },
-    "devDependencies": {
-        "@babylonjs/core": "9.27.1",
-        "@babylonjs/ktx2decoder": "9.27.1",
-        "@babylonjs/loaders": "9.27.1",
-        "@types/draco3dgltf": "1.4.3"
+        "playwright-core": "1.64.1",
+        "sharp": "0.35.4",
+        "xhr2": "0.2.1"
     }
 }

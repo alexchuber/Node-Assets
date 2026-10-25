@@ -7,7 +7,7 @@
     },
     "packageManager": "pnpm@11.9.0",
     "scripts": {
-        "build": "pnpm --filter @babylonjs/node-assets build && pnpm --filter @babylonjs/node-assets-cli build",
+        "build": "pnpm --filter @babylonjs/node-assets build && pnpm --filter node-assets-cli build",
         "build:core": "pnpm --filter @babylonjs/node-assets build",
         "cli": "node packages/cli/bin/node-assets.cjs",
         "typecheck": "tsc -p tsconfig.json --noEmit",

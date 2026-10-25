@@ -1,36 +1,31 @@
 import { execFile } from "node:child_process";
-import { cp, mkdir } from "node:fs/promises";
+import { cp, mkdir, symlink } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { build } from "vite";
 
 import cliPackage from "../../packages/cli/package.json";
-import libraryConfig from "../../packages/core/vite.config";
 
-export async function buildCliFixtureAsync(directory: string): Promise<string> {
-    const libraryDirectory = join(directory, "node_modules", "@babylonjs", "node-assets");
-    const cliDirectory = join(directory, "node_modules", "@babylonjs", "node-assets-cli");
-    await mkdir(libraryDirectory, { recursive: true });
+export async function buildCliFixtureAsync(directory: string, renderer = false): Promise<string> {
+    const cliDirectory = join(directory, ".cli");
     await mkdir(cliDirectory, { recursive: true });
-    await cp(new URL("../../packages/core/package.json", import.meta.url), join(libraryDirectory, "package.json"));
     await cp(new URL("../../packages/cli/package.json", import.meta.url), join(cliDirectory, "package.json"));
     await cp(new URL("../../packages/cli/bin", import.meta.url), join(cliDirectory, "bin"), { recursive: true });
-
-    await build({
-        ...libraryConfig,
-        configFile: false,
-        logLevel: "silent",
-        // Declaration bundling targets the real package's dist; this isolated fixture only executes JavaScript.
-        plugins: (libraryConfig.plugins ?? []).filter((plugin) => !plugin || !("name" in plugin) || plugin.name !== "vite:dts"),
-        build: { ...libraryConfig.build, outDir: join(libraryDirectory, "dist") },
-    });
+    await cp(new URL("../../packages/cli/graphs", import.meta.url), join(cliDirectory, "graphs"), { recursive: true });
+    await symlink(fileURLToPath(new URL("../../packages/cli/node_modules", import.meta.url)), join(cliDirectory, "node_modules"), "dir");
     await build({
         configFile: fileURLToPath(new URL("../../packages/cli/vite.config.ts", import.meta.url)),
         logLevel: "silent",
         build: { outDir: join(cliDirectory, "dist") },
     });
-
+    if (renderer) {
+        await build({
+            configFile: fileURLToPath(new URL("../../packages/cli/vite.render.config.ts", import.meta.url)),
+            logLevel: "silent",
+            build: { outDir: join(cliDirectory, "dist/render") },
+        });
+    }
     return join(cliDirectory, cliPackage.bin["node-assets"]);
 }
 
@@ -40,9 +35,9 @@ interface CommandResult {
     readonly stderr: string;
 }
 
-export function runNodeAsync(args: readonly string[], cwd: string): Promise<CommandResult> {
+export function runNodeAsync(args: readonly string[], cwd: string, timeout = 60_000): Promise<CommandResult> {
     return new Promise((resolve, reject) => {
-        execFile(process.execPath, args, { cwd, timeout: 30_000 }, (error, stdout, stderr) => {
+        execFile(process.execPath, args, { cwd, timeout, maxBuffer: 1024 * 1024 }, (error, stdout, stderr) => {
             const code = error?.code ?? 0;
             if (typeof code !== "number" || error?.killed) {
                 reject(error);

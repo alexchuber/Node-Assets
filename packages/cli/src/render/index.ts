@@ -227,7 +227,7 @@ async function renderDirectory(): Promise<string> {
         )
             return resolve(root);
     }
-    throw Object.assign(new Error("Renderer page is not built."), { code: "RENDERER_NOT_BUILT", help: ["pnpm --filter @babylonjs/node-assets-cli build"] });
+    throw Object.assign(new Error("Renderer page is not built."), { code: "RENDERER_NOT_BUILT", help: ["pnpm --filter node-assets-cli build"] });
 }
 
 async function createIO(): Promise<NodeIO> {

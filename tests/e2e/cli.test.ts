@@ -1,570 +1,430 @@
-import { cp, link, lstat, mkdir, mkdtemp, readFile, readdir, rm, stat, symlink, writeFile } from "node:fs/promises";
-import { join, relative } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { randomUUID } from "node:crypto";
+import { cp, link, mkdir, readFile, readdir, rm, stat, symlink, writeFile } from "node:fs/promises";
+import { join, resolve } from "node:path";
 
 import { NodeIO } from "@gltf-transform/core";
+import sharp from "sharp";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import cliPackage from "../../packages/cli/package.json";
-import { EncodeDracoBlock, EncodeKTX2Block, EncodeMeshoptBlock, GltfInputBlock, GltfOutputBlock, NodeAsset } from "../../packages/core/src/index";
+import { inputBytes, inputHash } from "../../packages/cli/src/inputs";
+import { decode, serialize } from "../../packages/cli/src/output";
+import { readProvenance } from "../../packages/cli/src/provenance";
+import { findBrowser } from "../../packages/cli/src/render";
 import { buildCliFixtureAsync, runNodeAsync } from "../helpers/cli";
-import { generateFbxData } from "../helpers/fbx";
-import { expectKtx2Image, parseGlbAsync } from "../helpers/glb";
-import { generateGlbData, generateGltfJson, generateTexturedGltfJson } from "../helpers/gltf";
-import { generateObjData } from "../helpers/obj";
-import { generateStlData } from "../helpers/stl";
+import { createGridDocument } from "../helpers/document";
+import { generateGlbData, generateGltfJson } from "../helpers/gltf";
 
-describe("Node Assets CLI", () => {
+const browser = await findBrowser().catch(() => undefined);
+
+describe("node-assets CLI", () => {
     let directory: string;
     let launcher: string;
     let input: string;
-    let texturedInput: string;
+    let sourceBytes: Uint8Array;
+
+    const run = (args: readonly string[], cwd = directory) => runNodeAsync([launcher, ...args], cwd);
+    const parse = (text: string) => decode(text) as Record<string, unknown>;
 
     beforeAll(async () => {
-        directory = await mkdtemp(fileURLToPath(new URL("../../packages/core/node_modules/.node-assets-cli-", import.meta.url)));
-        launcher = await buildCliFixtureAsync(directory);
-        input = join(directory, "input.gltf");
-        texturedInput = join(directory, "textured.gltf");
-        await writeFile(input, generateGltfJson());
-        await writeFile(texturedInput, generateTexturedGltfJson());
-        await writeFile(join(directory, "input.glb"), generateGlbData());
+        directory = resolve(`_cli-test-${randomUUID()}`);
+        await mkdir(directory);
+        launcher = await buildCliFixtureAsync(directory, !!browser);
+        input = join(directory, "input.glb");
+        const doc = await new NodeIO().readBinary(generateGlbData());
+        doc.getRoot().listMeshes()[0]!.listPrimitives()[0]!.setMaterial(doc.createMaterial().setDoubleSided(true));
+        sourceBytes = await new NodeIO().writeBinary(doc);
+        await writeFile(input, sourceBytes);
     }, 120_000);
 
     afterAll(async () => {
-        if (directory !== undefined) {
-            await rm(directory, { recursive: true, force: true });
-        }
+        if (directory) await rm(directory, { recursive: true, force: true });
     });
 
-    it.each([[], ["--help"], ["-h"], ["pipeline", "--help"]].map((args) => ({ args })))("shows help for $args", async ({ args }) => {
-        const result = await runNodeAsync([launcher, ...args], directory);
-        expect(result.code).toBe(0);
-        expect(result.stderr).toBe("");
-        for (const term of [
-            "pipeline",
-            ".gltf",
-            ".glb",
-            ".fbx",
-            ".obj",
-            ".stl",
-            ".usd",
-            ".usda",
-            ".usdc",
-            ".usdz",
-            "draco",
-            "meshopt",
-            "ktx2",
-            "validate",
-            "quantize",
-            "cull-unused",
-            "strip-materials",
-            "--force",
-            "--stats",
-            "--benchmark",
-        ]) {
-            expect(result.stdout).toContain(term);
-        }
-    });
-
-    it.each(["--version", "-v"])("reports the package version with %s", async (flag) => {
-        const result = await runNodeAsync([launcher, flag], directory);
+    it.each(["--version", "-v", "-V"])("reports the bare version with %s", async (flag) => {
+        const result = await run([flag]);
         expect(result.code).toBe(0);
         expect(result.stdout.trim()).toBe(cliPackage.version);
         expect(result.stderr).toBe("");
     });
 
-    it.each(
-        [
-            ["unknown"],
-            ["pipeline"],
-            ["pipeline", "input.gltf"],
-            ["pipeline", "input.gltf", "unknown", "output.glb"],
-            ["pipeline", "input.gltf", "DRACO", "output.glb"],
-            ["pipeline", "--unknown", "input.gltf", "output.glb"],
-            ["pipeline", "input.gltf", "--unknown", "output.glb"],
-            ["pipeline", "input.ply", "output.glb"],
-            ["pipeline", "input", "output.glb"],
-            ["pipeline", "input.gltf", "output.gltf"],
-            ["pipeline", "input.gltf", "output"],
-        ].map((args) => ({ args }))
-    )("rejects invalid arguments $args", async ({ args }) => {
-        const cwd = await mkdtemp(join(directory, "invalid-"));
-        await cp(input, join(cwd, "input.gltf"));
-        await cp(input, join(cwd, "input.ply"));
-        await cp(input, join(cwd, "input"));
-        const before = await readdir(cwd);
-        const result = await runNodeAsync([launcher, ...args], cwd);
+    it("answers version without loading a CLI bundle", async () => {
+        const isolated = join(directory, ".version-only");
+        await mkdir(isolated);
+        await cp("packages/cli/bin", join(isolated, "bin"), { recursive: true });
+        await cp("packages/cli/package.json", join(isolated, "package.json"));
+        const result = await runNodeAsync([join(isolated, "bin/node-assets.cjs"), "--version"], isolated);
+        expect(result.code).toBe(0);
+        expect(result.stdout.trim()).toBe(cliPackage.version);
+    });
+
+    it("keeps version latency close to the Node startup floor", async () => {
+        const floorStart = performance.now();
+        await runNodeAsync(["-e", "process.stdout.write('1')"], directory);
+        const floor = performance.now() - floorStart;
+        const versionStart = performance.now();
+        const result = await run(["--version"]);
+        expect(result.code).toBe(0);
+        expect(performance.now() - versionStart).toBeLessThan(floor * 5);
+    });
+
+    it("prints the bundled manual", async () => {
+        const result = await run(["help"]);
+        expect(result.code).toBe(0);
+        const source = await readFile("packages/cli/docs/node-assets.1.md", "utf8");
+        expect(result.stdout).toBe(source.match(/```text\n([\s\S]*?)\n```/)![1] + "\n");
+    });
+
+    it.each(["inspect", "run", "show", "tune", "help"])("prints complete help for %s", async (command) => {
+        const result = await run([command, "--help"]);
+        expect(result.code).toBe(0);
+        expect(parse(result.stdout)).toMatchObject({ usage: expect.any(String), description: expect.any(String), flags: expect.any(Array), examples: expect.any(Array) });
+    });
+
+    it.each([
+        ["unknown"],
+        ["pipeline"],
+        ["run", "--unknown"],
+        ["inspect", "--unknown"],
+        ["show", "--unknown"],
+        ["tune", "--unknown"],
+        ["help", "--unknown"],
+        ["show", "optimize", "extra"],
+        ["run", "optimize", "input.glb"],
+        ["run", "optimize", "input.glb", "-o", "out.gltf"],
+        ["inspect", "input.glb", "--network", "invalid"],
+        ["inspect", "input.glb", "--view", "128junk"],
+    ])("rejects usage errors %#", async (...args: string[]) => {
+        const result = await run(args);
+        expect(result.code).toBe(2);
+        expect(parse(result.stdout).code).toBe("USAGE");
+    });
+
+    it("shows models and graph files, largest first, skipping hidden and excluded directories", async () => {
+        const cwd = join(directory, "home");
+        await mkdir(join(cwd, "a/b/c/d"), { recursive: true });
+        await mkdir(join(cwd, "node_modules"));
+        await mkdir(join(cwd, "dist"));
+        await mkdir(join(cwd, ".hidden"));
+        await writeFile(join(cwd, "small.glb"), "1");
+        await writeFile(join(cwd, "a/large.obj"), "12345");
+        for (const path of ["a/b/c/deep.glb", "a/b/c/d/too-deep.glb", "node_modules/skip.glb", "dist/skip.glb", ".hidden/skip.glb", ".skip.glb"])
+            await writeFile(join(cwd, path), "1");
+        await writeFile(join(cwd, "mine.toon"), serialize({ graph: 1, blocks: [{ type: "transform.dedup" }] }));
+        await writeFile(join(cwd, "not-a-graph.toon"), "other: 1\n");
+        const result = await run([], cwd);
+        expect(result.code).toBe(0);
+        const value = parse(result.stdout);
+        expect((value.models as { file: string }[]).map((model) => model.file)).toEqual(["a/large.obj", "a/b/c/deep.glb", "small.glb"]);
+        expect(value.graphs).toEqual([{ file: "mine.toon", bytes: (await stat(join(cwd, "mine.toon"))).size }]);
+        expect(value.builtins).toEqual([expect.objectContaining({ name: "optimize", file: expect.stringMatching(/optimize\.toon$/) })]);
+    });
+
+    it("shows default configurations and round trips through a graph file", async () => {
+        const shown = await run(["show", "optimize"]);
+        expect(shown.code).toBe(0);
+        const value = parse(shown.stdout);
+        expect(value.graph).toBe(1);
+        expect(value.blocks).toContainEqual({ type: "transform.encode-textures", config: { format: "webp", quality: 90, slots: "color" } });
+        const file = join(directory, "round-trip.toon");
+        await writeFile(file, shown.stdout);
+        const roundTrip = await run(["show", file]);
+        expect(roundTrip.code).toBe(0);
+        expect(parse(roundTrip.stdout)).toEqual(value);
+    });
+
+    it("runs optimize and preserves the output on an identical re-run", async () => {
+        const output = join(directory, "optimized.glb");
+        const first = await run(["run", "optimize", input, "-o", output]);
+        expect(first.code, first.stdout).toBe(0);
+        expect((await stat(output)).size).toBeGreaterThan(0);
+        expect(await readProvenance(output)).toMatchObject({ graph: expect.stringMatching(/^[a-f0-9]{12}$/), input: expect.stringMatching(/^[a-f0-9]{12}$/) });
+        const before = await stat(output);
+        const second = await run(["run", "optimize", input, "-o", output]);
+        expect(second.code).toBe(0);
+        expect(parse(second.stdout).results).toEqual([expect.objectContaining({ status: "up to date (no-op)" })]);
+        expect((await stat(output)).mtimeMs).toBe(before.mtimeMs);
+        expect(await readFile(input)).toEqual(Buffer.from(sourceBytes));
+    });
+
+    it("requires --force for unrelated outputs and replaces atomically", async () => {
+        const output = join(directory, "existing.glb");
+        await writeFile(output, "existing");
+        const failed = await run(["run", "optimize", input, "-o", output]);
+        expect(failed.code).toBe(1);
+        expect(parse(failed.stdout).code).toBe("OUTPUT_EXISTS");
+        expect(await readFile(output, "utf8")).toBe("existing");
+        const forced = await run(["run", "optimize", input, "-o", output, "--force"]);
+        expect(forced.code, forced.stdout).toBe(0);
+        expect(await readProvenance(output)).not.toBeNull();
+        expect((await readdir(directory)).filter((name) => name.endsWith(".tmp"))).toEqual([]);
+    });
+
+    it("collects directory inputs non-recursively and writes directory outputs", async () => {
+        const sources = join(directory, "sources");
+        const outputs = join(directory, "outputs");
+        await mkdir(sources);
+        await writeFile(join(sources, "one.glb"), generateGlbData());
+        await writeFile(join(sources, "two.glb"), generateGlbData());
+        await writeFile(join(sources, ".hidden.glb"), generateGlbData());
+        await writeFile(join(sources, "note.txt"), "");
+        await writeFile(join(sources, "export.blend"), "");
+        const result = await run(["run", "optimize", sources, "-o", outputs + "/"]);
+        expect(result.code, result.stdout).toBe(0);
+        expect((await readdir(outputs)).sort()).toEqual(["one.glb", "two.glb"]);
+        expect(parse(result.stdout).results).toContainEqual(expect.objectContaining({ status: "skipped" }));
+        const bad = await run(["run", "optimize", sources, "-o", "one.glb"]);
+        expect(bad.code).toBe(2);
+    });
+
+    it.each(["direct", "symlink", "hardlink"])("never overwrites an input through %s", async (kind) => {
+        let output = input;
+        if (kind !== "direct") {
+            output = join(directory, `${kind}.glb`);
+            if (kind === "symlink") await symlink(input, output);
+            else await link(input, output);
+        }
+        const result = await run(["run", "optimize", input, "-o", output, "--force"]);
+        expect(result.code).toBe(2);
+        expect(parse(result.stdout).code).toBe("USAGE");
+        expect(await readFile(input)).toEqual(Buffer.from(sourceBytes));
+    });
+
+    it("never overwrites an input through a symlinked parent and unresolved dot segments", async () => {
+        const cwd = join(directory, "symlink-parent");
+        const nested = join(cwd, "target/nested");
+        await mkdir(nested, { recursive: true });
+        const victim = join(cwd, "target/victim.glb");
+        await writeFile(victim, sourceBytes);
+        await symlink(nested, join(cwd, "alias"), "dir");
+        const output = `${cwd}/alias/missing/../../victim.glb`;
+        const result = await run(["run", "optimize", victim, "-o", output, "--force"]);
+        expect(result.code).toBe(2);
+        expect(parse(result.stdout).code).toBe("USAGE");
+        expect(await readFile(victim)).toEqual(Buffer.from(sourceBytes));
+    });
+
+    it("uses one canonical input for conversion, hashing, and byte accounting", async () => {
+        const cwd = join(directory, "canonical-input");
+        await mkdir(join(cwd, "target/nested"), { recursive: true });
+        const canonical = join(cwd, "target/victim.glb");
+        const original = await new NodeIO().writeBinary(createGridDocument(1));
+        await writeFile(canonical, original);
+        await writeFile(join(cwd, "victim.glb"), sourceBytes);
+        await symlink(join(cwd, "target/nested"), join(cwd, "alias"), "dir");
+        const result = await run(["run", "optimize", "alias/../victim.glb", "-o", "out/"], cwd);
+        expect(result.code, result.stdout).toBe(0);
+        expect(parse(result.stdout).results).toContainEqual(expect.objectContaining({ input: "alias/../victim.glb", bytes_before: original.length }));
+        const output = join(cwd, "out/victim.glb");
+        expect(await readProvenance(output)).toMatchObject({ input: await inputHash(canonical) });
+        const inspected = await run(["inspect", output], cwd);
+        expect(inspected.code, inspected.stdout).toBe(0);
+        expect(parse(inspected.stdout).triangles).toBe(2);
+        expect(await readFile(canonical)).toEqual(Buffer.from(original));
+        expect(await readFile(join(cwd, "victim.glb"))).toEqual(Buffer.from(sourceBytes));
+    });
+
+    it("uses the supplied input basename while retaining the supplied display path", async () => {
+        const cwd = join(directory, "canonical-basename");
+        await mkdir(join(cwd, "target"), { recursive: true });
+        await writeFile(join(cwd, "target/actual.glb"), sourceBytes);
+        await symlink(join(cwd, "target/actual.glb"), join(cwd, "display.glb"));
+        const result = await run(["run", "optimize", "display.glb", "-o", "out/"], cwd);
+        expect(result.code, result.stdout).toBe(0);
+        expect(await readdir(join(cwd, "out"))).toEqual(["display.glb"]);
+        expect(parse(result.stdout).results).toContainEqual(expect.objectContaining({ input: "display.glb" }));
+    });
+
+    it("inspects the canonical input rather than a lexically normalized alternative", async () => {
+        const cwd = join(directory, "canonical-inspect");
+        await mkdir(join(cwd, "target/nested"), { recursive: true });
+        const canonical = join(cwd, "target/victim.gltf");
+        await new NodeIO().write(canonical, createGridDocument(1));
+        await writeFile(join(cwd, "victim.gltf"), generateGltfJson());
+        await symlink(join(cwd, "target/nested"), join(cwd, "alias"), "dir");
+        const result = await run(["inspect", "alias/../victim.gltf"], cwd);
+        expect(result.code, result.stdout).toBe(0);
+        expect(parse(result.stdout)).toMatchObject({ file: "alias/../victim.gltf", triangles: 2, bytes: await inputBytes(canonical) });
+    });
+
+    it("rejects case-insensitive batch output collisions before writing anything", async () => {
+        const cwd = join(directory, "case-collision");
+        await mkdir(join(cwd, "one"), { recursive: true });
+        await mkdir(join(cwd, "two"));
+        await writeFile(join(cwd, "one/part.glb"), sourceBytes);
+        await writeFile(join(cwd, "two/PART.glb"), sourceBytes);
+        const result = await run(["run", "optimize", "one/part.glb", "two/PART.glb", "-o", "out/"], cwd);
+        expect(result.code).toBe(2);
+        expect(parse(result.stdout).code).toBe("USAGE");
+        expect((await readdir(cwd)).sort()).toEqual(["one", "two"]);
+        expect(await readFile(join(cwd, "one/part.glb"))).toEqual(Buffer.from(sourceBytes));
+        expect(await readFile(join(cwd, "two/PART.glb"))).toEqual(Buffer.from(sourceBytes));
+    });
+
+    it("rejects collisions between supplied symlink basenames before writing anything", async () => {
+        const cwd = join(directory, "symlink-name-collision");
+        await mkdir(join(cwd, "one"), { recursive: true });
+        await mkdir(join(cwd, "two"));
+        await mkdir(join(cwd, "target"));
+        const first = join(cwd, "target/first.glb");
+        const second = join(cwd, "target/second.glb");
+        await writeFile(first, sourceBytes);
+        await writeFile(second, sourceBytes);
+        await symlink(first, join(cwd, "one/display.glb"));
+        await symlink(second, join(cwd, "two/DISPLAY.glb"));
+        const result = await run(["run", "optimize", "one/display.glb", "two/DISPLAY.glb", "-o", "out/"], cwd);
+        expect(result.code).toBe(2);
+        expect(parse(result.stdout).code).toBe("USAGE");
+        expect((await readdir(cwd)).sort()).toEqual(["one", "target", "two"]);
+        expect(await readFile(first)).toEqual(Buffer.from(sourceBytes));
+        expect(await readFile(second)).toEqual(Buffer.from(sourceBytes));
+    });
+
+    it.each([{ type: "transform.unknown" }, { type: "transform.encode-textures", config: { quality: 101 } }])("reports BAD_GRAPH for invalid blocks %#", async (block) => {
+        const file = join(directory, `bad-${randomUUID()}.toon`);
+        await writeFile(file, serialize({ graph: 1, blocks: [block] }));
+        const result = await run(["run", file, input, "-o", join(directory, "bad-output.glb")]);
         expect(result.code).toBe(1);
-        expect(result.stderr.trim()).not.toBe("");
-        expect(await readdir(cwd)).toEqual(before);
+        expect(parse(result.stdout).code).toBe("BAD_GRAPH");
     });
 
-    it.skipIf(typeof Worker !== "undefined")("fails without writing output when USD lacks Web Worker support", async () => {
-        const cwd = await mkdtemp(join(directory, "usd-"));
-        await writeFile(join(cwd, "input.usda"), "#usda 1.0\n");
-        const before = await readdir(cwd);
-        const result = await runNodeAsync([launcher, "pipeline", "input.usda", "output.glb"], cwd);
-        expect(result.code).toBe(1);
-        expect(result.stderr.trim()).not.toBe("");
-        expect(await readdir(cwd)).toEqual(before);
+    it("inspects a generated GLB without a browser", async () => {
+        const result = await run(["inspect", input]);
+        expect(result.code, result.stdout).toBe(0);
+        expect(parse(result.stdout)).toMatchObject({
+            status: "ok",
+            bytes: (await stat(input)).size,
+            gpu_mib: expect.any(Number),
+            load_s: expect.any(Number),
+            triangles: 1,
+            textures: "none",
+            decoders: "none",
+            required_extensions: "none",
+        });
     });
 
-    it.each(["gltf", "glb"])("round trips a local %s without transforms", async (extension) => {
-        const output = join(directory, `roundtrip-${extension}.glb`);
-        const result = await runNodeAsync([launcher, "pipeline", `input.${extension}`, output], directory);
-        expect(result.code).toBe(0);
-        expect(result.stdout).not.toContain("Stats:");
-        expect(result.stdout).not.toContain("Benchmark:");
-        const document = await new NodeIO().read(output);
-        expect(document.getRoot().listMeshes()[0]?.listPrimitives()[0]?.getAttribute("POSITION")?.getArray()).toEqual(new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]));
-        const parsed = await readGlbAsync(output);
-        expect(parsed.json.extensionsUsed ?? []).not.toContain("KHR_draco_mesh_compression");
-        expect(parsed.json.extensionsUsed ?? []).not.toContain("EXT_meshopt_compression");
+    it("reports missing and invalid inputs with structured error codes", async () => {
+        const missing = await run(["inspect", join(directory, "missing.glb")]);
+        expect(missing.code).toBe(1);
+        expect(parse(missing.stdout).code).toBe("INPUT_NOT_FOUND");
+        const corrupt = join(directory, "corrupt.glb");
+        await writeFile(corrupt, "bad");
+        const invalid = await run(["inspect", corrupt]);
+        expect(invalid.code).toBe(1);
+        expect(parse(invalid.stdout).code).toBe("INVALID_INPUT");
     });
 
-    it.each([
-        { extension: "obj", data: generateObjData() },
-        { extension: "stl", data: generateStlData() },
-        { extension: "fbx", data: generateFbxData() },
-    ])("converts a local $extension input to GLB", async ({ extension, data }) => {
-        const source = join(directory, `source.${extension}`);
-        const output = join(directory, `${extension}-input.glb`);
-        await writeFile(source, data);
-
-        const result = await runNodeAsync([launcher, "pipeline", source, output], directory);
-
-        expect(result.code).toBe(0);
-        expect((await readGlbAsync(output)).json.meshes).toHaveLength(1);
-    });
-
-    it.skipIf(typeof Worker === "undefined" && !process.allowedNodeEnvironmentFlags.has("--experimental-web-worker"))(
-        "converts a local USDA input to GLB when Web Workers are available",
-        async () => {
-            const source = join(directory, "source.usda");
-            const output = join(directory, "usda-input.glb");
-            await writeFile(
-                source,
-                '#usda 1.0\n(\n    defaultPrim = "Root"\n)\ndef Xform "Root"\n{\n    def Mesh "Tri"\n    {\n        int[] faceVertexCounts = [3]\n        int[] faceVertexIndices = [0, 1, 2]\n        point3f[] points = [(0, 0, 0), (1, 0, 0), (0, 1, 0)]\n    }\n}\n'
-            );
-            const flags = typeof Worker === "undefined" ? ["--experimental-web-worker"] : [];
-
-            const result = await runNodeAsync([...flags, launcher, "pipeline", source, output], directory);
-
-            expect(result.code).toBe(0);
-            expect((await readGlbAsync(output)).json.meshes).toHaveLength(1);
-        }
-    );
-
-    it.each([
-        { extension: "gltf", flags: ["--stats"] },
-        { extension: "glb", flags: ["--stats"] },
-        { extension: "glb", flags: ["--benchmark"] },
-        { extension: "glb", flags: ["--stats", "--benchmark"] },
-    ])("reports requested metrics for $extension with $flags", async ({ extension, flags }) => {
-        const source = join(directory, `input.${extension}`);
-        const output = join(directory, `report-${extension}-${flags.join("-")}.glb`);
-        const result = await runNodeAsync([launcher, "pipeline", source, "draco", output, ...flags], directory);
-        expect(result.code).toBe(0);
-        expect(result.stderr).toBe("");
-        expect((await readGlbAsync(output)).json.extensionsUsed).toContain("KHR_draco_mesh_compression");
-        expect(result.stdout).toContain(`Wrote ${output}`);
-
-        if (flags.includes("--stats")) {
-            expect(result.stdout).toContain(`Stats:\n  Total size before: ${(await stat(source)).size} B\n  Total size after: ${(await stat(output)).size} B`);
-        } else {
-            expect(result.stdout).not.toContain("Stats:");
-        }
-
-        if (flags.includes("--benchmark")) {
-            expect(result.stdout).toContain("Benchmark:");
-            for (const label of ["Completion time", "CPU time (user)", "CPU time (system)"]) {
-                const line = result.stdout.split("\n").find((line) => line.startsWith(`  ${label}: `));
-                expect(line).toMatch(/: \d+\.\d{2} (?:ms|s|min|h)$/u);
-                const value = Number(line?.split(": ")[1]?.split(" ")[0]);
-                expect(value).toBeGreaterThanOrEqual(0);
-                if (label === "Completion time") {
-                    expect(value).toBeGreaterThan(0);
-                }
-            }
-            for (const label of ["RSS", "Peak RSS (process lifetime)", "Heap used"]) {
-                const line = result.stdout.split("\n").find((line) => line.startsWith(`  ${label}: `));
-                expect(line).toMatch(/: (?:\d+ B|\d+\.\d{2} (?:KiB|MiB|GiB|TiB|PiB))$/u);
-                expect(Number(line?.split(": ")[1]?.split(" ")[0])).toBeGreaterThan(0);
-                expect(Number(line?.split(": ")[1]?.split(" ")[0])).toBeLessThan(1_024);
-            }
-        } else {
-            expect(result.stdout).not.toContain("Benchmark:");
-        }
-    });
-
-    it.each([
-        { bytes: 1_023, expected: "1023 B", divisor: 1 },
-        { bytes: 1_024, expected: "1.00 KiB", divisor: 1_024 },
-        { bytes: 1_536, expected: "1.50 KiB", divisor: 1_024 },
-        { bytes: 1_048_575, expected: "1.00 MiB", divisor: 1_048_576 },
-        { bytes: 1_048_576, expected: "1.00 MiB", divisor: 1_048_576 },
-        { bytes: 1_310_720, expected: "1.25 MiB", divisor: 1_048_576 },
-    ])("formats input sizes of $bytes bytes as $expected and keeps the unit for output", async ({ bytes, expected, divisor }) => {
-        const source = join(directory, `size-${bytes}.gltf`);
-        const output = join(directory, `size-${bytes}.glb`);
-        await writeFile(source, generateGltfJson().padEnd(bytes, " "));
-
-        const result = await runNodeAsync([launcher, "pipeline", source, output, "--stats"], directory);
-        expect(result.code).toBe(0);
-        expect(result.stdout).toContain(`Total size before: ${expected}`);
-        const outputBytes = (await stat(output)).size;
-        expect(result.stdout).toContain(`Total size after: ${divisor === 1 ? outputBytes : (outputBytes / divisor).toFixed(2)} ${expected.split(" ")[1]}`);
-    });
-
-    it.each([
-        { padding: 960, unit: "B" },
-        { padding: 2_048, unit: "KiB" },
-    ])("formats output sizes using the input's $unit unit even when output grows", async ({ padding, unit }) => {
-        const source = join(directory, `large-output-${unit}.gltf`);
-        const output = join(directory, `large-output-${unit}.glb`);
-        await writeFile(source, JSON.stringify({ asset: { version: "2.0" }, extras: { label: "x".repeat(padding) } }));
-
-        const result = await runNodeAsync([launcher, "pipeline", source, output, "--stats"], directory);
-        expect(result.code).toBe(0);
-        const outputBytes = (await stat(output)).size;
-        expect(outputBytes).toBeGreaterThan(1_024);
-        expect(outputBytes).toBeLessThan(1_048_576);
-        expect(result.stdout).toContain(`Total size after: ${unit === "B" ? outputBytes : (outputBytes / 1_024).toFixed(2)} ${unit}`);
-    });
-
-    it.each([
-        { milliseconds: 0, completion: "0.00 ms", user: "0.00 ms", system: "0.00 ms" },
-        { milliseconds: 12.34, completion: "12.34 ms", user: "24.68 ms", system: "6.17 ms" },
-        { milliseconds: 999.994, completion: "999.99 ms", user: "1999.99 ms", system: "500.00 ms" },
-        { milliseconds: 999.999, completion: "1.00 s", user: "2.00 s", system: "0.50 s" },
-        { milliseconds: 1_000, completion: "1.00 s", user: "2.00 s", system: "0.50 s" },
-        { milliseconds: 2_538.93, completion: "2.54 s", user: "5.08 s", system: "1.27 s" },
-        { milliseconds: 59_999, completion: "1.00 min", user: "2.00 min", system: "0.50 min" },
-        { milliseconds: 60_000, completion: "1.00 min", user: "2.00 min", system: "0.50 min" },
-        { milliseconds: 72_471.94, completion: "1.21 min", user: "2.42 min", system: "0.60 min" },
-        { milliseconds: 3_599_990, completion: "1.00 h", user: "2.00 h", system: "0.50 h" },
-        { milliseconds: 3_600_000, completion: "1.00 h", user: "2.00 h", system: "0.50 h" },
-        { milliseconds: 5_400_000, completion: "1.50 h", user: "3.00 h", system: "0.75 h" },
-    ])("formats $milliseconds ms using the completion-time unit for every timing row", async ({ milliseconds, completion, user, system }) => {
-        const output = join(directory, `timing-${milliseconds}.glb`);
-        // Keep the real pipeline, but control clocks in a child process to cover long runs without waiting.
-        const script = `
-            const { runCliAsync } = await import(${JSON.stringify(new URL("../dist/cli.js", pathToFileURL(launcher)).href)});
-            let started = false;
-            process.hrtime.bigint = () => {
-                if (!started) {
-                    started = true;
-                    return 0n;
-                }
-                return ${BigInt(Math.round(milliseconds * 1_000_000))}n;
-            };
-            process.cpuUsage = (previous) => previous === undefined
-                ? { user: 0, system: 0 }
-                : ${JSON.stringify({ user: Math.round(milliseconds * 2_000), system: Math.round(milliseconds * 500) })};
-            await runCliAsync(${JSON.stringify(["pipeline", input, output, "--benchmark"])});
-        `;
-        const result = await runNodeAsync(["--input-type=module", "--eval", script], directory);
-        expect(result.code).toBe(0);
-        expect(result.stderr).toBe("");
-        expect(result.stdout).toContain(`Completion time: ${completion}`);
-        expect(result.stdout).toContain(`CPU time (user): ${user}`);
-        expect(result.stdout).toContain(`CPU time (system): ${system}`);
-        expect((await readGlbAsync(output)).json.meshes).toHaveLength(1);
-    });
-
-    it("resolves sibling glTF resources from the input path", async () => {
-        const sourceDirectory = join(directory, "external");
-        await mkdir(sourceDirectory);
-        const io = new NodeIO();
-        await io.write(join(sourceDirectory, "model.gltf"), await io.read(input));
-        expect(await readdir(sourceDirectory)).toContain("model.bin");
-
-        const output = join(directory, "external.glb");
-        const result = await runNodeAsync([launcher, "pipeline", "external/model.gltf", output], directory);
-        expect(result.code).toBe(0);
-        expect((await io.read(output)).getRoot().listMeshes()).toHaveLength(1);
-    });
-
-    it("accepts uppercase extensions and relative paths with spaces from another directory", async () => {
-        const cwd = join(directory, "working directory");
+    it("hashes referenced resources and invalidates provenance when they change", async () => {
+        const cwd = join(directory, "external");
         await mkdir(cwd);
-        await cp(input, join(cwd, "source file.GLTF"));
-        const result = await runNodeAsync([launcher, "pipeline", "source file.GLTF", "output file.GLB"], cwd);
-        expect(result.code).toBe(0);
-        expect((await new NodeIO().read(join(cwd, "output file.GLB"))).getRoot().listMeshes()).toHaveLength(1);
+        const value = JSON.parse(generateGltfJson()) as { buffers: { uri: string }[] };
+        const buffer = Buffer.from(value.buffers[0]!.uri.split(",")[1]!, "base64");
+        value.buffers[0]!.uri = "mesh.bin";
+        const path = join(cwd, "model.gltf");
+        await writeFile(path, JSON.stringify(value));
+        await writeFile(join(cwd, "mesh.bin"), buffer);
+        expect(await inputBytes(path)).toBe((await stat(path)).size + buffer.length);
+        const before = await inputHash(path);
+        buffer[0] = 1;
+        await writeFile(join(cwd, "mesh.bin"), buffer);
+        expect(await inputHash(path)).not.toBe(before);
     });
 
-    it("accepts hyphen-prefixed paths after the option terminator", async () => {
-        const cwd = await mkdtemp(join(directory, "hyphens-"));
-        await cp(input, join(cwd, "-input.gltf"));
-        const result = await runNodeAsync([launcher, "--", "pipeline", "-input.gltf", "-output.glb"], cwd);
-        expect(result.code).toBe(0);
-        expect((await new NodeIO().read(join(cwd, "-output.glb"))).getRoot().listMeshes()).toHaveLength(1);
-    });
+    describe.skipIf(!browser)("browser-dependent CLI", () => {
+        it("checks an unchanged output and checks an existing no-op without rewriting", async () => {
+            const graph = join(directory, "check.toon");
+            const output = join(directory, "checked.glb");
+            await writeFile(graph, serialize({ graph: 1, blocks: [{ type: "transform.dedup" }], check: { fidelity: 0.9, view: 64 } }));
+            const result = await run(["run", graph, input, "-o", output, "--check"]);
+            expect(result.code, result.stdout).toBe(0);
+            expect(parse(result.stdout).results).toContainEqual(expect.objectContaining({ check: "pass", fidelity: expect.any(Number) }));
+            const before = (await stat(output)).mtimeMs;
+            const noop = await run(["run", graph, input, "-o", output, "--check"]);
+            expect(noop.code, noop.stdout).toBe(0);
+            expect(parse(noop.stdout).results).toContainEqual(expect.objectContaining({ status: "up to date (no-op)", check: "pass" }));
+            expect((await stat(output)).mtimeMs).toBe(before);
+        }, 60_000);
 
-    it.each([
-        { blocks: ["validate"], geometry: undefined, ktx2: false },
-        { blocks: ["draco"], geometry: "KHR_draco_mesh_compression", ktx2: false },
-        { blocks: ["meshopt"], geometry: "EXT_meshopt_compression", ktx2: false },
-        { blocks: ["ktx2"], geometry: undefined, ktx2: true },
-        { blocks: ["validate", "draco", "validate"], geometry: "KHR_draco_mesh_compression", ktx2: false },
-        { blocks: ["meshopt", "validate"], geometry: "EXT_meshopt_compression", ktx2: false },
-        { blocks: ["ktx2", "validate"], geometry: undefined, ktx2: true },
-        { blocks: ["ktx2", "draco"], geometry: "KHR_draco_mesh_compression", ktx2: true },
-        { blocks: ["ktx2", "meshopt"], geometry: "EXT_meshopt_compression", ktx2: true },
-    ])(
-        "encodes $blocks through the built package",
-        async ({ blocks, geometry, ktx2 }) => {
-            const output = join(directory, `${blocks.join("-")}.glb`);
-            const result = await runNodeAsync([launcher, "pipeline", texturedInput, ...blocks, output], directory);
-            expect(result.code).toBe(0);
-            const parsed = await readGlbAsync(output);
-            if (geometry !== undefined) {
-                expect(parsed.json.extensionsUsed).toContain(geometry);
-                if (geometry === "KHR_draco_mesh_compression") {
-                    expect(parsed.json.meshes?.[0]?.primitives[0]?.extensions?.KHR_draco_mesh_compression).toBeDefined();
-                } else {
-                    expect(parsed.json.bufferViews?.some(({ extensions }) => extensions?.EXT_meshopt_compression !== undefined)).toBe(true);
+        it("writes the output but fails a check when textures are heavily degraded", async () => {
+            const doc = createGridDocument(2);
+            const textureData = Buffer.alloc(64 * 64 * 3);
+            for (let y = 0; y < 64; y++) {
+                for (let x = 0; x < 64; x++) {
+                    const offset = (y * 64 + x) * 3;
+                    const red = (Math.floor(x / 4) + Math.floor(y / 4)) % 2 === 0;
+                    textureData.set(red ? [255, 0, 0] : [0, 255, 255], offset);
                 }
             }
-            if (ktx2) {
-                expect(parsed.json.extensionsUsed).toContain("KHR_texture_basisu");
-                expectKtx2Image(parsed);
+            const png = await sharp(textureData, { raw: { width: 64, height: 64, channels: 3 } })
+                .png()
+                .toBuffer();
+            const texture = doc.createTexture().setImage(png).setMimeType("image/png");
+            const material = doc.createMaterial().setBaseColorTexture(texture).setDoubleSided(true).setRoughnessFactor(1).setMetallicFactor(0);
+            const primitive = doc.getRoot().listMeshes()[0]!.listPrimitives()[0]!;
+            const buffer = doc.getRoot().listBuffers()[0]!;
+            const positions = primitive.getAttribute("POSITION")!.getArray()!;
+            const uv: number[] = [];
+            for (let i = 0; i < positions.length; i += 3) uv.push(positions[i]!, positions[i + 1]!);
+            primitive.setMaterial(material).setAttribute("TEXCOORD_0", doc.createAccessor().setType("VEC2").setArray(new Float32Array(uv)).setBuffer(buffer));
+            const source = join(directory, "textured.glb");
+            await writeFile(source, await new NodeIO().writeBinary(doc));
+            const graph = join(directory, "degrade.toon");
+            await writeFile(graph, serialize({ graph: 1, blocks: [{ type: "transform.resize-textures", config: { maxSize: 1 } }], check: { fidelity: 0.99, view: 64 } }));
+            const output = join(directory, "degraded.glb");
+            const result = await run(["run", graph, source, "-o", output, "--check"]);
+            expect(result.code, result.stdout).toBe(1);
+            expect(parse(result.stdout).results).toContainEqual(expect.objectContaining({ status: "below limit", check: "fail" }));
+            expect((await stat(output)).size).toBeGreaterThan(0);
+        }, 60_000);
+
+        it("compares against the same-named original in a directory", async () => {
+            const result = await run(["inspect", input, "--against", directory, "--view", "64"]);
+            expect(result.code, result.stdout).toBe(0);
+            const value = parse(result.stdout);
+            expect(value.fidelity).toBeGreaterThanOrEqual(0.999);
+            expect(value.original).toMatchObject({ bytes: (await stat(input)).size, gpu_mib: expect.any(Number), load_s: expect.any(Number) });
+        }, 60_000);
+
+        it("matches the supplied symlink name against an original in a directory", async () => {
+            const cwd = join(directory, "symlink-original-name");
+            await mkdir(join(cwd, "target"), { recursive: true });
+            await mkdir(join(cwd, "originals"));
+            const target = join(cwd, "target/actual.glb");
+            await writeFile(target, sourceBytes);
+            await writeFile(join(cwd, "originals/display.glb"), sourceBytes);
+            await symlink(target, join(cwd, "display.glb"));
+            const result = await run(["inspect", "display.glb", "--against", "originals", "--view", "64"], cwd);
+            expect(result.code, result.stdout).toBe(0);
+            const value = parse(result.stdout);
+            expect(value).toMatchObject({ file: "display.glb", against: "originals/display.glb" });
+            expect(value.fidelity).toBeGreaterThanOrEqual(0.999);
+            expect(value.original).toMatchObject({ file: "originals/display.glb", bytes: sourceBytes.length });
+        }, 60_000);
+
+        it("restores an earlier reference after another original fails to render", async () => {
+            const cwd = join(directory, "reference-reset");
+            const candidates = join(cwd, "candidates");
+            const originals = join(cwd, "originals");
+            await mkdir(candidates, { recursive: true });
+            await mkdir(originals);
+            const a = join(candidates, "a.glb");
+            const b = join(candidates, "b.glb");
+            await writeFile(a, sourceBytes);
+            await writeFile(b, sourceBytes);
+            await writeFile(join(originals, "a.glb"), sourceBytes);
+            const empty = await new NodeIO().readBinary(generateGlbData());
+            for (const mesh of empty.getRoot().listMeshes()) mesh.dispose();
+            await writeFile(join(originals, "b.glb"), await new NodeIO().writeBinary(empty));
+            const result = await run(["inspect", a, b, a, "--against", originals, "--view", "64"]);
+            expect(result.code, result.stdout).toBe(1);
+            const rows = parse(result.stdout).models as { file: string; status: string; code?: string; fidelity?: number }[];
+            const compared = rows.filter((row) => row.file.endsWith("/a.glb"));
+            expect(compared).toHaveLength(2);
+            for (const row of compared) {
+                expect(row.status).toBe("ok");
+                expect(row.fidelity).toBeGreaterThanOrEqual(0.999);
             }
-        },
-        60_000
-    );
-
-    it("quantizes mesh attributes", async () => {
-        const output = join(directory, "quantized.glb");
-        const result = await runNodeAsync([launcher, "pipeline", input, "quantize", output], directory);
-
-        expect(result.code).toBe(0);
-        expect((await readGlbAsync(output)).json.extensionsUsed).toContain("KHR_mesh_quantization");
-    });
-
-    it("culls unused resources", async () => {
-        const source = join(directory, "unused-material.gltf");
-        const output = join(directory, "culled.glb");
-        const gltf = JSON.parse(generateGltfJson()) as { materials?: unknown[] };
-        gltf.materials = [{ name: "Unused" }];
-        await writeFile(source, JSON.stringify(gltf));
-
-        const result = await runNodeAsync([launcher, "pipeline", source, "cull-unused", output], directory);
-
-        expect(result.code).toBe(0);
-        expect((await readGlbAsync(output)).json.materials).toBeUndefined();
-    });
-
-    it("strips materials and their unused textures", async () => {
-        const output = join(directory, "stripped.glb");
-        const result = await runNodeAsync([launcher, "pipeline", texturedInput, "strip-materials", output], directory);
-
-        expect(result.code).toBe(0);
-        const { json } = await readGlbAsync(output);
-        expect(json.materials).toBeUndefined();
-        expect(json.textures).toBeUndefined();
-        expect(json.images).toBeUndefined();
-    });
-
-    it("prints validation diagnostics and writes output for a valid document", async () => {
-        const source = join(directory, "validate-warnings.gltf");
-        const output = join(directory, "validate-warnings.glb");
-        const io = new NodeIO();
-        const document = await io.read(input);
-        document.createNode();
-        await io.write(source, document);
-
-        const result = await runNodeAsync([launcher, "pipeline", source, "validate", output], directory);
-
-        expect(result.code).toBe(0);
-        expect(result.stdout).toContain("\u2705 glTF is valid");
-        expect(result.stdout).toContain("[Warning]");
-        expect(result.stdout).toContain("at /nodes/1");
-        expect((await readGlbAsync(output)).json.meshes).toHaveLength(1);
-    });
-
-    it("fails validation without creating output or printing success reports", async () => {
-        const source = join(directory, "validate-invalid.gltf");
-        const output = join(directory, "validate-invalid.glb");
-        const io = new NodeIO();
-        const document = await io.read(input);
-        document
-            .getRoot()
-            .listAccessors()[2]!
-            .setArray(new Uint16Array([0, 1, 99]));
-        await io.write(source, document);
-
-        const result = await runNodeAsync([launcher, "pipeline", source, "validate", output, "--stats", "--benchmark"], directory);
-
-        expect(result.code).toBe(1);
-        expect(result.stdout).toContain("[Error]");
-        expect(result.stdout).not.toContain("is valid");
-        expect(result.stdout).not.toContain("Wrote ");
-        expect(result.stdout).not.toContain("Stats:");
-        expect(result.stdout).not.toContain("Benchmark:");
-        expect(result.stderr.trim()).not.toBe("");
-        await expect(readFile(output)).rejects.toThrow();
-    });
-
-    it.each([
-        { blocks: ["draco", "draco"], first: EncodeDracoBlock, second: EncodeDracoBlock },
-        { blocks: ["ktx2", "ktx2"], first: EncodeKTX2Block, second: EncodeKTX2Block },
-        { blocks: ["draco", "meshopt"], first: EncodeDracoBlock, second: EncodeMeshoptBlock },
-        { blocks: ["meshopt", "draco"], first: EncodeMeshoptBlock, second: EncodeDracoBlock },
-    ])(
-        "matches library behavior for $blocks without imposing restrictions",
-        async ({ blocks, first: FirstBlock, second: SecondBlock }) => {
-            const source = new GltfInputBlock({ input: texturedInput });
-            const first = new FirstBlock();
-            const second = new SecondBlock();
-            const destination = new GltfOutputBlock();
-            source.output.connectTo(first.input);
-            first.output.connectTo(second.input);
-            second.output.connectTo(destination.input);
-            const asset = new NodeAsset({ name: "reference", outputBlock: destination });
-            const output = join(directory, `sequence-${blocks.join("-")}.glb`);
-
-            try {
-                const [reference] = await Promise.allSettled([asset.executeAsync()]);
-                const result = await runNodeAsync([launcher, "pipeline", texturedInput, ...blocks, output], directory);
-                if (reference?.status === "fulfilled") {
-                    expect(result.code).toBe(0);
-                    expect((await readGlbAsync(output)).json).toEqual((await parseGlbAsync(reference.value)).json);
-                } else {
-                    expect(result.code).toBe(1);
-                    expect(result.stderr.trim()).not.toBe("");
-                    await expect(readFile(output)).rejects.toThrow();
-                }
-            } finally {
-                asset.dispose();
-            }
-        },
-        60_000
-    );
-
-    it.each([[], ["--stats", "--benchmark"]].map((flags) => ({ flags })))("does not overwrite an existing destination with $flags", async ({ flags }) => {
-        const output = join(directory, `existing-${flags.join("-")}.glb`);
-        const original = Buffer.from("keep this file");
-        await writeFile(output, original);
-        const result = await runNodeAsync([launcher, ...flags, "pipeline", input, output], directory);
-        expect(result.code).toBe(1);
-        expect(result.stderr.trim()).not.toBe("");
-        expect(result.stdout).not.toContain("Wrote ");
-        expect(result.stdout).not.toContain("Stats:");
-        expect(result.stdout).not.toContain("Benchmark:");
-        expect(await readFile(output)).toEqual(original);
-    });
-
-    it.each(["--force", "-f"])("replaces an existing destination with %s", async (flag) => {
-        const cwd = await mkdtemp(join(directory, "force-existing-"));
-        const output = join(cwd, "output.glb");
-        await writeFile(output, "replace this file");
-        const result = await runNodeAsync([launcher, "pipeline", input, output, flag], directory);
-        expect(result.code).toBe(0);
-        expect(result.stdout).toContain(`Wrote ${output}`);
-        expect((await readGlbAsync(output)).json.meshes).toHaveLength(1);
-        expect(await readdir(cwd)).toEqual(["output.glb"]);
-    });
-
-    it("writes a new destination with --force", async () => {
-        const cwd = await mkdtemp(join(directory, "force-new-"));
-        const output = join(cwd, "output.glb");
-        const result = await runNodeAsync([launcher, "pipeline", input, output, "--force"], directory);
-        expect(result.code).toBe(0);
-        expect((await readGlbAsync(output)).json.meshes).toHaveLength(1);
-        expect(await readdir(cwd)).toEqual(["output.glb"]);
-    });
-
-    it("replaces a symbolic link destination with --force without writing its target", async () => {
-        const cwd = await mkdtemp(join(directory, "force-symlink-"));
-        const target = join(cwd, "target.glb");
-        const output = join(cwd, "output.glb");
-        const original = Buffer.from("keep this file");
-        await writeFile(target, original);
-        await symlink(target, output);
-        const result = await runNodeAsync([launcher, "pipeline", input, output, "--force"], directory);
-        expect(result.code).toBe(0);
-        expect((await lstat(output)).isFile()).toBe(true);
-        expect(await readFile(target)).toEqual(original);
-    });
-
-    it("keeps an existing destination when the pipeline fails with --force", async () => {
-        const cwd = await mkdtemp(join(directory, "force-invalid-"));
-        const source = join(cwd, "invalid.gltf");
-        const output = join(cwd, "output.glb");
-        const io = new NodeIO();
-        const document = await io.read(input);
-        document
-            .getRoot()
-            .listAccessors()[2]!
-            .setArray(new Uint16Array([0, 1, 99]));
-        await io.write(source, document);
-        const original = Buffer.from("keep this file");
-        await writeFile(output, original);
-        const before = await readdir(cwd);
-
-        const result = await runNodeAsync([launcher, "pipeline", source, "validate", output, "--force"], directory);
-
-        expect(result.code).toBe(1);
-        expect(result.stdout).not.toContain("Wrote ");
-        expect(await readFile(output)).toEqual(original);
-        expect(await readdir(cwd)).toEqual(before);
-    });
-
-    it.each([[], ["--force"]].map((flags) => ({ flags })))("does not overwrite the input through an equivalent relative output path with $flags", async ({ flags }) => {
-        const source = join(directory, "input.glb");
-        const original = await readFile(source);
-        const result = await runNodeAsync([launcher, "pipeline", source, relative(directory, source), ...flags], directory);
-        expect(result.code).toBe(1);
-        expect(await readFile(source)).toEqual(original);
-    });
-
-    it("does not replace the input through a hard link with --force", async () => {
-        const cwd = await mkdtemp(join(directory, "force-hardlink-"));
-        const source = join(cwd, "input.gltf");
-        await cp(input, source);
-        await link(source, join(cwd, "output.glb"));
-        const original = await readFile(source);
-        const result = await runNodeAsync([launcher, "pipeline", "input.gltf", "output.glb", "--force"], cwd);
-        expect(result.code).toBe(1);
-        expect(result.stderr.trim()).not.toBe("");
-        expect(await readFile(source)).toEqual(original);
-    });
-
-    it.each(["missing", "malformed", "directory"])("surfaces a %s input without creating output", async (kind) => {
-        const source = join(directory, `${kind}.gltf`);
-        const output = join(directory, `${kind}.glb`);
-        if (kind === "malformed") {
-            await writeFile(source, "not glTF");
-        } else if (kind === "directory") {
-            await mkdir(source);
-        }
-        const result = await runNodeAsync([launcher, "pipeline", source, output], directory);
-        expect(result.code).toBe(1);
-        expect(result.stderr.trim()).not.toBe("");
-        await expect(readFile(output)).rejects.toThrow();
-    });
-
-    it("surfaces a missing output parent without creating directories", async () => {
-        const parent = join(directory, "missing-parent");
-        const result = await runNodeAsync([launcher, "pipeline", input, join(parent, "output.glb")], directory);
-        expect(result.code).toBe(1);
-        expect(result.stderr.trim()).not.toBe("");
-        await expect(readdir(parent)).rejects.toThrow();
-    });
-
-    it.each([[], ["--force"]].map((flags) => ({ flags })))("refuses a directory destination with $flags", async ({ flags }) => {
-        const output = join(directory, `destination${flags.join("")}.glb`);
-        await mkdir(output);
-        const result = await runNodeAsync([launcher, "pipeline", input, output, ...flags], directory);
-        expect(result.code).toBe(1);
-        expect(result.stderr.trim()).not.toBe("");
-        expect(await readdir(output)).toEqual([]);
+            expect(rows.find((row) => row.file.endsWith("/b.glb"))).toMatchObject({ status: "failed", code: "INVALID_INPUT" });
+        }, 60_000);
     });
 });
-
-async function readGlbAsync(path: string) {
-    const bytes = await readFile(path);
-    return parseGlbAsync(new File([bytes], "scene.glb", { type: "model/gltf-binary" }));
-}
