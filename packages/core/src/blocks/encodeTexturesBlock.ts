@@ -1,9 +1,10 @@
 import type { Extension } from "@gltf-transform/core";
-import { EXTTextureAVIF, EXTTextureWebP } from "@gltf-transform/extensions";
+import { EXTTextureAVIF, EXTTextureWebP, KHRTextureBasisu } from "@gltf-transform/extensions";
 
 import { GltfDocumentType } from "../connectionPoints/gltfDocument";
 import { classifyTexture, matchesTextureSlots } from "../helpers/textureUsage";
 import { updateTextureUri } from "../helpers/updateTextureUri";
+import { KTX2DecoderResource } from "../resources/ktx2DecoderResource";
 import { PlatformIOResource } from "../resources/platformIOResource";
 import { isRasterImageMimeType, type RasterImageMimeType } from "../resources/rasterImageCodec";
 import { RasterImageCodecResource } from "../resources/rasterImageCodecResource";
@@ -19,20 +20,20 @@ const EncodeTexturesBlockDefinition = /* @__PURE__ */ defineBlock({
         quality: integerValue(80, { min: 1, max: 100 }),
         slots: enumValue(["all", "color", "data"]),
     },
-    resources: { codec: RasterImageCodecResource, io: PlatformIOResource },
-    runAsync: async (document, config, { codec, io }) => {
-        io.registerExtensions([EXTTextureWebP, EXTTextureAVIF]);
+    resources: { codec: RasterImageCodecResource, ktx2Decoder: KTX2DecoderResource, io: PlatformIOResource },
+    runAsync: async (document, config, { codec, ktx2Decoder, io }) => {
+        io.registerExtensions([EXTTextureWebP, EXTTextureAVIF, KHRTextureBasisu]);
         for (const texture of document.getRoot().listTextures()) {
             const image = texture.getImage();
             const sourceMime = texture.getMimeType();
-            if (image === null || !isRasterImageMimeType(sourceMime)) {
+            if (image === null || (sourceMime !== "image/ktx2" && !isRasterImageMimeType(sourceMime))) {
                 continue;
             }
             const { category } = classifyTexture(texture);
             if (!matchesTextureSlots(category, config.slots)) {
                 continue;
             }
-            const decoded = await codec.decodeAsync(image, sourceMime);
+            const decoded = sourceMime === "image/ktx2" ? await ktx2Decoder.decodeAsync(image) : await codec.decodeAsync(image, sourceMime);
             let mime: RasterImageMimeType = `image/${config.format}`;
             if (mime === "image/jpeg") {
                 for (let i = 3; i < decoded.data.length; i += 4) {
@@ -43,7 +44,8 @@ const EncodeTexturesBlockDefinition = /* @__PURE__ */ defineBlock({
                 }
             }
             const encoded = await codec.encodeAsync(decoded, mime, { quality: config.quality });
-            const compatibilityConversion = (sourceMime === "image/webp" || sourceMime === "image/avif") && (mime === "image/jpeg" || mime === "image/png");
+            const compatibilityConversion =
+                (sourceMime === "image/webp" || sourceMime === "image/avif" || sourceMime === "image/ktx2") && (mime === "image/jpeg" || mime === "image/png");
             if (encoded.byteLength >= image.byteLength && !compatibilityConversion) {
                 continue;
             }
@@ -56,8 +58,11 @@ const EncodeTexturesBlockDefinition = /* @__PURE__ */ defineBlock({
                 .listTextures()
                 .map((texture) => texture.getMimeType())
         );
-        for (const Extension of [EXTTextureWebP, EXTTextureAVIF] as const) {
-            const mime = Extension === EXTTextureWebP ? "image/webp" : "image/avif";
+        for (const [Extension, mime] of [
+            [EXTTextureWebP, "image/webp"],
+            [EXTTextureAVIF, "image/avif"],
+            [KHRTextureBasisu, "image/ktx2"],
+        ] as const) {
             if (mimes.has(mime)) {
                 document.createExtension<Extension>(Extension).setRequired(true);
             } else {

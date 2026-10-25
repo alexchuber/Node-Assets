@@ -50,6 +50,10 @@ count as color; all other slots count as data.
     - Output: the same `Document`
     - Uses: glTF Transform `quantize()`; execution-scoped `PlatformIO`
     - Behavior: Quantizes mesh attributes with library-default behavior.
+- `DequantizeBlock` (`transform.dequantize`)
+    - Input/output: the same `Document`
+    - Uses: glTF Transform `dequantize()`
+    - Behavior: Converts vertex and morph-target attributes to unnormalized float32, except joint indices, and removes `KHR_mesh_quantization`. No config.
 - `DedupBlock` (`transform.dedup`)
     - Input/output: the same `Document`
     - Uses: glTF Transform `dedup()`
@@ -83,9 +87,9 @@ count as color; all other slots count as data.
     - Behavior: Fits JPEG/PNG/WebP images to the maximum longer side without upscaling or changing format. Skips mixed color/data textures.
 - `EncodeTexturesBlock` (`transform.encode-textures`)
     - Input/output: the same `Document`
-    - Uses: `RasterImageCodecResource`; execution-scoped `PlatformIO`
+    - Uses: `RasterImageCodecResource`, `KTX2DecoderResource` (loaded only for selected KTX2 textures); execution-scoped `PlatformIO`
     - Config: `format` (`webp|avif|jpeg|png`, default `webp`), `quality` (integer 1–100, default 80), `slots` (`all|color|data`, default `all`).
-    - Behavior: Encodes JPEG/PNG/WebP/AVIF; preserves smaller originals unless converting extension formats to JPEG/PNG for compatibility. JPEG with transparency becomes PNG. Skips mixed color/data textures; `all` includes unused textures. Updates image URI extensions and required WebP/AVIF declarations. AVIF requires Node/Sharp.
+    - Behavior: Encodes JPEG/PNG/WebP/AVIF and supported 2D ETC1S/UASTC KTX2 sources (top mip decoded to RGBA); preserves smaller originals unless converting extension formats to JPEG/PNG for compatibility. JPEG with transparency becomes PNG. Skips mixed color/data textures; `all` includes unused textures. Updates image URI extensions and required WebP/AVIF/BasisU declarations, removing BasisU when no KTX2 remains. AVIF requires Node/Sharp.
 - `ValidateBlock`
     - Input: `Document`
     - Output: the same `Document`

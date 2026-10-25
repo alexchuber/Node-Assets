@@ -76,7 +76,8 @@ IDs, forward/missing references, and graphs with multiple sinks throw
 Use `ResizeTexturesBlock({ maxSize: 2048, slots: "all" })` before
 `EncodeTexturesBlock({ format: "webp", quality: 80, slots: "all" })`.
 Resizing fits the longer side without upscaling and preserves JPEG, PNG, or
-WebP format. Encoding accepts JPEG, PNG, WebP, and AVIF, with targets `webp`,
+WebP format. Encoding accepts JPEG, PNG, WebP, AVIF, and supported 2D ETC1S/UASTC
+KTX2 images, with targets `webp`,
 `avif`, `jpeg`, or `png`. Quality is an integer from 1 to 100, passed unchanged
 to the encoder and ignored for PNG. JPEG falls back to PNG for non-opaque alpha.
 
@@ -84,9 +85,11 @@ to the encoder and ignored for PNG. JPEG falls back to PNG for non-opaque alpha.
 emissive, diffuse, specular-glossiness, sheen color, and specular color) count as
 color; all other slots count as data.
 Textures shared by color and data slots remain unchanged. `all` also includes
-unused textures. Larger encodes are discarded, except when converting WebP or
-AVIF to JPEG/PNG for compatibility. Image URI extensions and required
-`EXT_texture_webp`/`EXT_texture_avif` declarations follow the resulting formats.
+unused textures. KTX2 is decoded to RGBA using its highest-resolution mip level.
+Larger encodes are discarded, except when converting WebP, AVIF, or KTX2 to
+JPEG/PNG for compatibility. Image URI extensions and required
+`EXT_texture_webp`/`EXT_texture_avif`/`KHR_texture_basisu` declarations follow the
+resulting formats.
 AVIF processing requires the Node codec (Sharp); the browser codec rejects it.
 
 # Example: Compressing GLB

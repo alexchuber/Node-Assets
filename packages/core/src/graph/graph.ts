@@ -2,6 +2,7 @@ import type { Block, _BlockRuntime } from "../blocks/block";
 import type { _InputBlockDefinition, ConfigDescriptor } from "../blocks/blockDefinition";
 import { CullUnusedBlock } from "../blocks/cullUnusedBlock";
 import { DedupBlock } from "../blocks/dedupBlock";
+import { DequantizeBlock } from "../blocks/dequantizeBlock";
 import { EncodeDracoBlock } from "../blocks/encodeDracoBlock";
 import { EncodeKTX2Block } from "../blocks/encodeKtx2Block";
 import { EncodeMeshoptBlock } from "../blocks/encodeMeshoptBlock";
@@ -200,6 +201,7 @@ function createRegistry(): ReadonlyMap<string, new (options?: Readonly<Record<st
     return new Map<string, new (options?: Readonly<Record<string, unknown>>) => TransformBlock>([
         ["transform.cull-unused", CullUnusedBlock],
         ["transform.dedup", DedupBlock],
+        ["transform.dequantize", DequantizeBlock],
         ["transform.encode-draco", EncodeDracoBlock],
         ["transform.encode-ktx2", EncodeKTX2Block],
         ["transform.encode-meshopt", EncodeMeshoptBlock],

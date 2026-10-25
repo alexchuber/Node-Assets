@@ -20,6 +20,7 @@ export { GltfInputBlock } from "./blocks/gltfInputBlock";
 export { GltfOutputBlock, type GltfOutputBlockOptions } from "./blocks/gltfOutputBlock";
 export { ObjInputBlock } from "./blocks/objInputBlock";
 export { QuantizeBlock } from "./blocks/quantizeBlock";
+export { DequantizeBlock, type DequantizeBlockOptions } from "./blocks/dequantizeBlock";
 export { StlInputBlock } from "./blocks/stlInputBlock";
 export { UsdInputBlock } from "./blocks/usdInputBlock";
 export { ValidateBlock, type ValidateBlockOptions } from "./blocks/validateBlock";
