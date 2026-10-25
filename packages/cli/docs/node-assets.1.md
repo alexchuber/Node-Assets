@@ -42,6 +42,7 @@ DESCRIPTION
      or higher (SSIM, 1 = identical; default 0.9 at 1024 px). The limit holds
      at the render size, so set --view to the largest size the model will
      appear on screen: 2048 for a zoomable product viewer or VR close-ups.
+     Fidelity is rounded to 3 decimals before display and limit checks.
 
      Output is TOON on stdout; progress goes to stderr. Nothing prompts.
      Errors are TOON on stdout too, with a code and a fix.

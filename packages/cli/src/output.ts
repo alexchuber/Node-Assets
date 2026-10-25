@@ -1,5 +1,4 @@
 import { relative } from "node:path";
-import { format } from "node:util";
 
 import { GraphError } from "@babylonjs/node-assets";
 import { encode } from "@toon-format/toon";
@@ -54,13 +53,21 @@ export function seconds(value: number): number {
     return Math.round(value * 100) / 100;
 }
 
+let diagnosticsDepth = 0;
+let savedConsole: Pick<typeof console, "log" | "info" | "warn" | "debug" | "error"> | undefined;
+
 export async function withDiagnostics<T>(action: () => Promise<T>): Promise<T> {
-    const saved = { log: console.log, info: console.info, warn: console.warn, debug: console.debug };
-    const diagnostic = (...args: unknown[]) => progress(format(...args));
-    Object.assign(console, { log: diagnostic, info: diagnostic, warn: diagnostic, debug: diagnostic });
+    if (diagnosticsDepth++ === 0) {
+        savedConsole = { log: console.log, info: console.info, warn: console.warn, debug: console.debug, error: console.error };
+        const silent = () => {};
+        Object.assign(console, { log: silent, info: silent, warn: silent, debug: silent, error: silent });
+    }
     try {
         return await action();
     } finally {
-        Object.assign(console, saved);
+        if (--diagnosticsDepth === 0) {
+            Object.assign(console, savedConsole);
+            savedConsole = undefined;
+        }
     }
 }

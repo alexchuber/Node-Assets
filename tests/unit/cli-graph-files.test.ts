@@ -15,7 +15,9 @@ describe("CLI graph files", () => {
             tuned: { input: "model.glb", renderer: "Chrome" },
         });
         expect(value.blocks[0]?.config).toEqual({ format: "webp", quality: 80, slots: "all" });
-        expect(parseGraphFile(serializeGraphFile(value))).toEqual(value);
+        const text = serializeGraphFile(value);
+        expect(text.match(/^(?:graph|name|goal|blocks|check|tuned)\b/gm)).toEqual(["graph", "name", "goal", "blocks", "check", "tuned"]);
+        expect(parseGraphFile(text)).toEqual(value);
     });
 
     it("hashes canonical defaults, not metadata or config key order", () => {

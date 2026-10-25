@@ -27,6 +27,26 @@ describe.skipIf(!browser)("node-assets tune in a browser", () => {
         if (directory) await rm(directory, { recursive: true, force: true });
     });
 
+    it("writes three-decimal fidelity consistently to rows and tuned results", async () => {
+        const doc = createGridDocument(1);
+        doc.getRoot().listMeshes()[0]!.listPrimitives()[0]!.setMaterial(doc.createMaterial().setDoubleSided(true));
+        const input = join(directory, "rounding.glb");
+        await writeFile(input, await new NodeIO().writeBinary(doc));
+        const graph = join(directory, "rounding.compat.toon");
+        const result = await runNodeAsync([launcher, "tune", input, "--for", "compat", "--view", "64", "--time-limit", "0.001s", "-o", graph], directory);
+        expect(result.code, result.stdout + result.stderr).toBe(0);
+        const row = (decode(result.stdout) as { results: { fidelity: number }[] }).results[0]!;
+        expect(row.fidelity).toBeGreaterThanOrEqual(0.9);
+        expect(row.fidelity).toBe(Math.round(row.fidelity * 1000) / 1000);
+        expect((await readGraph(graph)).tuned).toMatchObject({ result: { fidelity: row.fidelity } });
+        expect(
+            result.stderr
+                .split("\n")
+                .filter(Boolean)
+                .every((line) => line.startsWith("tune:"))
+        ).toBe(true);
+    }, 60_000);
+
     it("writes size and compat graphs and worst-view previews, then runs the size graph", async () => {
         const doc = createGridDocument(2);
         const pixels = new Uint8Array(32 * 32 * 3);

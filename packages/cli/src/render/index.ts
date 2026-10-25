@@ -26,7 +26,7 @@ export interface FidelityRenderer {
     stop(): Promise<void>;
     /** Frames an embedded GLB at 1024px/four views by default; rejects an empty view with INVALID_INPUT. */
     setReference(bytes: Uint8Array, options?: ReferenceOptions): Promise<ReferenceResult>;
-    /** Reuses reference framing and returns unrounded worst-tile SSIM, its view index, and warm loadMs. */
+    /** Reuses reference framing and returns three-decimal worst-tile SSIM, its view index, and warm loadMs. */
     evaluate(bytes: Uint8Array): Promise<EvaluationResult>;
     /** Returns a PNG with the reference on the left and last candidate on the right. */
     preview(view: number): Promise<Buffer>;
@@ -183,7 +183,7 @@ export function createRenderer(options: RendererOptions = {}): FidelityRenderer 
             try {
                 const result = await callPage(page, path);
                 hasCandidate = true;
-                return result;
+                return { ...result, worst: Math.round(result.worst * 1000) / 1000 };
             } finally {
                 blobs.delete(path);
             }
@@ -263,7 +263,7 @@ export async function setReference(bytes: Uint8Array, options?: ReferenceOptions
     return shared.setReference(bytes, options);
 }
 
-/** Returns unrounded worst-tile SSIM, its view index, and warm loadMs against the shared reference. */
+/** Returns three-decimal worst-tile SSIM, its view index, and warm loadMs against the shared reference. */
 export async function evaluate(bytes: Uint8Array): Promise<EvaluationResult> {
     if (!shared) throw new Error("Set a reference before evaluating.");
     return shared.evaluate(bytes);

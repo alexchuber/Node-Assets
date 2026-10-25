@@ -125,6 +125,7 @@ describe("node-assets CLI", () => {
         expect(shown.code).toBe(0);
         const value = parse(shown.stdout);
         expect(value.graph).toBe(1);
+        expect(Object.keys(value)).toEqual(["graph", "name", "blocks"]);
         expect(value.blocks).toContainEqual({ type: "transform.encode-textures", config: { format: "webp", quality: 90, slots: "color" } });
         const file = join(directory, "round-trip.toon");
         await writeFile(file, shown.stdout);
@@ -145,6 +146,37 @@ describe("node-assets CLI", () => {
         expect(parse(second.stdout).results).toEqual([expect.objectContaining({ status: "up to date (no-op)" })]);
         expect((await stat(output)).mtimeMs).toBe(before.mtimeMs);
         expect(await readFile(input)).toEqual(Buffer.from(sourceBytes));
+    });
+
+    it("keeps library graph logs out of stdout and stderr while preserving progress", async () => {
+        const doc = await new NodeIO().readBinary(sourceBytes);
+        const buffer = doc.getRoot().listBuffers()[0]!;
+        doc.getRoot()
+            .listMeshes()[0]!
+            .listPrimitives()[0]!
+            .setAttribute(
+                "TEXCOORD_0",
+                doc
+                    .createAccessor()
+                    .setType("VEC2")
+                    .setArray(new Float32Array([2, 2, 3, 2, 2, 3]))
+                    .setBuffer(buffer)
+            );
+        doc.createAccessor()
+            .setType("SCALAR")
+            .setArray(new Float32Array([1, 2, 3]))
+            .setBuffer(buffer);
+        await writeFile(join(directory, "quiet.glb"), await new NodeIO().writeBinary(doc));
+        const graph = join(directory, "quiet.toon");
+        await writeFile(
+            graph,
+            serialize({ graph: 1, blocks: [{ type: "transform.quantize" }, { type: "transform.cull-unused" }, { type: "transform.instance", config: { min: 2 } }] })
+        );
+        const result = await run(["run", graph, "quiet.glb", "-o", "quiet-out.glb"]);
+        expect(result.code, result.stdout + result.stderr).toBe(0);
+        expect(parse(result.stdout).results).toContainEqual(expect.objectContaining({ status: "ok" }));
+        expect(result.stderr).toBe("run: quiet.glb\n");
+        expect((await stat(join(directory, "quiet-out.glb"))).size).toBeGreaterThan(0);
     });
 
     it("requires --force for unrelated outputs and replaces atomically", async () => {
@@ -374,6 +406,8 @@ describe("node-assets CLI", () => {
             const result = await run(["run", graph, source, "-o", output, "--check"]);
             expect(result.code, result.stdout).toBe(1);
             expect(parse(result.stdout).results).toContainEqual(expect.objectContaining({ status: "below limit", check: "fail" }));
+            const row = (parse(result.stdout).results as { fidelity: number }[])[0]!;
+            expect(row.fidelity).toBe(Math.round(row.fidelity * 1000) / 1000);
             expect((await stat(output)).size).toBeGreaterThan(0);
         }, 60_000);
 
@@ -382,6 +416,7 @@ describe("node-assets CLI", () => {
             expect(result.code, result.stdout).toBe(0);
             const value = parse(result.stdout);
             expect(value.fidelity).toBeGreaterThanOrEqual(0.999);
+            expect(value.fidelity).toBe(Math.round(Number(value.fidelity) * 1000) / 1000);
             expect(value.original).toMatchObject({ bytes: (await stat(input)).size, gpu_mib: expect.any(Number), load_s: expect.any(Number) });
         }, 60_000);
 

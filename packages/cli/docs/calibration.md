@@ -35,7 +35,8 @@ per model. Without `--write`, only the report is written. `--write` requires all
 fit and held-out rankings, and review the JSON diff before keeping it. Rebuild
 the CLI after writing coefficients: they are bundled, not read at runtime.
 Unknown options fail with exit 2; runtime failures exit 1. Nothing prompts.
-Stdout contains TOON; progress and diagnostic messages go to stderr.
+Stdout contains TOON; progress goes to stderr. Library console output is
+suppressed.
 
 For a single tiny smoke check, without updating coefficients:
 

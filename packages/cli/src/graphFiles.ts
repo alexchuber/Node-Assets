@@ -51,9 +51,10 @@ export function normalizeGraph(value: unknown): GraphFile {
     try {
         const graph = serializeGraph(parseGraph({ graph: source.graph, blocks: source.blocks }).blocks, { defaults: true });
         return {
-            ...graph,
+            graph: graph.graph,
             ...(typeof source.name === "string" ? { name: source.name } : {}),
             ...(typeof source.goal === "string" ? { goal: source.goal } : {}),
+            blocks: graph.blocks,
             ...(check ? { check } : {}),
             ...(Object.hasOwn(source, "tuned") ? { tuned: object(source.tuned, "tuned") } : {}),
         };
