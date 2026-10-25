@@ -7,14 +7,7 @@ import { withDiagnostics } from "./output";
 
 export async function executeGraph(graph: Graph, input: string | Document): Promise<Uint8Array> {
     if (typeof input !== "string") {
-        const asset = new NodeAsset({ name: "node-assets-document", outputBlock: graph.tail });
-        const context = new NodeAssetContext(asset);
-        context.setInput(graph.head, input);
-        try {
-            return await withDiagnostics(async () => writeGlb(await asset.executeAsync(context)));
-        } finally {
-            asset.dispose();
-        }
+        return withDiagnostics(async () => writeGlb(await executeToDocument(graph, input)));
     }
     const destination = new GltfOutputBlock();
     const source = inputBlock(input);
@@ -27,5 +20,16 @@ export async function executeGraph(graph: Graph, input: string | Document): Prom
         asset.dispose();
         source.output.disconnectFrom(graph.head.input);
         graph.tail.output.disconnectFrom(destination.input);
+    }
+}
+
+export async function executeToDocument(graph: Graph, input: Document): Promise<Document> {
+    const asset = new NodeAsset({ name: "node-assets-document", outputBlock: graph.tail });
+    const context = new NodeAssetContext(asset);
+    context.setInput(graph.head, input);
+    try {
+        return await withDiagnostics(() => asset.executeAsync(context));
+    } finally {
+        asset.dispose();
     }
 }

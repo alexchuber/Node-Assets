@@ -2,6 +2,8 @@
 
 The reference page for the `node-assets` command. `node-assets help` prints the text below.
 
+Maintainers can refit the load estimate with the [dev-only Babylon.js calibration tool](calibration.md).
+
 ```text
 NODE-ASSETS(1)                     User Commands                    NODE-ASSETS(1)
 
@@ -125,9 +127,12 @@ COMMANDS
      --time-limit D  budget for the whole run, e.g. 90s, 5m (default 7m). A
                      run cut short still writes the best results so far,
                      marks them "search: partial", and gives the command that
-                     finishes the search. Agent shells often stop commands
-                     after about 10 minutes; tune one model per call when a
-                     batch needs longer.
+                     finishes the search. The budget stops new search work;
+                     each input's baseline is always checked, and compat also
+                     checks an original-size PNG fallback when the original
+                     textures need extensions. Agent shells often stop
+                     commands after about 10 minutes; tune one model per call
+                     when a batch needs longer.
 
   run <graph> <input>... -o <out.glb|dir/>
      Applies a graph file or a built-in graph. Several inputs or a directory
@@ -189,6 +194,7 @@ GRAPHS
        transform.encode-ktx2       KTX2 (ETC1S / UASTC)
        transform.simplify          reduce triangles
        transform.quantize          store vertex data in smaller types
+       transform.dequantize        restore float vertex data for compatibility
        transform.encode-meshopt    meshopt geometry compression
        transform.encode-draco      Draco geometry compression
        transform.strip-materials   remove all materials

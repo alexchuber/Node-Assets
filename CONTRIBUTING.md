@@ -50,8 +50,9 @@ pnpm vitest run tests/e2e/cli.test.ts
 
 The [node-assets manual](packages/cli/docs/node-assets.1.md) defines commands,
 flags, TOON output, graph files and error codes. `pnpm cli <command> --help`
-prints a concise command reference. `run --check` and `inspect --against` need
-a Chromium browser; other implemented commands do not. `tune` is currently a
-help-complete stub pending the search implementation.
+prints a concise command reference. `tune`, `run --check`, and `inspect --against`
+need a Chromium browser; other commands do not. For example,
+`pnpm cli tune model.glb --for size,gpu -o graphs/` writes reusable graphs and
+side-by-side previews without writing models.
 
 Make sure you've run `pnpm lint`, `pnpm test`, and `pnpm build` before opening a pull request.
