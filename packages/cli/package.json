@@ -27,8 +27,7 @@
     },
     "scripts": {
         "build": "vite build && vite build --config vite.render.config.ts",
-        "calibrate:build": "vite build --config vite.calibrate.config.ts",
-        "prepack": "node scripts/prepack.mjs"
+        "calibrate:build": "vite build --config vite.calibrate.config.ts"
     },
     "dependencies": {
         "@babylonjs/core": "^9.27.1",

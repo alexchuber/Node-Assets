@@ -235,9 +235,10 @@ LIMITS
      (NODE_OPTIONS=--experimental-web-worker on Node versions that offer it).
      The fidelity check renders the static pose only. size counts raw bytes,
      not gzip or brotli transfer size. The load model's coefficients are
-     provisional. The 0.9 default has not yet been re-validated on the
-     Babylon.js renderer; check the previews. Scores can differ slightly
-     between browsers and machines.
+     provisional. The fidelity limit is a numerical SSIM check, not a
+     validated perceptual guarantee; the 0.9 default has not yet been
+     re-validated on the Babylon.js renderer, so check the previews. Scores
+     can differ slightly between browsers and machines.
 
 EXAMPLES
      node-assets

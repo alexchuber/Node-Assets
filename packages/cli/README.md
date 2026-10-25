@@ -6,7 +6,8 @@
 compatibility. `tune` then searches the optimization settings for the best result that stays within a fidelity
 limit: each candidate and the original are rendered with Babylon.js from 4 views and compared (worst-region SSIM,
 0.9 or higher at 1024 px by default). The winning settings are saved as a small, editable graph file that `run`
-applies to any number of models.
+applies to any number of models. The limit is a numerical check of the renders, not a validated guarantee that
+differences are invisible.
 
 The CLI is built for coding agents as well as people: output is [TOON](https://toonformat.dev) on stdout, errors carry
 a code and a fix, and nothing prompts.
@@ -132,11 +133,9 @@ pnpm cli --help
 pnpm vitest run tests/e2e/cli.test.ts
 ```
 
-To build the installable tarball, commit your changes first, then:
+To build the installable tarball:
 
 ```sh
+pnpm build
 cd packages/cli && npm pack
 ```
-
-`npm pack` refuses uncommitted changes in the build inputs, rebuilds core and the CLI, and records the commit in
-`dist/build-info.json` inside the tarball.
