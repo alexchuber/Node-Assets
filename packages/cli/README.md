@@ -1,97 +1,117 @@
 # Node Assets CLI
 
-A command-line interface for building and running pipelines with `@babylonjs/node-assets`.
+> **Preview (v0.1.0).** Expect rough edges and breaking changes. Not published to npm.
 
-> **⚠️ Notice:** This package is experimental. API is subject to change and not intended for production use.
+`node-assets` makes 3D models small and web-ready. Pick a goal: download size, GPU memory, load time or
+compatibility. `tune` then searches the optimization settings for the best result that still looks the same.
+Fidelity is checked by rendering the model with Babylon.js. The winning settings are saved as a small, editable graph
+file that `run` applies to any number of models.
 
-## Usage
+The CLI is built for coding agents as well as people: output is [TOON](https://toonformat.dev) on stdout, errors carry
+a code and a fix, and nothing prompts.
 
-### Pipelines
+## Install
 
-A pipeline is a sequence of operations applied to a 3D asset. The CLI allows you to define and run pipelines using the `node-assets pipeline` command.
-
-```sh
-node-assets pipeline input.gltf output.glb
-node-assets pipeline input.glb ktx2 draco output.glb
-node-assets pipeline model.fbx cull-unused quantize meshopt output.glb
-```
-
-The command syntax is:
-
-```text
-node-assets pipeline <input> [operation...] <output> [--force] [--stats] [--benchmark]
-```
-
-| Element   | Supported values                                                        |
-| --------- | ----------------------------------------------------------------------- |
-| Input     | `.gltf`, `.glb`, `.fbx`, `.obj`, `.stl`, `.usd`, `.usda`, `.usdc`, `.usdz` |
-| Output    | `.glb`                                                                  |
-| Operation | `draco`, `meshopt`, `ktx2`, `validate`, `quantize`, `cull-unused`, `strip-materials` |
-
-USD inputs require Web Worker support (a global `Worker`). On Node versions that
-offer it behind a flag, such as Node 26, enable it with:
+Requires Node.js 20.19+, 22.13+ or 24+.
 
 ```sh
-NODE_OPTIONS=--experimental-web-worker node-assets pipeline model.usdz output.glb
+npm i -g https://github.com/alexchuber/Node-Assets/releases/download/cli-v0.1.0/node-assets-cli-0.1.0.tgz
+node-assets --version
 ```
 
-Without specifying operations, the CLI reads the input and writes it back out as the target output format.
+`tune`, `run --check` and `inspect --against` render in a headless browser. They use Google Chrome, Microsoft Edge or
+Chromium if one is installed. If none is found, install one with:
 
-Run `node-assets --help` for command help or `node-assets --version` for the
+```sh
+npx playwright install chromium
+```
+
+To use a specific browser, set `NODE_ASSETS_CHROMIUM` to its executable path.
+
+### Agent skill
+
+Give your coding agent (Claude Code, Copilot, Cursor, Codex and others) a skill that tells it when and how to use the
+CLI. The skill is a thin wrapper: it points the agent at `node-assets help`, so the instructions always match the
 installed version.
 
-### Replacing output
-
-By default, the CLI does not overwrite an existing output file. It stops before
-running the pipeline and reports the error. To replace the file,
-for example when you repeat a benchmark run, add `--force` (or `-f`):
-
 ```sh
-node-assets pipeline input.glb draco output.glb --force --benchmark
+npx skills add https://github.com/alexchuber/Node-Assets/tree/cli-v0.1.0/skills/node-assets-cli
 ```
 
-The CLI replaces the output file only after the pipeline succeeds, so a failed
-run leaves the existing file unchanged. If the output is a symbolic link, the CLI
-replaces the link, not the file it points to. The CLI never replaces the input
-file, even with `--force`. It does not protect the files that a `.gltf` input
-references, such as external buffers and images, so do not name one of them as
-the output.
-
-### Run reports
+## Quick start
 
 ```sh
-node-assets pipeline input.glb draco output.glb --stats --benchmark
+node-assets tune model.glb --for size -o graphs/
+node-assets run graphs/model.size.toon model.glb -o public/model.glb
 ```
 
-Use either flag independently or both together. Reports appear after the output
-file has been written successfully. Without these flags, no run report is printed.
+`tune` writes `graphs/model.size.toon` (the settings) and `graphs/model.size.png` (original next to the result, at the
+view that changed most). `run` applies the graph and writes the optimized model.
 
-| Flag          | Report |
-| ------------- | ------ |
-| `--stats`     | Total size before and after for the named input and output files. |
-| `--benchmark` | Completion time, user and system CPU time, RSS, peak RSS, and heap used. |
+## Workflows
 
-Size statistics compare serialized file sizes, not decoded asset sizes. The input
-size excludes external buffers and images referenced by a `.gltf` or `.glb` file.
+| Task | Command | What it does |
+|---|---|---|
+| See what's here | `node-assets` | Lists the models and graphs under the current directory, the built-in graphs, and next steps. |
+| Measure models | `node-assets inspect assets/` | Bytes, GPU memory estimate, load time estimate, triangles, textures and required decoders, one row per model. |
+| Tune for one goal | `node-assets tune assets/helmet.glb --for size -o graphs/` | Finds the smallest download that looks the same at 1024 px, and writes `helmet.size.toon` + `helmet.size.png`. |
+| Tune for several goals | `node-assets tune assets/helmet.glb --for size,gpu,load,compat -o graphs/` | One search, one graph per goal, so you can compare and pick. |
+| Name the graph yourself | `node-assets tune assets/helmet.glb --for gpu -o graphs/helmet-quest.toon` | Writes to the given file (one input and one goal). |
+| Tune for close-ups or VR | `node-assets tune assets/helmet.glb --for gpu --view 2048 -o graphs/` | Holds fidelity at 2048 px instead of 1024 px. |
+| Tune a set of models | `node-assets tune assets/a.glb assets/b.glb assets/c.glb --for size -o graphs/` | Counts each decoder's download once across the set. |
+| Apply a graph | `node-assets run graphs/helmet.size.toon assets/helmet.glb -o public/helmet.glb` | Writes the optimized model. Running it again is a no-op. |
+| Reuse a graph on other models | `node-assets run graphs/helmet.size.toon assets/ -o public/ --check` | Applies the graph to every model in `assets/`, renders each result against its original and fails any below the limit. |
+| Quick optimize, no browser | `node-assets run optimize assets/helmet.glb -o public/helmet.glb` | Built-in graph: WebP textures up to 2048 px, quantized geometry, lossless cleanup. No fidelity search. |
+| Customize a graph | `node-assets show optimize > graphs/mine.toon` | Prints every block and setting with its default. Edit the file, then `run` it with `--check`. |
+| Compare results with originals | `node-assets inspect public/ --against assets/` | Renders each file next to the original of the same name and reports fidelity. |
+| Read the full guide | `node-assets help` | Prints the manual: goals, levers, graph format, output, errors. |
 
-Benchmark timing covers pipeline creation (including library loading), execution,
-output writing, and disposal, but excludes argument parsing, input and output file
-checks, and report printing. CPU times are process-wide and may include worker
-threads. RSS (resident set size) and heap used are process-wide snapshots at
-completion; peak RSS is the process-lifetime high-water mark, not a per-pipeline
-memory delta.
+Inputs can be `.glb`, `.gltf`, `.fbx`, `.obj` (with `.mtl`), `.stl` and `.usd`/`.usda`/`.usdc`/`.usdz`. Output is
+always `.glb`.
 
-The total size before selects a shared unit for both size totals, using
-1024-based units (B, KiB, MiB, GiB, TiB, PiB). Memory values scale independently.
-Bytes remain whole numbers; larger units use two decimal places. For example,
-2,088 bytes before and 776 bytes after display as `2.04 KiB` and `0.76 KiB`.
+## Reading the output
 
-Completion time selects a shared unit for all timing rows: milliseconds (`ms`),
-seconds (`s`), minutes (`min`), or hours (`h`), with two decimal places. For
-example, a 2,538.93 ms run displays as `2.54 s`, and 115.06 ms of system CPU time
-displays as `0.12 s`. Size and time unit selection advances to the next unit when
-rounding reaches its boundary. The selected unit is kept for the other rows,
-even when their values would otherwise use a different unit.
+Results are TOON on stdout: compact, indented `key: value` lines, with tables as `name[rows]{columns}:`. Progress goes
+to stderr. For example, `node-assets inspect duck.glb helmet.glb` prints:
+
+```text
+count: 2 models found
+models[2]{file,status,bytes,gpu_mib,load_s,triangles,textures,decoders,required_extensions}:
+  helmet.glb,ok,3773916,107.2,3.57,15452,5x jpeg 2048x2048,none,none
+  duck.glb,ok,120484,1.4,0.15,4212,1x png 512x512,none,none
+```
+ A `tune` result row lists the graph it wrote, bytes, decoder bytes, GPU MiB, estimated load seconds,
+fidelity, the chosen textures and geometry, the decoders the file needs, whether the search finished, and the preview
+image. `warnings` names any decoder the result needs; `help` suggests next commands. Errors look like this and exit 1
+(or 2 for usage errors):
+
+```text
+error: unknown goal "speed"
+code: USAGE
+help[1]: "goals: size, gpu, load, compat"
+```
+
+## Why `tune`
+
+In 54 graded runs of coding agents on a research prototype of this CLI, agents that used `tune` landed at a median
+**1.09×** the best known result. Agents that set the same options by hand landed at **2.11×**. Near-best results:
+11/20 with `tune`, 4/20 without. Every result in both groups passed an independent fidelity check. Details, method and
+caveats: [research/cli-v2/docs/node-assets.2.md](../../research/cli-v2/docs/node-assets.2.md).
+
+## Known limits
+
+- **Preview.** The CLI is a TypeScript port of the research prototype. It renders fidelity with Babylon.js, so its
+  results have not been re-graded against the research numbers yet.
+- The `load` goal estimates decode time with a model whose coefficients are provisional until they are refit on
+  Babylon.js cold loads (see [docs/calibration.md](docs/calibration.md)).
+- Fidelity is checked on the static pose only; animated and skinned models are not posed.
+- `size` counts raw file bytes, not gzip or brotli transfer size.
+- Fidelity scores can differ slightly between browsers and machines.
+- A long `tune` on several large models can hit its time limit (`--time-limit`, default 7 minutes). It still writes
+  the best results so far and prints the command that finishes the search.
+- USD input needs Web Worker support (`NODE_OPTIONS=--experimental-web-worker` on Node versions that offer it).
+- Results that use Draco, meshopt or KTX2 need the matching decoder in the viewer. Babylon.js loads them
+  automatically; for a file that needs none, use `--for compat`.
 
 ## Develop locally
 
@@ -100,5 +120,13 @@ From the repository root:
 ```sh
 pnpm install
 pnpm build
-pnpm cli pipeline input.gltf ktx2 draco output.glb
+pnpm cli --help
+pnpm vitest run tests/e2e/cli.test.ts
+```
+
+To build the installable tarball:
+
+```sh
+pnpm build
+cd packages/cli && npm pack
 ```
