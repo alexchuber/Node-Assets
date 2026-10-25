@@ -39,7 +39,11 @@ export class NodeRasterImageCodec implements RasterImageCodec {
         }
 
         const [targetWidth, targetHeight] = fitImageSize(width, height, maxSize);
-        return instance.autoOrient().resize(targetWidth, targetHeight, { fit: "fill" }).toFormat(toSharpFormat(mimeType)).toBuffer();
+        return instance
+            .autoOrient()
+            .resize(targetWidth, targetHeight, { fit: "fill" })
+            .toFormat(toSharpFormat(mimeType), mimeType === "image/avif" ? { quality: 90 } : undefined)
+            .toBuffer();
     }
 
     public async disposeAsync(): Promise<void> {

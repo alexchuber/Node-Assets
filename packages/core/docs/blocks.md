@@ -84,7 +84,7 @@ count as color; all other slots count as data.
     - Input/output: the same `Document`
     - Uses: `RasterImageCodecResource.resizeAsync()`
     - Config: `maxSize` (integer 1–16384, default 2048), `slots` (`all|color|data`, default `all`).
-    - Behavior: Fits JPEG/PNG/WebP images to the maximum longer side without upscaling or changing format. Skips mixed color/data textures.
+    - Behavior: Fits JPEG/PNG/WebP/AVIF images to the maximum longer side without upscaling or changing format. AVIF resizing requires Node/Sharp and uses quality 90; the browser codec rejects selected AVIF textures, as it does for encoding. Skips mixed color/data textures. Skips KTX2; decode/re-encode KTX2 first (for example, with `EncodeTexturesBlock({ format: "png" })`) before resizing.
 - `EncodeTexturesBlock` (`transform.encode-textures`)
     - Input/output: the same `Document`
     - Uses: `RasterImageCodecResource`, `KTX2DecoderResource` (loaded only for selected KTX2 textures); execution-scoped `PlatformIO`
