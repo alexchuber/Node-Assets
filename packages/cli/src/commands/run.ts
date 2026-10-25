@@ -1,5 +1,5 @@
 import { lstat, mkdir, readFile, realpath, stat } from "node:fs/promises";
-import { basename, dirname, extname, join, resolve } from "node:path";
+import { basename, dirname, extname, join, resolve, sep } from "node:path";
 
 import { parse, stringFlag } from "../arguments";
 import { readDoc } from "../document";
@@ -35,7 +35,7 @@ export async function cmdRun(argv: readonly string[]): Promise<number> {
     const collected = await collect(inputs);
     const items = await canonicalizeInputs(collected.items);
     const { multi } = collected;
-    const outputDirectory = outputArgument.endsWith("/") || (await stat(outputArgument).catch(() => null))?.isDirectory();
+    const outputDirectory = outputArgument.endsWith("/") || outputArgument.endsWith(sep) || (await stat(outputArgument).catch(() => null))?.isDirectory();
     if (multi && !outputDirectory && extname(outputArgument)) throw new CliError("USAGE", "Several inputs or a directory require -o dir/", [commandHelp("run").usage]);
     const directory = !!outputDirectory || multi;
     if (!directory && extname(outputArgument).toLowerCase() !== ".glb") throw new CliError("USAGE", "Output must end in .glb", ["Use -o <out.glb|dir/>"]);
