@@ -7,34 +7,20 @@ import { RawCubeTexture } from "@babylonjs/core/Materials/Textures/rawCubeTextur
 import { Texture } from "@babylonjs/core/Materials/Textures/texture";
 import { AppendSceneAsync } from "@babylonjs/core/Loading/sceneLoader";
 import { SceneLoaderFlags } from "@babylonjs/core/Loading/sceneLoaderFlags";
-import { KhronosTextureContainer2 } from "@babylonjs/core/Misc/khronosTextureContainer2";
 import { CubeMapToSphericalPolynomialTools } from "@babylonjs/core/Misc/HighDynamicRange/cubemapToSphericalPolynomial";
 import { RegisterInstancedMesh } from "@babylonjs/core/Meshes/instancedMesh.pure";
 import { RegisterGLTF2Loader } from "@babylonjs/loaders/glTF/2.0/glTFLoader.pure";
 import { RegisterGLTFFileLoader } from "@babylonjs/loaders/glTF/glTFFileLoader.pure";
 import { registerBuiltInGLTFExtensions } from "@babylonjs/loaders/glTF/2.0/Extensions/dynamic";
 
+import { configureLocalKtx2 } from "./codecs";
 import type { Frame, ReferenceResult } from "./protocol";
 import { createScorer } from "./ssim";
 import { emptyModelError } from "./errors";
 
 /** Installs the browser-side reference/evaluate protocol. Called only by the renderer HTML entry. */
 export function initialize(): void {
-    const local = (file: string) => new URL(`/codecs/${file}`, location.origin).href;
-    KhronosTextureContainer2.URLConfig = {
-        jsDecoderModule: local("ktx2Decoder.js"),
-        wasmUASTCToASTC: local("uastc_astc.wasm"),
-        wasmUASTCToBC7: local("uastc_bc7.wasm"),
-        wasmUASTCToRGBA_UNORM: local("uastc_rgba8_unorm_v2.wasm"),
-        wasmUASTCToRGBA_SRGB: local("uastc_rgba8_srgb_v2.wasm"),
-        wasmUASTCToR8_UNORM: local("uastc_r8_unorm.wasm"),
-        wasmUASTCToRG8_UNORM: local("uastc_rg8_unorm.wasm"),
-        jsMSCTranscoder: local("msc_basis_transcoder.js"),
-        wasmMSCTranscoder: local("msc_basis_transcoder.wasm"),
-        wasmZSTDDecoder: local("zstddec.wasm"),
-    };
-    // Main-thread decoding lets the context's offline route guard cover every decoder request.
-    KhronosTextureContainer2.DefaultNumWorkers = 0;
+    configureLocalKtx2(location.origin);
     SceneLoaderFlags.ShowLoadingScreen = false;
     RegisterInstancedMesh();
     RegisterGLTFFileLoader();
