@@ -23,7 +23,7 @@ async function sameFile(left: string, right: string): Promise<boolean> {
     return !!a && !!b && a.dev === b.dev && a.ino === b.ino;
 }
 
-export async function cmdRun(argv: readonly string[]): Promise<number> {
+export async function runCommandAsync(argv: readonly string[]): Promise<number> {
     const { values, positionals } = parse("run", argv);
     if (values.help) {
         out(commandHelp("run"));

@@ -4,7 +4,7 @@ import { join, resolve, sep } from "node:path";
 
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { cmdRun } from "../../packages/cli/src/commands/run";
+import { runCommandAsync } from "../../packages/cli/src/commands/run";
 import { serialize } from "../../packages/cli/src/output";
 import { generateGlbData } from "../helpers/gltf";
 
@@ -45,7 +45,7 @@ describe("CLI run output directories", () => {
     ])("creates a new output directory with a trailing %s separator", async (name, separator) => {
         const output = join(directory, name) + separator;
         await expect(stat(output)).rejects.toMatchObject({ code: "ENOENT" });
-        await expect(cmdRun([graph, input, "-o", output])).resolves.toBe(0);
+        await expect(runCommandAsync([graph, input, "-o", output])).resolves.toBe(0);
         expect((await stat(output)).isDirectory()).toBe(true);
         expect((await stat(join(output, "input.glb"))).size).toBeGreaterThan(0);
         expect(await readFile(input)).toEqual(Buffer.from(bytes));

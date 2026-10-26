@@ -9,7 +9,7 @@ import { decoderWarnings, docSummary, extensionsOf, formatNotes, gpuEstimate, lo
 import { asError, CliError, mib, out, progress, rel, seconds } from "../output";
 import type { FidelityRenderer } from "../render";
 
-export async function cmdInspect(argv: readonly string[]): Promise<number> {
+export async function inspectCommandAsync(argv: readonly string[]): Promise<number> {
     const { values, positionals } = parse("inspect", argv);
     if (values.help) {
         out(commandHelp("inspect"));

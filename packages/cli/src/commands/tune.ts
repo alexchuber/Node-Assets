@@ -31,7 +31,7 @@ function quote(argument: string): string {
     return /^[\w./,:=-]+$/.test(argument) ? argument : `'${argument.replaceAll("'", "'\\''")}'`;
 }
 
-export async function cmdTune(argv: readonly string[]): Promise<number> {
+export async function tuneCommandAsync(argv: readonly string[]): Promise<number> {
     const { values, positionals } = parse("tune", argv);
     if (values.help) {
         out(commandHelp("tune"));

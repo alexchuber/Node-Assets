@@ -8,7 +8,7 @@ import { builtinPath } from "../graphFiles";
 import { supportedInput } from "../inputs";
 import { out, rel } from "../output";
 
-export async function home(): Promise<number> {
+export async function homeCommandAsync(): Promise<number> {
     const models: { file: string; bytes: number }[] = [];
     const graphs: { file: string; bytes: number }[] = [];
     async function walk(directory: string, depth: number): Promise<void> {
