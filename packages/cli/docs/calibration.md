@@ -4,6 +4,9 @@ This is maintainer tooling, not a `node-assets` command. Its source (`dev/`),
 build (`.dev/`) and cache (`.cache/`) are excluded from the npm package. Run
 commands from the repository root, with dependencies and the core build present.
 
+For non-render variant and fit tests, run
+`pnpm vitest run tests/unit/cliCalibrate.test.ts`.
+
 ## Build and run
 
 ```sh

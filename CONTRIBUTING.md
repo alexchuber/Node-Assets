@@ -40,13 +40,20 @@ pnpm cli           # Show models and graphs under the current directory
 pnpm typedocs      # Generate the TypeDoc API reference
 ```
 
-The shared lint, format, and typecheck commands cover both packages. CLI tests
-live in `tests/e2e/cli.test.ts` and build isolated package fixtures. Build first,
-then run only the focused file:
+The shared lint, format, and typecheck commands cover both packages. Non-render
+CLI unit tests live in `tests/unit/cli*.test.ts`. Executable tests in
+`tests/e2e/cli.test.ts`, `tests/e2e/cliTuneOptions.test.ts`, and
+`tests/e2e/cliTune.test.ts` build isolated package fixtures. Renderer integration
+tests live in `tests/integration/cliRender.test.ts`. Build first, then run only
+the focused files:
 
 ```sh
-pnpm vitest run tests/e2e/cli.test.ts
+pnpm vitest run tests/unit/cliCommands.test.ts tests/e2e/cliTuneOptions.test.ts
 ```
+
+`tests/e2e/cli.test.ts`, `tests/e2e/cliTune.test.ts`, and
+`tests/integration/cliRender.test.ts` include browser renders; run them only when
+the change needs that coverage.
 
 The [node-assets manual](packages/cli/docs/node-assets.1.md) defines commands,
 flags, TOON output, graph files and error codes. `pnpm cli <command> --help`

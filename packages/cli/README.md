@@ -53,21 +53,21 @@ view that changed most). `run` applies the graph and writes the optimized model.
 
 ## Workflows
 
-| Task | Command | What it does |
-|---|---|---|
-| See what's here | `node-assets` | Lists the models and graphs under the current directory, the built-in graphs, and next steps. |
-| Measure models | `node-assets inspect assets/` | Bytes, GPU memory estimate, load time estimate, triangles, textures and required decoders, one row per model. |
-| Tune for one goal | `node-assets tune assets/helmet.glb --for size -o graphs/` | Finds the smallest download within the fidelity limit at 1024 px, and writes `helmet.size.toon` + `helmet.size.png`. |
-| Tune for several goals | `node-assets tune assets/helmet.glb --for size,gpu,load,compat -o graphs/` | One search, one graph per goal, so you can compare and pick. |
-| Name the graph yourself | `node-assets tune assets/helmet.glb --for gpu -o graphs/helmet-quest.toon` | Writes to the given file (one input and one goal). |
-| Tune for close-ups or VR | `node-assets tune assets/helmet.glb --for gpu --view 2048 -o graphs/` | Holds fidelity at 2048 px instead of 1024 px. |
-| Tune a set of models | `node-assets tune assets/a.glb assets/b.glb assets/c.glb --for size -o graphs/` | Counts each decoder's download once across the set. |
-| Apply a graph | `node-assets run graphs/helmet.size.toon assets/helmet.glb -o public/helmet.glb` | Writes the optimized model. Running it again is a no-op. |
-| Reuse a graph on other models | `node-assets run graphs/helmet.size.toon assets/ -o public/ --check` | Applies the graph to every model in `assets/`, renders each result against its original and fails any below the limit. |
-| Quick optimize, no browser | `node-assets run optimize assets/helmet.glb -o public/helmet.glb` | Built-in graph: WebP textures up to 2048 px, quantized geometry, lossless cleanup. No fidelity search. |
-| Customize a graph | `node-assets show optimize > graphs/mine.toon` | Prints every block and setting with its default. Edit the file, then `run` it with `--check`. |
-| Compare results with originals | `node-assets inspect public/ --against assets/` | Renders each file next to the original of the same name and reports fidelity. |
-| Read the full guide | `node-assets help` | Prints the manual: goals, levers, graph format, output, errors. |
+| Task                           | Command                                                                          | What it does                                                                                                           |
+| ------------------------------ | -------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| See what's here                | `node-assets`                                                                    | Lists the models and graphs under the current directory, the built-in graphs, and next steps.                          |
+| Measure models                 | `node-assets inspect assets/`                                                    | Bytes, GPU memory estimate, load time estimate, triangles, textures and required decoders, one row per model.          |
+| Tune for one goal              | `node-assets tune assets/helmet.glb --for size -o graphs/`                       | Finds the smallest download within the fidelity limit at 1024 px, and writes `helmet.size.toon` + `helmet.size.png`.   |
+| Tune for several goals         | `node-assets tune assets/helmet.glb --for size,gpu,load,compat -o graphs/`       | One search, one graph per goal, so you can compare and pick.                                                           |
+| Name the graph yourself        | `node-assets tune assets/helmet.glb --for gpu -o graphs/helmet-quest.toon`       | Writes to the given file (one input and one goal).                                                                     |
+| Tune for close-ups or VR       | `node-assets tune assets/helmet.glb --for gpu --view 2048 -o graphs/`            | Holds fidelity at 2048 px instead of 1024 px.                                                                          |
+| Tune a set of models           | `node-assets tune assets/a.glb assets/b.glb assets/c.glb --for size -o graphs/`  | Counts each decoder's download once across the set.                                                                    |
+| Apply a graph                  | `node-assets run graphs/helmet.size.toon assets/helmet.glb -o public/helmet.glb` | Writes the optimized model. Running it again is a no-op.                                                               |
+| Reuse a graph on other models  | `node-assets run graphs/helmet.size.toon assets/ -o public/ --check`             | Applies the graph to every model in `assets/`, renders each result against its original and fails any below the limit. |
+| Quick optimize, no browser     | `node-assets run optimize assets/helmet.glb -o public/helmet.glb`                | Built-in graph: WebP textures up to 2048 px, quantized geometry, lossless cleanup. No fidelity search.                 |
+| Customize a graph              | `node-assets show optimize > graphs/mine.toon`                                   | Prints every block and setting with its default. Edit the file, then `run` it with `--check`.                          |
+| Compare results with originals | `node-assets inspect public/ --against assets/`                                  | Renders each file next to the original of the same name and reports fidelity.                                          |
+| Read the full guide            | `node-assets help`                                                               | Prints the manual: goals, levers, graph format, output, errors.                                                        |
 
 Inputs can be `.glb`, `.gltf`, `.fbx`, `.obj` (with `.mtl`), `.stl` and `.usd`/`.usda`/`.usdc`/`.usdz`. Output is
 always `.glb`.
@@ -83,7 +83,8 @@ models[2]{file,status,bytes,gpu_mib,load_s,triangles,textures,decoders,required_
   helmet.glb,ok,3773916,107.2,3.57,15452,5x jpeg 2048x2048,none,none
   duck.glb,ok,120484,1.4,0.15,4212,1x png 512x512,none,none
 ```
- A `tune` result row lists the graph it wrote, bytes, decoder bytes, GPU MiB, estimated load seconds,
+
+A `tune` result row lists the graph it wrote, bytes, decoder bytes, GPU MiB, estimated load seconds,
 fidelity, the chosen textures and geometry, the decoders the file needs, whether the search finished, and the preview
 image. `warnings` names any decoder the result needs; `help` suggests next commands. Errors look like this and exit 1
 (or 2 for usage errors):
@@ -131,8 +132,13 @@ From the repository root:
 pnpm install
 pnpm build
 pnpm cli --help
-pnpm vitest run tests/e2e/cli.test.ts
+pnpm vitest run tests/unit/cliCommands.test.ts tests/e2e/cliTuneOptions.test.ts
 ```
+
+Other non-render CLI unit tests live in `tests/unit/cli*.test.ts`.
+`tests/e2e/cli.test.ts`, `tests/e2e/cliTune.test.ts`, and
+`tests/integration/cliRender.test.ts` include browser renders; run only the
+focused files needed for your change.
 
 To build the installable tarball:
 
