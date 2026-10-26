@@ -9,10 +9,11 @@ import { canonicalizeInputs, collect, inputHash, loadBytes } from "../inputs";
 import { decoderBytes, decoderWarnings, NETWORKS, type Network } from "../measure";
 import { asError, CliError, mib, out, progress, rel, seconds } from "../output";
 import type { FidelityRenderer } from "../render";
-import { GOALS, tune, type Goal } from "../tune";
-import { allocatePassDeadline } from "../tuneBudget";
-import { createTuneExecutor } from "../tuneCache";
-import { compileStages, type TuneStages } from "../tuneStages";
+import { allocatePassDeadline } from "../tune/budget";
+import { createTuneExecutor } from "../tune/cache";
+import { GOALS, type Goal } from "../tune/plan";
+import { tune } from "../tune/search";
+import { compileStages, type TuneStages } from "../tune/stages";
 
 function duration(value: string): number {
     const match = /^(\d+(?:\.\d+)?)\s*(s|m|min|h)?$/.exec(value.trim());

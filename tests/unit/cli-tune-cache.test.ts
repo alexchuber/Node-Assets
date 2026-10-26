@@ -10,9 +10,9 @@ import { instantiateGraph, normalizeGraph, readGraph, writeGraph } from "../../p
 import { inputHash } from "../../packages/cli/src/inputs";
 import { extensionsOf } from "../../packages/cli/src/measure";
 import type { FidelityRenderer } from "../../packages/cli/src/render";
-import { tune } from "../../packages/cli/src/tune";
-import { createTuneExecutor } from "../../packages/cli/src/tuneCache";
-import { compileStages, initialStages } from "../../packages/cli/src/tuneStages";
+import { createTuneExecutor } from "../../packages/cli/src/tune/cache";
+import { tune } from "../../packages/cli/src/tune/search";
+import { compileStages, initialStages } from "../../packages/cli/src/tune/stages";
 import { createGridDocument } from "../helpers/document";
 
 describe("tune input normalization", () => {

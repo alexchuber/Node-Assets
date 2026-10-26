@@ -13,9 +13,9 @@ import { inputHash } from "../../packages/cli/src/inputs";
 import { extensionsOf } from "../../packages/cli/src/measure";
 import { CliError } from "../../packages/cli/src/output";
 import type { FidelityRenderer } from "../../packages/cli/src/render";
-import { tune } from "../../packages/cli/src/tune";
-import { createTuneExecutor } from "../../packages/cli/src/tuneCache";
-import { compileStages } from "../../packages/cli/src/tuneStages";
+import { createTuneExecutor } from "../../packages/cli/src/tune/cache";
+import { tune } from "../../packages/cli/src/tune/search";
+import { compileStages } from "../../packages/cli/src/tune/stages";
 import { createGridDocument, createRasterImageAsync } from "../helpers/document";
 
 async function texturedSource(format: "webp" | "avif" | "ktx2", mixed = false): Promise<Uint8Array> {

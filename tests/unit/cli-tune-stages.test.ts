@@ -1,7 +1,7 @@
 import { parseGraph } from "@babylonjs/node-assets";
 import { describe, expect, it } from "vitest";
 
-import { compileStages, initialStages, withStages, type TuneStages } from "../../packages/cli/src/tuneStages";
+import { compileStages, initialStages, withStages, type TuneStages } from "../../packages/cli/src/tune/stages";
 
 describe("tune stage compilation", () => {
     it("compiles lossless cleanup and baseline geometry into a reusable graph", () => {

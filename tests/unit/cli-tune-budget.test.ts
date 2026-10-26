@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { allocatePassDeadline } from "../../packages/cli/src/tuneBudget";
+import { allocatePassDeadline } from "../../packages/cli/src/tune/budget";
 
 describe("tune whole-run deadline", () => {
     it("shares the remaining budget across all remaining passes without a floor", () => {

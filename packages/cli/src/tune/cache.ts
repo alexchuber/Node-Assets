@@ -2,10 +2,10 @@ import type { SerializedBlock } from "@babylonjs/node-assets";
 import type { Document } from "@gltf-transform/core";
 import { cloneDocument } from "@gltf-transform/functions";
 
-import { readDoc } from "./document";
-import { executeGraph, executeToDocument } from "./execution";
-import { graphHash, instantiateGraph } from "./graphFiles";
-import { stageBlocks, type TuneStages } from "./tuneStages";
+import { readDoc } from "../document";
+import { executeGraph, executeToDocument } from "../execution";
+import { graphHash, instantiateGraph } from "../graphFiles";
+import { stageBlocks, type TuneStages } from "./stages";
 
 export function createTuneExecutor() {
     const documents = new Map<string, Document>();

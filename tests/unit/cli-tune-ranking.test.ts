@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { writeGlb } from "../../packages/cli/src/document";
 import type { FidelityRenderer } from "../../packages/cli/src/render";
-import { tune } from "../../packages/cli/src/tune";
+import { tune } from "../../packages/cli/src/tune/search";
 import { createGridDocument } from "../helpers/document";
 
 describe("tune fidelity tie-breaking", () => {

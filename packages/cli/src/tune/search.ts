@@ -1,46 +1,11 @@
-import { readDoc } from "./document";
-import { decodeMs, features } from "./loadModel";
-import { decoderBytes, docSummary, extensionsOf, gpuEstimate, loadSeconds, NETWORKS, type Network } from "./measure";
-import { CliError, progress } from "./output";
-import type { FidelityRenderer } from "./render";
-import type { createTuneExecutor } from "./tuneCache";
-import { initialStages, withStages, type StagePatch, type TuneStages } from "./tuneStages";
-
-export type Goal = "size" | "gpu" | "load" | "compat";
-export const GOALS: readonly Goal[] = ["size", "gpu", "load", "compat"];
-
-interface TextureFamily {
-    readonly format: TuneStages["textures"]["format"];
-    readonly q?: boolean;
-    readonly ktx2?: Partial<TuneStages["textures"]["ktx2"]>;
-}
-
-const LEVELS = [30, 40, 50, 60, 70, 80, 90];
-const TEXFAM: Record<string, TextureFamily> = {
-    avif: { format: "avif", q: true },
-    webp: { format: "webp", q: true },
-    jpeg: { format: "jpeg", q: true },
-    png: { format: "png" },
-    "ktx2 etc1s+uastc": { format: "ktx2", ktx2: { color: "etc1s", data: "uastc" } },
-    "ktx2 uastc": { format: "ktx2", ktx2: { color: "uastc", data: "uastc" } },
-    "ktx2 etc1s": { format: "ktx2", ktx2: { color: "etc1s", data: "etc1s" } },
-};
-const GEOM: Record<string, Partial<TuneStages["geometry"]>> = {
-    quantize: { mode: "quantize" },
-    meshopt: { mode: "meshopt", meshoptLevel: "medium" },
-    "meshopt-high": { mode: "meshopt", meshoptLevel: "high" },
-    draco: { mode: "draco", dracoPosition: 14, dracoNormal: 10, dracoTexcoord: 12 },
-    "draco-low": { mode: "draco", dracoPosition: 11, dracoNormal: 8, dracoTexcoord: 10 },
-    none: { mode: "none" },
-};
-const PLAN: Record<Goal, { tex: [string[], string[]]; geo: [string[], string[]] }> = {
-    size: { tex: [["avif"], ["webp"]], geo: [["draco", "meshopt-high"], ["draco-low"]] },
-    load: { tex: [["avif"], ["webp"]], geo: [["meshopt-high", "draco"], ["meshopt"]] },
-    gpu: { tex: [["ktx2 etc1s+uastc"], ["ktx2 uastc", "ktx2 etc1s"]], geo: [["meshopt"], []] },
-    compat: { tex: [["jpeg"], ["png"]], geo: [["none"], []] },
-};
-const TEXEXT = ["EXT_texture_webp", "EXT_texture_avif", "KHR_texture_basisu"];
-const GEOEXT = ["KHR_mesh_quantization", "EXT_meshopt_compression", "KHR_draco_mesh_compression"];
+import { readDoc } from "../document";
+import { decodeMs, features } from "../loadModel";
+import { decoderBytes, docSummary, extensionsOf, gpuEstimate, loadSeconds, NETWORKS, type Network } from "../measure";
+import { CliError, progress } from "../output";
+import type { FidelityRenderer } from "../render";
+import type { createTuneExecutor } from "./cache";
+import { GEOEXT, GEOM, LEVELS, PLAN, SIMPLIFY_LEVELS, SIZES, TEXEXT, TEXFAM, type Goal } from "./plan";
+import { initialStages, withStages, type StagePatch, type TuneStages } from "./stages";
 
 interface Ranked {
     readonly stages: TuneStages;
@@ -148,12 +113,7 @@ export async function tune(glb: Uint8Array, hash: string, opts: TuneOptions) {
         if (fallback.pass && eligible("compat", fallback)) texPool.push(fallback);
     }
     const fams: Record<string, FamilySearch> = {};
-    const sizes =
-        summary.maxTexture <= 0
-            ? []
-            : keep.has("texture-size")
-              ? [summary.maxTexture]
-              : [256, 512, 768, 1024, 1536, 2048, 3072, 4096].filter((size) => size < summary.maxTexture).concat([summary.maxTexture]);
+    const sizes = summary.maxTexture <= 0 ? [] : keep.has("texture-size") ? [summary.maxTexture] : SIZES.filter((size) => size < summary.maxTexture).concat([summary.maxTexture]);
     const texEval = async (fam: string, size: number, cq = 90, dq = 90) => {
         const { q, ...cfg } = TEXFAM[fam]!;
         const textures: StagePatch["textures"] = { ...cfg, ...(q ? { quality: cq, dataQuality: dq } : {}), maxSize: sizes[size]! };
@@ -239,7 +199,7 @@ export async function tune(glb: Uint8Array, hash: string, opts: TuneOptions) {
     let simplifyRatio: number | null | undefined;
     const simplifySearch = async () => {
         if (!canSimplify || simplifyRatio !== undefined) return;
-        simplifyRatio = (await lowest([0.25, 0.5, 0.75], async (ratio) => (await geoEval(compatOnly ? "none" : "quantize", ratio)).pass, "simplification")) ?? null;
+        simplifyRatio = (await lowest(SIMPLIFY_LEVELS, async (ratio) => (await geoEval(compatOnly ? "none" : "quantize", ratio)).pass, "simplification")) ?? null;
     };
 
     const comboOf = (t: TuneCandidate, g: TuneCandidate): Combination => ({
