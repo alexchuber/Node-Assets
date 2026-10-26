@@ -6,14 +6,14 @@ import { NodeIO } from "@gltf-transform/core";
 import sharp from "sharp";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { readDoc } from "../../packages/cli/src/document";
-import { readGraph } from "../../packages/cli/src/graphFiles";
+import { readDocAsync } from "../../packages/cli/src/document";
+import { readGraphAsync } from "../../packages/cli/src/graphFiles";
 import { decode } from "../../packages/cli/src/output";
-import { findBrowser } from "../../packages/cli/src/render";
+import { findBrowserAsync } from "../../packages/cli/src/render";
 import { buildCliFixtureAsync, runNodeAsync } from "../helpers/cli";
 import { createGridDocument } from "../helpers/document";
 
-const browser = await findBrowser().catch(() => undefined);
+const browser = await findBrowserAsync().catch(() => undefined);
 
 describe.skipIf(!browser)("node-assets tune in a browser", () => {
     let directory: string;
@@ -38,7 +38,7 @@ describe.skipIf(!browser)("node-assets tune in a browser", () => {
         const row = (decode(result.stdout) as { results: { fidelity: number }[] }).results[0]!;
         expect(row.fidelity).toBeGreaterThanOrEqual(0.9);
         expect(row.fidelity).toBe(Math.round(row.fidelity * 1000) / 1000);
-        expect((await readGraph(graph)).tuned).toMatchObject({ result: { fidelity: row.fidelity } });
+        expect((await readGraphAsync(graph)).tuned).toMatchObject({ result: { fidelity: row.fidelity } });
         expect(
             result.stderr
                 .split("\n")
@@ -76,7 +76,7 @@ describe.skipIf(!browser)("node-assets tune in a browser", () => {
         expect((await readdir(output)).sort()).toEqual(["tiny.compat.png", "tiny.compat.toon", "tiny.size.png", "tiny.size.toon"]);
         for (const row of stdout.results) {
             expect(row.fidelity).toBeGreaterThanOrEqual(0.9);
-            const graph = await readGraph(join(directory, row.graph));
+            const graph = await readGraphAsync(join(directory, row.graph));
             expect(graph.check).toEqual({ fidelity: 0.9, view: 128 });
             expect(graph.tuned).toMatchObject({
                 renderer: expect.stringContaining("SwiftShader"),
@@ -92,7 +92,7 @@ describe.skipIf(!browser)("node-assets tune in a browser", () => {
         const run = await runNodeAsync([launcher, "run", join(output, "tiny.size.toon"), input, "-o", model], directory);
         expect(run.code, run.stdout + run.stderr).toBe(0);
         expect((await stat(model)).size).toBeGreaterThan(0);
-        expect((await readDoc(new Uint8Array(await readFile(model)))).getRoot().listTextures()).toHaveLength(1);
+        expect((await readDocAsync(new Uint8Array(await readFile(model)))).getRoot().listTextures()).toHaveLength(1);
         expect(await readFile(input)).toEqual(Buffer.from(source));
     }, 180_000);
 });

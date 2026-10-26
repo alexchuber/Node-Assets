@@ -49,6 +49,6 @@ export function provenanceOf(bytes: Uint8Array): Provenance | null {
     }
 }
 
-export async function readProvenance(file: string): Promise<Provenance | null> {
+export async function readProvenanceAsync(file: string): Promise<Provenance | null> {
     return readFile(file).then(provenanceOf, () => null);
 }

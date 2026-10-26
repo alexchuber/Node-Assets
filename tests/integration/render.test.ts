@@ -9,11 +9,11 @@ import sharp from "sharp";
 import { build } from "vite";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { createRenderer, findBrowser } from "../../packages/cli/src/render/index";
+import { createRenderer, findBrowserAsync } from "../../packages/cli/src/render/index";
 import { EncodeDracoBlock, EncodeKTX2Block, EncodeMeshoptBlock, GltfOutputBlock, NodeAsset } from "../../packages/core/src/index";
 import { parseGlbAsync } from "../helpers/glb";
 
-const browser = await findBrowser().catch((error: unknown) => {
+const browser = await findBrowserAsync().catch((error: unknown) => {
     if (error instanceof Error && "code" in error && error.code === "NO_BROWSER") return undefined;
     throw error;
 });
@@ -30,13 +30,13 @@ describe.skipIf(!browser)("offline fidelity renderer", () => {
         await build({ configFile: fileURLToPath(new URL("../../packages/cli/vite.render.config.ts", import.meta.url)), logLevel: "error" });
         source = await texturedModel();
         reference = await write(source);
-        await renderer.start();
+        await renderer.startAsync();
         console.info("Renderer:", renderer.browserName);
-        await renderer.setReference(reference, { size: 256, views: 2 });
+        await renderer.setReferenceAsync(reference, { size: 256, views: 2 });
     }, 60_000);
 
     afterAll(async () => {
-        await renderer.stop();
+        await renderer.stopAsync();
         console.info("Renderer scores:", scores);
     });
 
@@ -56,10 +56,10 @@ describe.skipIf(!browser)("offline fidelity renderer", () => {
     });
 
     it("scores an identical model and creates a side-by-side PNG", async () => {
-        scores.identical = (await renderer.evaluate(reference)).worst;
+        scores.identical = (await renderer.evaluateAsync(reference)).worst;
         expect(scores.identical).toBeGreaterThanOrEqual(0.999);
         expect(renderer.browserName).toMatch(/SwiftShader/);
-        const png = await renderer.preview(0);
+        const png = await renderer.previewAsync(0);
         const metadata = await sharp(png).metadata();
         expect(metadata).toMatchObject({ format: "png", width: 512, height: 256 });
         const { data, info } = await sharp(png).raw().toBuffer({ resolveWithObject: true });
@@ -73,7 +73,7 @@ describe.skipIf(!browser)("offline fidelity renderer", () => {
     it("detects visibly moved geometry with reference framing", async () => {
         const candidate = await copy(source);
         candidate.getRoot().listNodes()[0]!.setTranslation([0.6, 0, 0]);
-        const result = await renderer.evaluate(await write(candidate));
+        const result = await renderer.evaluateAsync(await write(candidate));
         scores.degraded = result.worst;
         expect(result.worst).toBeLessThan(0.8);
         expect(result.worstView).toBeGreaterThanOrEqual(0);
@@ -82,14 +82,14 @@ describe.skipIf(!browser)("offline fidelity renderer", () => {
 
     it("renders locally decoded ETC1S, UASTC/zstd and WebP textures", async () => {
         const ktx = await new NodeAsset({ name: "renderer-ktx", outputBlock: new EncodeKTX2Block({ input: await copy(source) }) }).executeAsync();
-        scores.ktx2 = (await renderer.evaluate(await write(ktx))).worst;
+        scores.ktx2 = (await renderer.evaluateAsync(await write(ktx))).worst;
         expect(scores.ktx2).toBeGreaterThan(0.8);
 
         const webp = await copy(source);
         webp.createExtension(EXTTextureWebP).setRequired(true);
         const texture = webp.getRoot().listTextures()[0]!;
         texture.setImage(await sharp(texture.getImage()!).webp({ lossless: true }).toBuffer()).setMimeType("image/webp");
-        scores.webp = (await renderer.evaluate(await write(webp))).worst;
+        scores.webp = (await renderer.evaluateAsync(await write(webp))).worst;
         expect(scores.webp).toBeGreaterThan(0.8);
         expect(requests.some((url) => url.endsWith("/msc_basis_transcoder.wasm"))).toBe(true);
         expect(requests.some((url) => url.endsWith("/zstddec.wasm"))).toBe(true);
@@ -105,16 +105,16 @@ describe.skipIf(!browser)("offline fidelity renderer", () => {
             const file = await new NodeAsset({ name: `renderer-${name}`, outputBlock: output }).executeAsync();
             const { json } = await parseGlbAsync(file);
             expect(json.extensionsUsed).toContain(name === "draco" ? "KHR_draco_mesh_compression" : "EXT_meshopt_compression");
-            scores[name] = (await renderer.evaluate(new Uint8Array(await file.arrayBuffer()))).worst;
+            scores[name] = (await renderer.evaluateAsync(new Uint8Array(await file.arrayBuffer()))).worst;
             expect(scores[name]).toBeGreaterThanOrEqual(0.99);
         }
     }, 60_000);
 
     it("does not silently score a differing sparse object as one", async () => {
         const thin = await texturedModel(0.01);
-        await renderer.setReference(await write(thin), { size: 256, views: 1 });
+        await renderer.setReferenceAsync(await write(thin), { size: 256, views: 1 });
         thin.getRoot().listNodes()[0]!.setTranslation([0.05, 0, 0]);
-        scores.sparse = (await renderer.evaluate(await write(thin))).worst;
+        scores.sparse = (await renderer.evaluateAsync(await write(thin))).worst;
         expect(scores.sparse).toBeLessThan(0.99);
     });
 
@@ -127,7 +127,7 @@ describe.skipIf(!browser)("offline fidelity renderer", () => {
         } else {
             model.getRoot().listMaterials()[0]!.setDoubleSided(false);
         }
-        await expect(renderer.setReference(await write(model), { size: 64, views: kind === "one empty view" ? 2 : 1 })).rejects.toMatchObject({
+        await expect(renderer.setReferenceAsync(await write(model), { size: 64, views: kind === "one empty view" ? 2 : 1 })).rejects.toMatchObject({
             code: "INVALID_INPUT",
             help: expect.any(Array),
         });

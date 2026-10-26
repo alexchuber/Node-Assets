@@ -8,11 +8,11 @@ import { MeshoptDecoder, MeshoptEncoder } from "meshoptimizer";
 
 let ioPromise: Promise<NodeIO> | undefined;
 
-export function getIO(): Promise<NodeIO> {
-    return (ioPromise ??= createIO());
+export function getIOAsync(): Promise<NodeIO> {
+    return (ioPromise ??= createIOAsync());
 }
 
-async function createIO(): Promise<NodeIO> {
+async function createIOAsync(): Promise<NodeIO> {
     const require = createRequire(import.meta.url);
     const [wasmBinary] = await Promise.all([readFile(require.resolve("draco3dgltf/draco_decoder_gltf.wasm")), MeshoptDecoder.ready, MeshoptEncoder.ready]);
     const [decoder, encoder] = await Promise.all([draco.createDecoderModule({ wasmBinary }), draco.createEncoderModule()]);
@@ -27,10 +27,10 @@ async function createIO(): Promise<NodeIO> {
         .setLogger(new Logger(Logger.Verbosity.SILENT));
 }
 
-export async function readDoc(bytes: Uint8Array): Promise<Document> {
-    return (await getIO()).readBinary(bytes);
+export async function readDocAsync(bytes: Uint8Array): Promise<Document> {
+    return (await getIOAsync()).readBinary(bytes);
 }
 
-export async function writeGlb(document: Document): Promise<Uint8Array> {
-    return (await getIO()).writeBinary(document);
+export async function writeGlbAsync(document: Document): Promise<Uint8Array> {
+    return (await getIOAsync()).writeBinary(document);
 }

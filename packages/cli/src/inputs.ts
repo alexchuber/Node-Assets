@@ -4,8 +4,8 @@ import { basename, dirname, extname, isAbsolute, resolve, sep } from "node:path"
 
 import { FbxInputBlock, GltfInputBlock, GltfOutputBlock, NodeAsset, ObjInputBlock, StlInputBlock, UsdInputBlock } from "@babylonjs/node-assets";
 
-import { getIO, readDoc } from "./document";
-import { CliError, rel, withDiagnostics } from "./output";
+import { getIOAsync, readDocAsync } from "./document";
+import { CliError, rel, withDiagnosticsAsync } from "./output";
 
 export const ALL_IN = [".glb", ".gltf", ".fbx", ".obj", ".stl", ".usd", ".usda", ".usdc", ".usdz"] as const;
 
@@ -31,7 +31,7 @@ export interface InputItem {
     readonly skip?: string;
 }
 
-export async function collect(positionals: readonly string[]): Promise<{ items: InputItem[]; multi: boolean }> {
+export async function collectAsync(positionals: readonly string[]): Promise<{ items: InputItem[]; multi: boolean }> {
     const items: InputItem[] = [];
     let multi = positionals.length > 1;
     const auxiliary = [".bin", ".png", ".jpg", ".jpeg", ".webp", ".avif", ".ktx2", ".mtl", ".txt", ".md", ".json", ".toon", ".html", ".js", ".css"];
@@ -58,7 +58,7 @@ export async function collect(positionals: readonly string[]): Promise<{ items: 
     return { items, multi };
 }
 
-export async function canonicalizeInputs(items: readonly InputItem[]): Promise<(InputItem & { readonly display: string; readonly name: string })[]> {
+export async function canonicalizeInputsAsync(items: readonly InputItem[]): Promise<(InputItem & { readonly display: string; readonly name: string })[]> {
     return Promise.all(
         items.map(async (item) => {
             const display = isAbsolute(item.input) ? rel(item.input) : item.input;
@@ -107,18 +107,18 @@ export function invalidInput(error: unknown, file: string): CliError {
     return new CliError("INVALID_INPUT", `${file}: ${message}`, [hint]);
 }
 
-export async function loadBytes(file: string): Promise<Uint8Array> {
+export async function loadBytesAsync(file: string): Promise<Uint8Array> {
     if (!(await stat(file).catch(() => null))?.isFile()) throw new CliError("INPUT_NOT_FOUND", `${file}: no such input file`);
     const source = inputBlock(file);
-    return withDiagnostics(async () => {
+    return withDiagnosticsAsync(async () => {
         try {
             if (extname(file).toLowerCase() === ".glb") {
                 const bytes = new Uint8Array(await readFile(file));
-                await readDoc(bytes);
+                await readDocAsync(bytes);
                 return bytes;
             }
             if (extname(file).toLowerCase() === ".gltf") {
-                const io = await getIO();
+                const io = await getIOAsync();
                 return await io.writeBinary(await io.read(resolve(file)));
             }
             const destination = new GltfOutputBlock();
@@ -135,7 +135,7 @@ export async function loadBytes(file: string): Promise<Uint8Array> {
     });
 }
 
-async function inputFiles(file: string): Promise<string[]> {
+async function inputFilesAsync(file: string): Promise<string[]> {
     const files = new Set([resolve(file)]);
     const directory = dirname(resolve(file));
     const addURI = (uri: string) => {
@@ -164,11 +164,11 @@ async function inputFiles(file: string): Promise<string[]> {
     return [...files];
 }
 
-export async function inputBytes(file: string): Promise<number> {
+export async function inputBytesAsync(file: string): Promise<number> {
     try {
         const source = resolve(file);
         const sizes = await Promise.all(
-            (await inputFiles(file)).map(async (path) => {
+            (await inputFilesAsync(file)).map(async (path) => {
                 const entry = await stat(path).catch((error: unknown) => {
                     if (path === source) throw error;
                     return null;
@@ -182,11 +182,11 @@ export async function inputBytes(file: string): Promise<number> {
     }
 }
 
-export async function inputHash(file: string): Promise<string> {
+export async function inputHashAsync(file: string): Promise<string> {
     const hash = createHash("sha1");
     try {
         const source = resolve(file);
-        for (const path of await inputFiles(file)) {
+        for (const path of await inputFilesAsync(file)) {
             const bytes = await readFile(path).catch((error: unknown) => {
                 if (path === source) throw error;
                 return undefined;

@@ -1,4 +1,4 @@
-import { readDoc } from "../document";
+import { readDocAsync } from "../document";
 import { decodeMs, features } from "../loadModel";
 import { decoderBytes, docSummary, extensionsOf, gpuEstimate, loadSeconds, NETWORKS, type Network } from "../measure";
 import { CliError, progress } from "../output";
@@ -52,15 +52,15 @@ interface TuneOptions {
     readonly executor: ReturnType<typeof createTuneExecutor>;
 }
 
-export async function tune(glb: Uint8Array, hash: string, opts: TuneOptions) {
+export async function tuneAsync(glb: Uint8Array, hash: string, opts: TuneOptions) {
     const { goals, floor, view, network, amortize, deadline, keep, renderer, executor } = opts;
     const t0 = Date.now();
     const timeUp = () => Date.now() >= deadline;
     const netS = (bytes: number) => (bytes * 8) / (NETWORKS[network] * 1e6);
     const amort = (names: readonly string[]) => decoderBytes(names) / amortize;
-    const original = await readDoc(glb);
+    const original = await readDocAsync(glb);
     const summary = docSummary(original);
-    await renderer.setReference(glb, { size: view, views: 4 });
+    await renderer.setReferenceAsync(glb, { size: view, views: 4 });
     const candidates: TuneCandidate[] = [];
     const skipped: string[] = [];
     const skip = (what: string) => {
@@ -75,13 +75,13 @@ export async function tune(glb: Uint8Array, hash: string, opts: TuneOptions) {
             c.stages.geometry.mode === "none" &&
             !c.required.some((extension) => TEXEXT.includes(extension) || GEOEXT.includes(extension)));
     const seen = new Map<string, TuneCandidate>();
-    const evaluate = async (label: string, stages: TuneStages): Promise<TuneCandidate> => {
+    const evaluateAsync = async (label: string, stages: TuneStages): Promise<TuneCandidate> => {
         const key = JSON.stringify(stages);
         const previous = seen.get(key);
         if (previous) return previous;
-        const bytes = await executor.execute(hash, glb, stages, summary.maxTexture);
-        const doc = await readDoc(bytes);
-        const fidelity = await renderer.evaluate(bytes);
+        const bytes = await executor.executeAsync(hash, glb, stages, summary.maxTexture);
+        const doc = await readDocAsync(bytes);
+        const fidelity = await renderer.evaluateAsync(bytes);
         const ex = extensionsOf(doc);
         const gpu = gpuEstimate(doc);
         const c: TuneCandidate = {
@@ -105,47 +105,47 @@ export async function tune(glb: Uint8Array, hash: string, opts: TuneOptions) {
         progress(`tune: ${label}: ${(c.bytes / 1e6).toFixed(3)} MB, GPU ${(c.gpu / 1048576).toFixed(1)} MiB, fidelity ${c.fidelity.toFixed(3)}${c.pass ? "" : " (below limit)"}`);
         return c;
     };
-    const baseline = await evaluate("baseline (cleanup only)", base);
+    const baseline = await evaluateAsync("baseline (cleanup only)", base);
     if (timeUp()) skip("remaining search");
     const texPool = [baseline];
     if (compatOnly && !eligible("compat", baseline)) {
-        const fallback = await evaluate("compat fallback (original-size PNG)", withStages(base, { textures: { format: "png" } }));
+        const fallback = await evaluateAsync("compat fallback (original-size PNG)", withStages(base, { textures: { format: "png" } }));
         if (fallback.pass && eligible("compat", fallback)) texPool.push(fallback);
     }
     const fams: Record<string, FamilySearch> = {};
     const sizes = summary.maxTexture <= 0 ? [] : keep.has("texture-size") ? [summary.maxTexture] : SIZES.filter((size) => size < summary.maxTexture).concat([summary.maxTexture]);
-    const texEval = async (fam: string, size: number, cq = 90, dq = 90) => {
+    const texEvalAsync = async (fam: string, size: number, cq = 90, dq = 90) => {
         const { q, ...cfg } = TEXFAM[fam]!;
         const textures: StagePatch["textures"] = { ...cfg, ...(q ? { quality: cq, dataQuality: dq } : {}), maxSize: sizes[size]! };
-        const c = await evaluate(`textures ${fam} ${sizes[size]}px${q ? ` q${cq}/${dq}` : ""}`, withStages(base, { textures }));
+        const c = await evaluateAsync(`textures ${fam} ${sizes[size]}px${q ? ` q${cq}/${dq}` : ""}`, withStages(base, { textures }));
         if (c.pass && !texPool.includes(c)) texPool.push(c);
         return c;
     };
-    const sizeTop = async (fam: string, maxIdx = sizes.length - 1) => {
+    const sizeTopAsync = async (fam: string, maxIdx = sizes.length - 1) => {
         if (fams[fam] || !sizes.length) return;
         if (!(TEXFAM[fam]!.q || maxIdx < sizes.length - 1)) {
             fams[fam] = { best: null, lo: 0, hi: maxIdx, open: true };
             return;
         }
         if (timeUp()) return skip(`${fam} textures`);
-        const pass = (await texEval(fam, maxIdx)).pass;
+        const pass = (await texEvalAsync(fam, maxIdx)).pass;
         fams[fam] = { best: pass ? maxIdx : null, lo: 0, hi: maxIdx - 1, open: pass };
     };
-    const sizeSearch = async (fam: string, maxIdx?: number) => {
-        await sizeTop(fam, maxIdx);
+    const sizeSearchAsync = async (fam: string, maxIdx?: number) => {
+        await sizeTopAsync(fam, maxIdx);
         const f = fams[fam];
         if (!f?.open) return;
         while (f.lo <= f.hi) {
             if (timeUp()) return skip(`${fam} texture sizes`);
             const mid = (f.lo + f.hi) >> 1;
-            if ((await texEval(fam, mid)).pass) {
+            if ((await texEvalAsync(fam, mid)).pass) {
                 f.best = mid;
                 f.hi = mid - 1;
             } else f.lo = mid + 1;
         }
         f.open = false;
     };
-    const lowest = async (levels: readonly number[], test: (level: number) => Promise<boolean>, what: string): Promise<number | undefined> => {
+    const lowestAsync = async (levels: readonly number[], testAsync: (level: number) => Promise<boolean>, what: string): Promise<number | undefined> => {
         let lo = 0;
         let hi = levels.length - 1;
         let best: number | undefined;
@@ -155,51 +155,51 @@ export async function tune(glb: Uint8Array, hash: string, opts: TuneOptions) {
                 return best;
             }
             const mid = (lo + hi) >> 1;
-            if (await test(levels[mid]!)) {
+            if (await testAsync(levels[mid]!)) {
                 best = levels[mid]!;
                 hi = mid - 1;
             } else lo = mid + 1;
         }
         return best;
     };
-    const qualitySearch = async (fam: string) => {
+    const qualitySearchAsync = async (fam: string) => {
         const f = fams[fam];
         if (!f || f.best === null || !TEXFAM[fam]!.q || f.q) return;
         const size = f.best;
         const what = `${fam} quality`;
         const q =
-            (await lowest(
+            (await lowestAsync(
                 LEVELS.filter((level) => level < 90),
-                async (level) => (await texEval(fam, size, level, level)).pass,
+                async (level) => (await texEvalAsync(fam, size, level, level)).pass,
                 what
             )) ?? 90;
         const cq =
-            (await lowest(
+            (await lowestAsync(
                 LEVELS.filter((level) => level < q),
-                async (level) => (await texEval(fam, size, level, q)).pass,
+                async (level) => (await texEvalAsync(fam, size, level, q)).pass,
                 what
             )) ?? q;
         const dq =
-            (await lowest(
+            (await lowestAsync(
                 LEVELS.filter((level) => level < q),
-                async (level) => (await texEval(fam, size, cq, level)).pass,
+                async (level) => (await texEvalAsync(fam, size, cq, level)).pass,
                 what
             )) ?? q;
         f.q = [cq, dq];
     };
 
     const geoPool = [baseline];
-    const geoEval = async (id: string, simplify = 1) => {
+    const geoEvalAsync = async (id: string, simplify = 1) => {
         if (id === "quantize" && simplify === 1 && !compatOnly) return baseline;
-        const c = await evaluate(`geometry ${id}${simplify < 1 ? ` simplify ${simplify}` : ""}`, withStages(base, { geometry: { ...GEOM[id], simplify } }));
+        const c = await evaluateAsync(`geometry ${id}${simplify < 1 ? ` simplify ${simplify}` : ""}`, withStages(base, { geometry: { ...GEOM[id], simplify } }));
         if (c.pass && !geoPool.includes(c)) geoPool.push(c);
         return c;
     };
     const canSimplify = !keep.has("geometry") && summary.triangles > 2000;
     let simplifyRatio: number | null | undefined;
-    const simplifySearch = async () => {
+    const simplifySearchAsync = async () => {
         if (!canSimplify || simplifyRatio !== undefined) return;
-        simplifyRatio = (await lowest(SIMPLIFY_LEVELS, async (ratio) => (await geoEval(compatOnly ? "none" : "quantize", ratio)).pass, "simplification")) ?? null;
+        simplifyRatio = (await lowestAsync(SIMPLIFY_LEVELS, async (ratio) => (await geoEvalAsync(compatOnly ? "none" : "quantize", ratio)).pass, "simplification")) ?? null;
     };
 
     const comboOf = (t: TuneCandidate, g: TuneCandidate): Combination => ({
@@ -228,7 +228,7 @@ export async function tune(glb: Uint8Array, hash: string, opts: TuneOptions) {
     const failedCombos: Combination[] = [];
     const lossier = (a: TuneCandidate, b: TuneCandidate) => a === b || a.fidelity < b.fidelity;
     const doomed = (c: Combination) => failedCombos.some((failed) => lossier(c.t, failed.t) && lossier(c.g, failed.g));
-    const combine = async () => {
+    const combineAsync = async () => {
         for (const goal of goals) {
             const ranked = texPool
                 .flatMap((t) => geoPool.map((g) => comboOf(t, g)))
@@ -247,7 +247,7 @@ export async function tune(glb: Uint8Array, hash: string, opts: TuneOptions) {
                 built++;
                 const tl = c.t === baseline ? "original textures" : c.t.label.replace("textures ", "");
                 const gl = c.g === baseline ? base.geometry.mode : c.g.label.replace("geometry ", "");
-                if ((await evaluate(`${goal}: ${tl} + ${gl}`, c.stages)).pass) break;
+                if ((await evaluateAsync(`${goal}: ${tl} + ${gl}`, c.stages)).pass) break;
                 failedCombos.push(c);
             }
         }
@@ -255,29 +255,29 @@ export async function tune(glb: Uint8Array, hash: string, opts: TuneOptions) {
 
     for (const goal of goals)
         for (const id of PLAN[goal].geo[0]) {
-            if (!timeUp()) await geoEval(id);
+            if (!timeUp()) await geoEvalAsync(id);
             else skip(`geometry ${id}`);
         }
-    for (const goal of goals) for (const fam of PLAN[goal].tex[0]) await sizeTop(fam);
-    await combine();
-    for (const goal of goals) for (const fam of PLAN[goal].tex[0]) await sizeSearch(fam);
-    await combine();
+    for (const goal of goals) for (const fam of PLAN[goal].tex[0]) await sizeTopAsync(fam);
+    await combineAsync();
+    for (const goal of goals) for (const fam of PLAN[goal].tex[0]) await sizeSearchAsync(fam);
+    await combineAsync();
 
-    for (const goal of goals) for (const fam of PLAN[goal].tex[0]) await qualitySearch(fam);
+    for (const goal of goals) for (const fam of PLAN[goal].tex[0]) await qualitySearchAsync(fam);
     for (const goal of goals)
         for (const id of PLAN[goal].geo[1]) {
-            if (!timeUp()) await geoEval(id);
+            if (!timeUp()) await geoEvalAsync(id);
             else skip(`geometry ${id}`);
         }
-    if (!timeUp()) await simplifySearch();
+    if (!timeUp()) await simplifySearchAsync();
     else if (canSimplify) skip("simplification");
     if (simplifyRatio)
         for (const goal of goals)
             for (const id of PLAN[goal].geo[0]) {
-                if (!timeUp()) await geoEval(id, simplifyRatio);
+                if (!timeUp()) await geoEvalAsync(id, simplifyRatio);
                 else skip(`geometry ${id} simplify ${simplifyRatio}`);
             }
-    await combine();
+    await combineAsync();
 
     for (const goal of goals) {
         for (const fam of PLAN[goal].tex[1]) {
@@ -288,15 +288,15 @@ export async function tune(glb: Uint8Array, hash: string, opts: TuneOptions) {
             const mixed = fams["ktx2 etc1s+uastc"];
             if (goal === "gpu" && mixed?.best != null) {
                 const current = mixed.best;
-                if (fam === "ktx2 uastc" && current > 0) await sizeSearch(fam, current - 1);
-                if (fam === "ktx2 etc1s") fams[fam] ??= { best: (await texEval(fam, current)).pass ? current : null, lo: 0, hi: -1, open: false };
+                if (fam === "ktx2 uastc" && current > 0) await sizeSearchAsync(fam, current - 1);
+                if (fam === "ktx2 etc1s") fams[fam] ??= { best: (await texEvalAsync(fam, current)).pass ? current : null, lo: 0, hi: -1, open: false };
             } else {
-                await sizeSearch(fam);
-                await qualitySearch(fam);
+                await sizeSearchAsync(fam);
+                await qualitySearchAsync(fam);
             }
         }
     }
-    await combine();
+    await combineAsync();
 
     const winners: Partial<Record<Goal, TuneCandidate>> = {};
     for (const goal of goals) {

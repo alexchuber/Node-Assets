@@ -106,7 +106,7 @@ export function loadSeconds(doc: Document, bytes: number, network: Network = "4g
     return ((bytes + decoderBytes(extensionsOf(doc).decoders) / amortize) * 8) / (NETWORKS[network] * 1e6) + decodeMs(features(doc, bytes)) / 1000;
 }
 
-export async function validate(bytes: Uint8Array): Promise<{ errors: number; codes: string[] }> {
+export async function validateAsync(bytes: Uint8Array): Promise<{ errors: number; codes: string[] }> {
     try {
         const result = await validator.validateBytes(new Uint8Array(bytes), { maxIssues: 200, ignoredIssues: ["UNSUPPORTED_EXTENSION"] });
         return { errors: result.issues.numErrors, codes: [...new Set(result.issues.messages.filter((message) => message.severity === 0).map((message) => message.code))] };

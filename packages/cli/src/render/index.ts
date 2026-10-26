@@ -8,11 +8,11 @@ import { fileURLToPath } from "node:url";
 import type { NodeIO } from "@gltf-transform/core";
 import type { Browser, BrowserContext, Page } from "playwright-core";
 
-import { findBrowser } from "./browser";
+import { findBrowserAsync } from "./browser";
 import { emptyModelError } from "./errors";
 import type { EvaluationResult, ReferenceOptions, ReferenceResult } from "./protocol";
 
-export { findBrowser } from "./browser";
+export { findBrowserAsync } from "./browser";
 export type { EvaluationResult, Frame, ReferenceOptions, ReferenceResult } from "./protocol";
 
 export interface RendererOptions {
@@ -22,14 +22,14 @@ export interface RendererOptions {
 /** An isolated offline renderer. Operations on an instance must be awaited sequentially. */
 export interface FidelityRenderer {
     readonly browserName: string | undefined;
-    start(): Promise<void>;
-    stop(): Promise<void>;
+    startAsync(): Promise<void>;
+    stopAsync(): Promise<void>;
     /** Frames an embedded GLB at 1024px/four views by default; rejects an empty view with INVALID_INPUT. */
-    setReference(bytes: Uint8Array, options?: ReferenceOptions): Promise<ReferenceResult>;
+    setReferenceAsync(bytes: Uint8Array, options?: ReferenceOptions): Promise<ReferenceResult>;
     /** Reuses reference framing and returns three-decimal worst-tile SSIM, its view index, and warm loadMs. */
-    evaluate(bytes: Uint8Array): Promise<EvaluationResult>;
+    evaluateAsync(bytes: Uint8Array): Promise<EvaluationResult>;
     /** Returns a PNG with the reference on the left and last candidate on the right. */
-    preview(view: number): Promise<Buffer>;
+    previewAsync(view: number): Promise<Buffer>;
 }
 
 /** Creates a lazy offline SwiftShader renderer for embedded GLBs. Await calls sequentially and stop in finally. */
@@ -55,7 +55,7 @@ export function createRenderer(options: RendererOptions = {}): FidelityRenderer 
                 response.end(bytes);
                 return;
             }
-            const root = await renderDirectory();
+            const root = await renderDirectoryAsync();
             const path = resolve(root, `.${pathname === "/" ? "/index.html" : pathname}`);
             if (!path.startsWith(root + sep)) {
                 response.writeHead(404).end();
@@ -74,12 +74,12 @@ export function createRenderer(options: RendererOptions = {}): FidelityRenderer 
         }
     });
 
-    async function start(): Promise<void> {
+    async function startAsync(): Promise<void> {
         if (startPromise) return startPromise;
         startPromise = (async () => {
             try {
-                const location = await findBrowser();
-                await renderDirectory();
+                const location = await findBrowserAsync();
+                await renderDirectoryAsync();
                 await new Promise<void>((resolve, reject) => {
                     server.once("error", reject);
                     server.listen(0, "127.0.0.1", () => {
@@ -113,14 +113,14 @@ export function createRenderer(options: RendererOptions = {}): FidelityRenderer 
                     else await route.abort("blockedbyclient");
                 });
             } catch (error) {
-                await stop();
+                await stopAsync();
                 throw error;
             }
         })();
         return startPromise;
     }
 
-    async function stop(): Promise<void> {
+    async function stopAsync(): Promise<void> {
         await context?.close().catch(() => {});
         await browser?.close().catch(() => {});
         context = undefined;
@@ -137,8 +137,8 @@ export function createRenderer(options: RendererOptions = {}): FidelityRenderer 
         profile = undefined;
     }
 
-    async function put(bytes: Uint8Array): Promise<string> {
-        ioPromise ??= createIO();
+    async function putAsync(bytes: Uint8Array): Promise<string> {
+        ioPromise ??= createIOAsync();
         const io = await ioPromise;
         const document = await io.readBinary(bytes);
         document.disposeExtension("KHR_draco_mesh_compression");
@@ -152,16 +152,16 @@ export function createRenderer(options: RendererOptions = {}): FidelityRenderer 
         get browserName() {
             return browserName;
         },
-        start,
-        stop,
-        async setReference(bytes, { size = 1024, views: count = 4 } = {}) {
+        startAsync,
+        stopAsync,
+        async setReferenceAsync(bytes, { size = 1024, views: count = 4 } = {}) {
             if (!Number.isInteger(size) || size < 16 || !Number.isInteger(count) || count < 1) throw new Error("Invalid reference dimensions.");
-            await start();
+            await startAsync();
             await page?.close();
             page = undefined;
             hasCandidate = false;
             views = 0;
-            const path = await put(bytes);
+            const path = await putAsync(bytes);
             try {
                 const nextPage = await context!.newPage();
                 page = nextPage;
@@ -169,26 +169,26 @@ export function createRenderer(options: RendererOptions = {}): FidelityRenderer 
                 await nextPage.setViewportSize({ width: size, height: size });
                 await nextPage.goto(origin!);
                 await nextPage.waitForFunction(() => !!window.fidelityRenderer);
-                const result = await callPage(nextPage, path, { size, views: count });
+                const result = await callPageAsync(nextPage, path, { size, views: count });
                 views = count;
                 return result;
             } finally {
                 blobs.delete(path);
             }
         },
-        async evaluate(bytes) {
+        async evaluateAsync(bytes) {
             if (!page || !views) throw new Error("Set a reference before evaluating.");
-            const path = await put(bytes);
+            const path = await putAsync(bytes);
             hasCandidate = false;
             try {
-                const result = await callPage(page, path);
+                const result = await callPageAsync(page, path);
                 hasCandidate = true;
                 return { ...result, worst: Math.round(result.worst * 1000) / 1000 };
             } finally {
                 blobs.delete(path);
             }
         },
-        async preview(view) {
+        async previewAsync(view) {
             if (!page || !hasCandidate || !Number.isInteger(view) || view < 0 || view >= views) throw new Error("Evaluate a candidate and select a valid view before previewing.");
             const data = await page.evaluate((index) => window.fidelityRenderer!.preview(index), view);
             return Buffer.from(data.slice(data.indexOf(",") + 1), "base64");
@@ -196,9 +196,9 @@ export function createRenderer(options: RendererOptions = {}): FidelityRenderer 
     };
 }
 
-async function callPage(page: Page, url: string, options: Required<ReferenceOptions>): Promise<ReferenceResult>;
-async function callPage(page: Page, url: string): Promise<EvaluationResult>;
-async function callPage(page: Page, url: string, options?: Required<ReferenceOptions>): Promise<ReferenceResult | EvaluationResult> {
+async function callPageAsync(page: Page, url: string, options: Required<ReferenceOptions>): Promise<ReferenceResult>;
+async function callPageAsync(page: Page, url: string): Promise<EvaluationResult>;
+async function callPageAsync(page: Page, url: string, options?: Required<ReferenceOptions>): Promise<ReferenceResult | EvaluationResult> {
     const result = await page.evaluate(
         async ({ url, options }) => {
             try {
@@ -216,7 +216,7 @@ async function callPage(page: Page, url: string, options?: Required<ReferenceOpt
     return result.value;
 }
 
-async function renderDirectory(): Promise<string> {
+async function renderDirectoryAsync(): Promise<string> {
     const directory = dirname(fileURLToPath(import.meta.url));
     for (const root of [resolve(directory, "render"), resolve(directory, "../../dist/render")]) {
         if (
@@ -230,7 +230,7 @@ async function renderDirectory(): Promise<string> {
     throw Object.assign(new Error("Renderer page is not built."), { code: "RENDERER_NOT_BUILT", help: ["pnpm --filter node-assets-cli build"] });
 }
 
-async function createIO(): Promise<NodeIO> {
+async function createIOAsync(): Promise<NodeIO> {
     const [{ NodeIO }, { ALL_EXTENSIONS }, { createDecoderModule }, { MeshoptDecoder }] = await Promise.all([
         import("@gltf-transform/core"),
         import("@gltf-transform/extensions"),
@@ -240,37 +240,4 @@ async function createIO(): Promise<NodeIO> {
     const wasmBinary = await readFile(createRequire(import.meta.url).resolve("draco3dgltf/draco_decoder_gltf.wasm"));
     const [decoder] = await Promise.all([createDecoderModule({ wasmBinary }), MeshoptDecoder.ready]);
     return new NodeIO().registerExtensions(ALL_EXTENSIONS).registerDependencies({ "draco3d.decoder": decoder, "meshopt.decoder": MeshoptDecoder });
-}
-
-let shared: FidelityRenderer | undefined;
-
-/** Starts the shared renderer and returns its provenance and rendering API. */
-export async function startRenderer(options?: RendererOptions): Promise<FidelityRenderer> {
-    shared ??= createRenderer(options);
-    await shared.start();
-    return shared;
-}
-
-/** Stops and releases the shared renderer. */
-export async function stopRenderer(): Promise<void> {
-    await shared?.stop();
-    shared = undefined;
-}
-
-/** Lazily renders an embedded GLB reference (1024px/four views); rejects empty views with INVALID_INPUT. */
-export async function setReference(bytes: Uint8Array, options?: ReferenceOptions): Promise<ReferenceResult> {
-    shared ??= createRenderer();
-    return shared.setReference(bytes, options);
-}
-
-/** Returns three-decimal worst-tile SSIM, its view index, and warm loadMs against the shared reference. */
-export async function evaluate(bytes: Uint8Array): Promise<EvaluationResult> {
-    if (!shared) throw new Error("Set a reference before evaluating.");
-    return shared.evaluate(bytes);
-}
-
-/** Returns a reference | candidate side-by-side PNG from the shared renderer. */
-export async function preview(view: number): Promise<Buffer> {
-    if (!shared) throw new Error("Set a reference before previewing.");
-    return shared.preview(view);
 }

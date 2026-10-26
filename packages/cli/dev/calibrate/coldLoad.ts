@@ -5,10 +5,10 @@ import { extname, join, resolve, sep } from "node:path";
 
 import { chromium, type Browser, type BrowserContext } from "playwright-core";
 
-import { writeAtomic } from "../../src/files";
-import { findBrowser } from "../../src/render/browser";
+import { writeAtomicAsync } from "../../src/files";
+import { findBrowserAsync } from "../../src/render/browser";
 
-export async function prepareDecoders(cache: string) {
+export async function prepareDecodersAsync(cache: string) {
     const names = ["draco_wasm_wrapper_gltf.js", "draco_decoder_gltf.wasm", "draco_decoder_gltf.js", "meshopt_decoder.js"];
     const files = [];
     for (const name of names) {
@@ -21,14 +21,14 @@ export async function prepareDecoders(cache: string) {
             if (!response.ok) throw new Error(`Decoder download failed (${response.status}): ${url}`);
             bytes = Buffer.from(await response.arrayBuffer());
             if (!bytes.length || bytes.subarray(0, 100).toString().trimStart().startsWith("<")) throw new Error(`Invalid decoder download: ${url}`);
-            await writeAtomic(path, bytes);
+            await writeAtomicAsync(path, bytes);
         }
         files.push({ name, url, sha256: createHash("sha256").update(bytes).digest("hex") });
     }
     return files;
 }
 
-export async function startColdLoader(cliRoot: string) {
+export async function startColdLoaderAsync(cliRoot: string) {
     const pageRoot = resolve(cliRoot, ".dev/page");
     const decoderRoot = join(cliRoot, ".cache/babylon-decoders");
     const ktxRoot = join(cliRoot, "dist/render/codecs");
@@ -37,8 +37,8 @@ export async function startColdLoader(cliRoot: string) {
             throw new Error("Build the CLI and calibration page first: pnpm --filter node-assets-cli build && pnpm --filter node-assets-cli calibrate:build");
         });
     }
-    const location = await findBrowser();
-    const decoders = await prepareDecoders(decoderRoot);
+    const location = await findBrowserAsync();
+    const decoders = await prepareDecodersAsync(decoderRoot);
     let bytes: Uint8Array | undefined;
     let browser: Browser | undefined;
     let host: BrowserContext | undefined;
@@ -71,7 +71,7 @@ export async function startColdLoader(cliRoot: string) {
             response.writeHead(404).end();
         }
     });
-    async function stop() {
+    async function stopAsync() {
         await host?.close().catch(() => {});
         await browser?.close().catch(() => {});
         if (server.listening) await new Promise<void>((done) => server.close(() => done()));
@@ -105,8 +105,8 @@ export async function startColdLoader(cliRoot: string) {
         return {
             browserName,
             decoders,
-            stop,
-            async measure(model: Uint8Array) {
+            stopAsync,
+            async measureAsync(model: Uint8Array) {
                 // Never rewrite/decompress the GLB: the browser must exercise the real codecs.
                 bytes = model;
                 let context: BrowserContext | undefined;
@@ -144,7 +144,7 @@ export async function startColdLoader(cliRoot: string) {
             },
         };
     } catch (error) {
-        await stop();
+        await stopAsync();
         throw error;
     }
 }

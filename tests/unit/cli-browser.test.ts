@@ -3,7 +3,7 @@ import type { Stats } from "node:fs";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { browserCandidates, findBrowser } from "../../packages/cli/src/render/browser";
+import { browserCandidates, findBrowserAsync } from "../../packages/cli/src/render/browser";
 
 vi.mock("node:fs/promises", () => ({ access: vi.fn(), stat: vi.fn() }));
 vi.mock("../../packages/cli/node_modules/playwright-core/index.mjs", () => ({ chromium: { executablePath: () => "/cached/chromium" } }));
@@ -78,7 +78,7 @@ describe("browser discovery candidates", () => {
         vi.mocked(access).mockResolvedValue(undefined);
         vi.mocked(stat).mockImplementation(async (path) => ({ isFile: () => path === "/cached/chromium" }) as Stats);
 
-        await expect(findBrowser()).resolves.toEqual({ executablePath: "/cached/chromium", name: "Chromium" });
+        await expect(findBrowserAsync()).resolves.toEqual({ executablePath: "/cached/chromium", name: "Chromium" });
     });
 
     it("rejects a directory override with NO_BROWSER rather than falling back", async () => {
@@ -86,7 +86,7 @@ describe("browser discovery candidates", () => {
         vi.mocked(access).mockResolvedValue(undefined);
         vi.mocked(stat).mockImplementation(async (path) => ({ isFile: () => path === "/cached/chromium" }) as Stats);
 
-        await expect(findBrowser()).rejects.toMatchObject({ code: "NO_BROWSER", help: expect.any(Array) });
+        await expect(findBrowserAsync()).rejects.toMatchObject({ code: "NO_BROWSER", help: expect.any(Array) });
     });
 
     it("requires execute permissions on an override file", async () => {
@@ -94,7 +94,7 @@ describe("browser discovery candidates", () => {
         vi.mocked(stat).mockResolvedValue({ isFile: () => true } as Stats);
         vi.mocked(access).mockRejectedValue(new Error("Permission denied"));
 
-        await expect(findBrowser()).rejects.toMatchObject({ code: "NO_BROWSER" });
+        await expect(findBrowserAsync()).rejects.toMatchObject({ code: "NO_BROWSER" });
     });
 
     it("accepts an executable override file", async () => {
@@ -102,6 +102,6 @@ describe("browser discovery candidates", () => {
         vi.mocked(stat).mockResolvedValue({ isFile: () => true } as Stats);
         vi.mocked(access).mockResolvedValue(undefined);
 
-        await expect(findBrowser()).resolves.toEqual({ executablePath: "/override/browser", name: "Chromium" });
+        await expect(findBrowserAsync()).resolves.toEqual({ executablePath: "/override/browser", name: "Chromium" });
     });
 });

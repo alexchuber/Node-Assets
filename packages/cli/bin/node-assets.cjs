@@ -6,8 +6,8 @@ if (require.main === module) {
         console.log(require("../package.json").version);
     } else {
         import("../dist/cli.js")
-            .then(async ({ main }) => {
-                process.exitCode = await main(args);
+            .then(async ({ mainAsync }) => {
+                process.exitCode = await mainAsync(args);
             })
             .catch(() => {
                 console.log("error: CLI could not start\ncode: INTERNAL\nhelp[1]: Reinstall node-assets-cli");

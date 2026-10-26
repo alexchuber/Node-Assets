@@ -2,9 +2,9 @@ import { readdir, realpath, stat } from "node:fs/promises";
 import { basename, extname, sep } from "node:path";
 
 import { parse, stringFlag, viewSize } from "../arguments";
-import { readDoc } from "../document";
+import { readDocAsync } from "../document";
 import { commandHelp } from "../help";
-import { canonicalizeInputs, collect, inputBytes, loadBytes, supportedInput } from "../inputs";
+import { canonicalizeInputsAsync, collectAsync, inputBytesAsync, loadBytesAsync, supportedInput } from "../inputs";
 import { decoderWarnings, docSummary, extensionsOf, formatNotes, gpuEstimate, loadSeconds, NETWORKS, type Network } from "../measure";
 import { asError, CliError, mib, out, progress, rel, seconds } from "../output";
 import type { FidelityRenderer } from "../render";
@@ -22,8 +22,8 @@ export async function inspectCommandAsync(argv: readonly string[]): Promise<numb
     const view = viewSize(stringFlag(values.view));
     const against = stringFlag(values.against);
     const againstDirectory = against ? (await stat(against).catch(() => null))?.isDirectory() : false;
-    const collected = await collect(positionals);
-    const items = await canonicalizeInputs(collected.items);
+    const collected = await collectAsync(positionals);
+    const items = await canonicalizeInputsAsync(collected.items);
     const models: Record<string, unknown>[] = [];
     const originals = new Map<string, { bytes: Uint8Array; row: Record<string, unknown> }>();
     const errors: CliError[] = [];
@@ -38,10 +38,10 @@ export async function inspectCommandAsync(argv: readonly string[]): Promise<numb
             }
             try {
                 if (item.error) throw item.error;
-                const bytes = await loadBytes(item.input);
-                const doc = await readDoc(bytes);
+                const bytes = await loadBytesAsync(item.input);
+                const doc = await readDocAsync(bytes);
                 const extensions = extensionsOf(doc);
-                const diskBytes = await inputBytes(item.input);
+                const diskBytes = await inputBytesAsync(item.input);
                 const row: Record<string, unknown> = {
                     file: item.display,
                     status: "ok",
@@ -67,9 +67,9 @@ export async function inspectCommandAsync(argv: readonly string[]): Promise<numb
                         const path = await realpath(original).catch(() => {
                             throw new CliError("INPUT_NOT_FOUND", `${original}: no readable original file`);
                         });
-                        const originalBytes = await loadBytes(path);
-                        const originalDoc = await readDoc(originalBytes);
-                        const size = await inputBytes(path);
+                        const originalBytes = await loadBytesAsync(path);
+                        const originalDoc = await readDocAsync(originalBytes);
+                        const size = await inputBytesAsync(path);
                         originals.set(original, {
                             bytes: originalBytes,
                             row: { file: rel(original), bytes: size, gpu_mib: mib(gpuEstimate(originalDoc).total), load_s: seconds(loadSeconds(originalDoc, size, network)) },
@@ -80,11 +80,11 @@ export async function inspectCommandAsync(argv: readonly string[]): Promise<numb
                     progress(`inspect: rendering ${item.display} against ${rel(original)} at ${view}px`);
                     if (currentReference !== original) {
                         currentReference = undefined;
-                        await renderer.setReference(reference.bytes, { size: view, views: 4 });
+                        await renderer.setReferenceAsync(reference.bytes, { size: view, views: 4 });
                         currentReference = original;
                     }
                     row.against = rel(original);
-                    row.fidelity = (await renderer.evaluate(bytes)).worst;
+                    row.fidelity = (await renderer.evaluateAsync(bytes)).worst;
                     row.original = reference.row;
                 }
                 models.push(row);
@@ -95,7 +95,7 @@ export async function inspectCommandAsync(argv: readonly string[]): Promise<numb
             }
         }
     } finally {
-        await renderer?.stop();
+        await renderer?.stopAsync();
     }
     if (models.length === 1 && errors.length === 1) throw errors[0]!;
     models.sort((a, b) => Number(b.bytes ?? -1) - Number(a.bytes ?? -1));

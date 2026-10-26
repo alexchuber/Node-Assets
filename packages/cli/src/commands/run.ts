@@ -2,23 +2,23 @@ import { lstat, mkdir, readFile, realpath, stat } from "node:fs/promises";
 import { basename, dirname, extname, join, resolve, sep } from "node:path";
 
 import { parse, stringFlag } from "../arguments";
-import { readDoc } from "../document";
-import { executeGraph } from "../execution";
-import { writeAtomic } from "../files";
-import { graphHash, instantiateGraph, readGraph } from "../graphFiles";
+import { readDocAsync } from "../document";
+import { executeGraphAsync } from "../execution";
+import { writeAtomicAsync } from "../files";
+import { graphHash, instantiateGraph, readGraphAsync } from "../graphFiles";
 import { commandHelp } from "../help";
-import { canonicalizeInputs, collect, inputBytes, inputHash, invalidInput, loadBytes } from "../inputs";
-import { decoderWarnings, extensionsOf, formatNotes, gpuEstimate, validate } from "../measure";
+import { canonicalizeInputsAsync, collectAsync, inputBytesAsync, inputHashAsync, invalidInput, loadBytesAsync } from "../inputs";
+import { decoderWarnings, extensionsOf, formatNotes, gpuEstimate, validateAsync } from "../measure";
 import { asError, CliError, mib, out, progress, rel } from "../output";
-import { readProvenance, withProvenance } from "../provenance";
+import { readProvenanceAsync, withProvenance } from "../provenance";
 import type { FidelityRenderer } from "../render";
 
-async function canonicalPath(file: string): Promise<string> {
+async function canonicalPathAsync(file: string): Promise<string> {
     return realpath(file).catch(async () => join(await realpath(dirname(resolve(file))).catch(() => dirname(resolve(file))), basename(file)));
 }
 
-async function sameFile(left: string, right: string): Promise<boolean> {
-    if ((await canonicalPath(left)) === right) return true;
+async function sameFileAsync(left: string, right: string): Promise<boolean> {
+    if ((await canonicalPathAsync(left)) === right) return true;
     const [a, b] = await Promise.all([stat(left).catch(() => null), stat(right).catch(() => null)]);
     return !!a && !!b && a.dev === b.dev && a.ino === b.ino;
 }
@@ -32,8 +32,8 @@ export async function runCommandAsync(argv: readonly string[]): Promise<number> 
     const [argument, ...inputs] = positionals;
     const outputArgument = stringFlag(values.out);
     if (!argument || !inputs.length || !outputArgument) throw new CliError("USAGE", "run requires a graph, input and -o output", [commandHelp("run").usage]);
-    const collected = await collect(inputs);
-    const items = await canonicalizeInputs(collected.items);
+    const collected = await collectAsync(inputs);
+    const items = await canonicalizeInputsAsync(collected.items);
     const { multi } = collected;
     const outputDirectory = outputArgument.endsWith("/") || outputArgument.endsWith(sep) || (await stat(outputArgument).catch(() => null))?.isDirectory();
     if (multi && !outputDirectory && extname(outputArgument)) throw new CliError("USAGE", "Several inputs or a directory require -o dir/", [commandHelp("run").usage]);
@@ -44,18 +44,18 @@ export async function runCommandAsync(argv: readonly string[]): Promise<number> 
     for (const item of items) {
         const output = directory ? join(outputArgument, basename(item.name, extname(item.name)) + ".glb") : outputArgument;
         if (!item.error && !item.skip) {
-            const canonical = (await canonicalPath(output)).toLowerCase();
+            const canonical = (await canonicalPathAsync(output)).toLowerCase();
             if (outputs.has(canonical)) throw new CliError("USAGE", "Inputs would produce the same output file", ["Run these inputs separately with different -o paths"]);
             outputs.add(canonical);
             for (const other of items) {
-                if (!other.error && !other.skip && (await sameFile(output, other.input))) {
+                if (!other.error && !other.skip && (await sameFileAsync(output, other.input))) {
                     throw new CliError("USAGE", "An output is also an input; nothing written", ["Choose a separate output file or directory"]);
                 }
             }
         }
         plans.push({ ...item, output });
     }
-    const graph = await readGraph(argument);
+    const graph = await readGraphAsync(argument);
     const hash = graphHash(graph);
     const results: Record<string, unknown>[] = [];
     const warnings = new Set<string>();
@@ -70,8 +70,8 @@ export async function runCommandAsync(argv: readonly string[]): Promise<number> 
             }
             try {
                 if (plan.error) throw plan.error;
-                const provenance = { graph: hash, input: await inputHash(plan.input) };
-                const previous = await readProvenance(plan.output);
+                const provenance = { graph: hash, input: await inputHashAsync(plan.input) };
+                const previous = await readProvenanceAsync(plan.output);
                 const exists = await lstat(plan.output).catch(() => null);
                 const noop = !!exists && previous?.graph === provenance.graph && previous.input === provenance.input;
                 if (exists && !noop && !values.force)
@@ -81,19 +81,19 @@ export async function runCommandAsync(argv: readonly string[]): Promise<number> 
                 else {
                     progress(`run: ${plan.display}`);
                     try {
-                        bytes = withProvenance(await executeGraph(instantiateGraph(graph), plan.input), provenance);
+                        bytes = withProvenance(await executeGraphAsync(instantiateGraph(graph), plan.input), provenance);
                     } catch (error) {
                         throw invalidInput(error, plan.display);
                     }
                 }
-                const doc = await readDoc(bytes);
+                const doc = await readDocAsync(bytes);
                 const extensions = extensionsOf(doc);
                 for (const warning of [...decoderWarnings(extensions.decoders), ...formatNotes(doc)]) warnings.add(warning);
                 const row: Record<string, unknown> = {
                     input: plan.display,
                     output: rel(plan.output),
                     status: noop ? "up to date (no-op)" : "ok",
-                    bytes_before: await inputBytes(plan.input),
+                    bytes_before: await inputBytesAsync(plan.input),
                     bytes_after: bytes.length,
                     gpu_mib: mib(gpuEstimate(doc).total),
                     decoders: extensions.decoders.join("+") || "none",
@@ -102,8 +102,8 @@ export async function runCommandAsync(argv: readonly string[]): Promise<number> 
                     renderer ??= (await import("../render")).createRenderer();
                     const limit = graph.check ?? { fidelity: 0.9, view: 1024 };
                     progress(`run: checking ${rel(plan.output)} at ${limit.view}px`);
-                    await renderer.setReference(await loadBytes(plan.input), { size: limit.view, views: 4 });
-                    const fidelity = (await renderer.evaluate(bytes)).worst;
+                    await renderer.setReferenceAsync(await loadBytesAsync(plan.input), { size: limit.view, views: 4 });
+                    const fidelity = (await renderer.evaluateAsync(bytes)).worst;
                     row.fidelity = fidelity;
                     row.check = fidelity >= limit.fidelity ? "pass" : "fail";
                     if (fidelity < limit.fidelity) {
@@ -112,9 +112,9 @@ export async function runCommandAsync(argv: readonly string[]): Promise<number> 
                     }
                 }
                 if (!noop) {
-                    const validation = await validate(bytes);
+                    const validation = await validateAsync(bytes);
                     if (validation.errors) {
-                        const original = await validate(await loadBytes(plan.input));
+                        const original = await validateAsync(await loadBytesAsync(plan.input));
                         const inherited = original.errors > 0 && validation.codes.every((code) => original.codes.includes(code));
                         warnings.add(
                             `${rel(plan.output)}: ${validation.errors} validator error(s) [${validation.codes.join(", ")}]${inherited ? " already present in the input; written anyway" : " introduced by this graph"}`
@@ -123,11 +123,11 @@ export async function runCommandAsync(argv: readonly string[]): Promise<number> 
                     await mkdir(dirname(plan.output), { recursive: true });
                     const destination = join(await realpath(dirname(plan.output)), basename(plan.output));
                     for (const other of items) {
-                        if (!other.error && !other.skip && (await sameFile(destination, other.input))) {
+                        if (!other.error && !other.skip && (await sameFileAsync(destination, other.input))) {
                             throw new CliError("USAGE", "An output is also an input", ["Choose a separate output file or directory"]);
                         }
                     }
-                    await writeAtomic(destination, bytes, !!values.force);
+                    await writeAtomicAsync(destination, bytes, !!values.force);
                 }
                 results.push(row);
             } catch (error) {
@@ -137,7 +137,7 @@ export async function runCommandAsync(argv: readonly string[]): Promise<number> 
             }
         }
     } finally {
-        await renderer?.stop();
+        await renderer?.stopAsync();
     }
     if (plans.length === 1 && errors.length === 1) throw errors[0]!;
     const written = results.filter((row) => row.status === "ok" || row.status === "up to date (no-op)" || row.status === "below limit");

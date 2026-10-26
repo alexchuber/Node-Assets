@@ -4,7 +4,7 @@ import { dirname, join } from "node:path";
 
 import { CliError } from "./output";
 
-export async function writeAtomic(file: string, bytes: Uint8Array | string, replace = true): Promise<void> {
+export async function writeAtomicAsync(file: string, bytes: Uint8Array | string, replace = true): Promise<void> {
     await mkdir(dirname(file), { recursive: true });
     const scratch = join(dirname(file), `.${randomUUID()}.tmp`);
     try {

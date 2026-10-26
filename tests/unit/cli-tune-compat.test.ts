@@ -6,15 +6,15 @@ import { EXTTextureAVIF, EXTTextureWebP } from "@gltf-transform/extensions";
 import sharp from "sharp";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { readDoc, writeGlb } from "../../packages/cli/src/document";
-import { executeGraph } from "../../packages/cli/src/execution";
-import { instantiateGraph, normalizeGraph, readGraph, writeGraph } from "../../packages/cli/src/graphFiles";
-import { inputHash } from "../../packages/cli/src/inputs";
+import { readDocAsync, writeGlbAsync } from "../../packages/cli/src/document";
+import { executeGraphAsync } from "../../packages/cli/src/execution";
+import { instantiateGraph, normalizeGraph, readGraphAsync, writeGraphAsync } from "../../packages/cli/src/graphFiles";
+import { inputHashAsync } from "../../packages/cli/src/inputs";
 import { extensionsOf } from "../../packages/cli/src/measure";
 import { CliError } from "../../packages/cli/src/output";
 import type { FidelityRenderer } from "../../packages/cli/src/render";
 import { createTuneExecutor } from "../../packages/cli/src/tune/cache";
-import { tune } from "../../packages/cli/src/tune/search";
+import { tuneAsync } from "../../packages/cli/src/tune/search";
 import { compileStages } from "../../packages/cli/src/tune/stages";
 import { createGridDocument, createRasterImageAsync } from "../helpers/document";
 
@@ -39,24 +39,24 @@ async function texturedSource(format: "webp" | "avif" | "ktx2", mixed = false): 
                 .setArray(new Float32Array([0, 0, 1, 0, 0, 1, 1, 1]))
                 .setBuffer(doc.getRoot().listBuffers()[0]!)
         );
-    if (format === "ktx2") return executeGraph(instantiateGraph({ graph: 1, blocks: [{ type: "transform.encode-ktx2", config: { mode: "etc1s" } }] }), doc);
+    if (format === "ktx2") return executeGraphAsync(instantiateGraph({ graph: 1, blocks: [{ type: "transform.encode-ktx2", config: { mode: "etc1s" } }] }), doc);
     if (format === "webp") doc.createExtension(EXTTextureWebP).setRequired(true);
     else doc.createExtension(EXTTextureAVIF).setRequired(true);
-    return writeGlb(doc);
+    return writeGlbAsync(doc);
 }
 
 function renderer(pngFidelity = 1): FidelityRenderer {
     return {
         browserName: "test",
-        start: async () => {},
-        stop: async () => {},
-        setReference: async () => ({ frame: { c: [0, 0, 0], r: 1 }, loadMs: 0 }),
-        evaluate: async (bytes) => ({
-            worst: (await readDoc(bytes)).getRoot().listTextures()[0]!.getMimeType() === "image/png" ? pngFidelity : 1,
+        startAsync: async () => {},
+        stopAsync: async () => {},
+        setReferenceAsync: async () => ({ frame: { c: [0, 0, 0], r: 1 }, loadMs: 0 }),
+        evaluateAsync: async (bytes) => ({
+            worst: (await readDocAsync(bytes)).getRoot().listTextures()[0]!.getMimeType() === "image/png" ? pngFidelity : 1,
             worstView: 0,
             loadMs: 0,
         }),
-        preview: async () => Buffer.alloc(0),
+        previewAsync: async () => Buffer.alloc(0),
     };
 }
 
@@ -78,7 +78,7 @@ describe("compat's mandatory texture fallback", () => {
             await writeFile(input, source);
             const executor = createTuneExecutor();
             try {
-                const result = await tune(source, await inputHash(input), {
+                const result = await tuneAsync(source, await inputHashAsync(input), {
                     goals: ["compat"],
                     floor: 0.9,
                     view: 64,
@@ -94,17 +94,17 @@ describe("compat's mandatory texture fallback", () => {
                 expect(winner.stages.textures).toMatchObject({ format: "png", maxSize: 32 });
                 expect(winner.required).toEqual([]);
                 expect(winner.decoders).toEqual([]);
-                const texture = (await readDoc(winner.glb)).getRoot().listTextures()[0]!;
+                const texture = (await readDocAsync(winner.glb)).getRoot().listTextures()[0]!;
                 expect(texture.getMimeType()).toBe("image/png");
                 expect(texture.getSize()).toEqual([32, 16]);
                 if (format !== "ktx2") {
-                    const original = (await readDoc(source)).getRoot().listTextures()[0]!;
+                    const original = (await readDocAsync(source)).getRoot().listTextures()[0]!;
                     expect(await sharp(texture.getImage()!).ensureAlpha().raw().toBuffer()).toEqual(await sharp(original.getImage()!).ensureAlpha().raw().toBuffer());
                 }
                 const graph = join(directory, `${format}.compat.toon`);
-                await writeGraph(graph, normalizeGraph({ ...compileStages(winner.stages, 32), goal: "compat" }));
-                const applied = await executeGraph(instantiateGraph(await readGraph(graph)), input);
-                expect(extensionsOf(await readDoc(applied)).required).toEqual([]);
+                await writeGraphAsync(graph, normalizeGraph({ ...compileStages(winner.stages, 32), goal: "compat" }));
+                const applied = await executeGraphAsync(instantiateGraph(await readGraphAsync(graph)), input);
+                expect(extensionsOf(await readDocAsync(applied)).required).toEqual([]);
                 expect(applied).toEqual(winner.glb);
             } finally {
                 executor.clear();
@@ -120,7 +120,7 @@ describe("compat's mandatory texture fallback", () => {
         const executor = createTuneExecutor();
         try {
             await expect(
-                tune(await texturedSource("webp", mixed), `rejected-${mixed}`, {
+                tuneAsync(await texturedSource("webp", mixed), `rejected-${mixed}`, {
                     goals: ["compat"],
                     floor: 0.9,
                     view: 64,

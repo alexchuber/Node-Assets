@@ -50,7 +50,7 @@ node packages/cli/.dev/calibrate.js --out packages/cli/.cache/smoke.json \
 
 ## What is measured
 
-The tool executes core graphs through the CLI's `executeGraph`. Texture
+The tool executes core graphs through the CLI's `executeGraphAsync`. Texture
 variants use keep/WebP/AVIF/KTX2 at 1024 and 256 px, PNG at 512 px and JPEG at
 2048 px with quantized geometry. Geometry variants use quantize/meshopt/Draco/
 none with WebP at 256 px. Two extra variants combine AVIF at 1024 px with

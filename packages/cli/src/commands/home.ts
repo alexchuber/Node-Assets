@@ -11,13 +11,13 @@ import { out, rel } from "../output";
 export async function homeCommandAsync(): Promise<number> {
     const models: { file: string; bytes: number }[] = [];
     const graphs: { file: string; bytes: number }[] = [];
-    async function walk(directory: string, depth: number): Promise<void> {
+    async function walkAsync(directory: string, depth: number): Promise<void> {
         if (depth > 3) return;
         const entries = await readdir(directory, { withFileTypes: true }).catch(() => []);
         for (const entry of entries) {
             if (entry.name.startsWith(".") || ["node_modules", "dist"].includes(entry.name)) continue;
             const file = join(directory, entry.name);
-            if (entry.isDirectory()) await walk(file, depth + 1);
+            if (entry.isDirectory()) await walkAsync(file, depth + 1);
             else if (entry.isFile()) {
                 if (supportedInput(file)) models.push({ file: rel(file), bytes: (await stat(file)).size });
                 else if (extname(file) === ".toon") {
@@ -32,7 +32,7 @@ export async function homeCommandAsync(): Promise<number> {
             }
         }
     }
-    await walk(process.cwd(), 0);
+    await walkAsync(process.cwd(), 0);
     models.sort((a, b) => b.bytes - a.bytes || a.file.localeCompare(b.file));
     graphs.sort((a, b) => b.bytes - a.bytes || a.file.localeCompare(b.file));
     const executable = resolve(process.argv[1] ?? "node-assets");

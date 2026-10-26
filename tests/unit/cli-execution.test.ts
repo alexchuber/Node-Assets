@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { EXTTextureWebP } from "@gltf-transform/extensions";
 
-import { readDoc } from "../../packages/cli/src/document";
-import { executeGraph } from "../../packages/cli/src/execution";
+import { readDocAsync } from "../../packages/cli/src/document";
+import { executeGraphAsync } from "../../packages/cli/src/execution";
 import { instantiateGraph } from "../../packages/cli/src/graphFiles";
 import { createGridDocument, createRasterImageAsync } from "../helpers/document";
 
@@ -11,11 +11,11 @@ describe("CLI document execution", () => {
         const graph = instantiateGraph({ graph: 1, blocks: [{ type: "transform.strip-materials" }] });
         const doc = createGridDocument(1);
         doc.getRoot().listMeshes()[0]!.listPrimitives()[0]!.setMaterial(doc.createMaterial());
-        const bytes = await executeGraph(graph, doc);
-        const result = await readDoc(bytes);
+        const bytes = await executeGraphAsync(graph, doc);
+        const result = await readDocAsync(bytes);
         expect(result.getRoot().listMeshes()).toHaveLength(1);
         expect(result.getRoot().listMaterials()).toHaveLength(0);
-        const next = await readDoc(await executeGraph(graph, createGridDocument(1)));
+        const next = await readDocAsync(await executeGraphAsync(graph, createGridDocument(1)));
         expect(next.getRoot().listMeshes()).toHaveLength(1);
     });
 
@@ -29,7 +29,7 @@ describe("CLI document execution", () => {
         const material = doc.createMaterial().setBaseColorTexture(texture);
         doc.getRoot().listMeshes()[0]!.listPrimitives()[0]!.setMaterial(material);
         const graph = instantiateGraph({ graph: 1, blocks: [{ type: "transform.dedup" }] });
-        const result = await readDoc(await executeGraph(graph, doc));
+        const result = await readDocAsync(await executeGraphAsync(graph, doc));
         expect(
             result
                 .getRoot()

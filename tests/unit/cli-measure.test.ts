@@ -3,7 +3,7 @@ import { EXTMeshoptCompression, KHRDracoMeshCompression, KHRTextureBasisu } from
 import { describe, expect, it } from "vitest";
 
 import { decodeMs, features } from "../../packages/cli/src/loadModel";
-import { decoderBytes, docSummary, extensionsOf, gpuEstimate, loadSeconds, validate } from "../../packages/cli/src/measure";
+import { decoderBytes, docSummary, extensionsOf, gpuEstimate, loadSeconds, validateAsync } from "../../packages/cli/src/measure";
 import { createGridDocument } from "../helpers/document";
 import { generateGlbData } from "../helpers/gltf";
 
@@ -36,7 +36,7 @@ describe("CLI model measurements", () => {
     });
 
     it("validates a generated GLB and reports unreadable input", async () => {
-        expect((await validate(generateGlbData())).errors).toBe(0);
-        expect((await validate(new Uint8Array(3))).errors).toBeGreaterThan(0);
+        expect((await validateAsync(generateGlbData())).errors).toBe(0);
+        expect((await validateAsync(new Uint8Array(3))).errors).toBeGreaterThan(0);
     });
 });

@@ -7,7 +7,7 @@ import { showCommandAsync } from "./commands/show";
 import { tuneCommandAsync } from "./commands/tune";
 import { asError, CliError, out } from "./output";
 
-export async function main(argv: readonly string[]): Promise<number> {
+export async function mainAsync(argv: readonly string[]): Promise<number> {
     try {
         const [command, ...rest] = argv;
         if (!command) return await homeCommandAsync();

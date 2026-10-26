@@ -2,8 +2,8 @@ import type { SerializedBlock } from "@babylonjs/node-assets";
 import type { Document } from "@gltf-transform/core";
 import { cloneDocument } from "@gltf-transform/functions";
 
-import { readDoc } from "../document";
-import { executeGraph, executeToDocument } from "../execution";
+import { readDocAsync } from "../document";
+import { executeGraphAsync, executeToDocumentAsync } from "../execution";
 import { graphHash, instantiateGraph } from "../graphFiles";
 import { stageBlocks, type TuneStages } from "./stages";
 
@@ -24,7 +24,7 @@ export function createTuneExecutor() {
     };
     return {
         clear: () => documents.clear(),
-        async execute(hash: string, glb: Uint8Array, stages: TuneStages, maxTexture: number): Promise<Uint8Array> {
+        async executeAsync(hash: string, glb: Uint8Array, stages: TuneStages, maxTexture: number): Promise<Uint8Array> {
             const blocks = stageBlocks(stages, maxTexture);
             const prefixKey = (prefix: readonly SerializedBlock[]) => `${hash}:${graphHash({ graph: 1, blocks: prefix })}`;
             const cleanupKey = prefixKey(blocks.cleanup);
@@ -35,18 +35,18 @@ export function createTuneExecutor() {
                 if (!document) {
                     let input = get(hash);
                     if (!input) {
-                        input = await readDoc(glb);
+                        input = await readDocAsync(glb);
                         input.disposeExtension("KHR_draco_mesh_compression");
                         input.disposeExtension("EXT_meshopt_compression");
                         put(hash, input);
                     }
-                    document = put(cleanupKey, await executeToDocument(instantiateGraph({ graph: 1, blocks: blocks.cleanup }), cloneDocument(input)));
+                    document = put(cleanupKey, await executeToDocumentAsync(instantiateGraph({ graph: 1, blocks: blocks.cleanup }), cloneDocument(input)));
                 }
                 if (blocks.textures.length) {
-                    document = put(textureKey, await executeToDocument(instantiateGraph({ graph: 1, blocks: blocks.textures }), cloneDocument(document)));
+                    document = put(textureKey, await executeToDocumentAsync(instantiateGraph({ graph: 1, blocks: blocks.textures }), cloneDocument(document)));
                 }
             }
-            return executeGraph(instantiateGraph({ graph: 1, blocks: blocks.geometry }), cloneDocument(document));
+            return executeGraphAsync(instantiateGraph({ graph: 1, blocks: blocks.geometry }), cloneDocument(document));
         },
     };
 }

@@ -7,15 +7,15 @@ import sharp from "sharp";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import cliPackage from "../../packages/cli/package.json";
-import { inputBytes, inputHash } from "../../packages/cli/src/inputs";
+import { inputBytesAsync, inputHashAsync } from "../../packages/cli/src/inputs";
 import { decode, serialize } from "../../packages/cli/src/output";
-import { readProvenance } from "../../packages/cli/src/provenance";
-import { findBrowser } from "../../packages/cli/src/render";
+import { readProvenanceAsync } from "../../packages/cli/src/provenance";
+import { findBrowserAsync } from "../../packages/cli/src/render";
 import { buildCliFixtureAsync, runNodeAsync } from "../helpers/cli";
 import { createGridDocument } from "../helpers/document";
 import { generateGlbData, generateGltfJson } from "../helpers/gltf";
 
-const browser = await findBrowser().catch(() => undefined);
+const browser = await findBrowserAsync().catch(() => undefined);
 
 describe("node-assets CLI", () => {
     let directory: string;
@@ -139,7 +139,7 @@ describe("node-assets CLI", () => {
         const first = await run(["run", "optimize", input, "-o", output]);
         expect(first.code, first.stdout).toBe(0);
         expect((await stat(output)).size).toBeGreaterThan(0);
-        expect(await readProvenance(output)).toMatchObject({ graph: expect.stringMatching(/^[a-f0-9]{12}$/), input: expect.stringMatching(/^[a-f0-9]{12}$/) });
+        expect(await readProvenanceAsync(output)).toMatchObject({ graph: expect.stringMatching(/^[a-f0-9]{12}$/), input: expect.stringMatching(/^[a-f0-9]{12}$/) });
         const before = await stat(output);
         const second = await run(["run", "optimize", input, "-o", output]);
         expect(second.code).toBe(0);
@@ -188,7 +188,7 @@ describe("node-assets CLI", () => {
         expect(await readFile(output, "utf8")).toBe("existing");
         const forced = await run(["run", "optimize", input, "-o", output, "--force"]);
         expect(forced.code, forced.stdout).toBe(0);
-        expect(await readProvenance(output)).not.toBeNull();
+        expect(await readProvenanceAsync(output)).not.toBeNull();
         expect((await readdir(directory)).filter((name) => name.endsWith(".tmp"))).toEqual([]);
     });
 
@@ -248,7 +248,7 @@ describe("node-assets CLI", () => {
         expect(result.code, result.stdout).toBe(0);
         expect(parse(result.stdout).results).toContainEqual(expect.objectContaining({ input: "alias/../victim.glb", bytes_before: original.length }));
         const output = join(cwd, "out/victim.glb");
-        expect(await readProvenance(output)).toMatchObject({ input: await inputHash(canonical) });
+        expect(await readProvenanceAsync(output)).toMatchObject({ input: await inputHashAsync(canonical) });
         const inspected = await run(["inspect", output], cwd);
         expect(inspected.code, inspected.stdout).toBe(0);
         expect(parse(inspected.stdout).triangles).toBe(2);
@@ -276,7 +276,7 @@ describe("node-assets CLI", () => {
         await symlink(join(cwd, "target/nested"), join(cwd, "alias"), "dir");
         const result = await run(["inspect", "alias/../victim.gltf"], cwd);
         expect(result.code, result.stdout).toBe(0);
-        expect(parse(result.stdout)).toMatchObject({ file: "alias/../victim.gltf", triangles: 2, bytes: await inputBytes(canonical) });
+        expect(parse(result.stdout)).toMatchObject({ file: "alias/../victim.gltf", triangles: 2, bytes: await inputBytesAsync(canonical) });
     });
 
     it("rejects case-insensitive batch output collisions before writing anything", async () => {
@@ -355,11 +355,11 @@ describe("node-assets CLI", () => {
         const path = join(cwd, "model.gltf");
         await writeFile(path, JSON.stringify(value));
         await writeFile(join(cwd, "mesh.bin"), buffer);
-        expect(await inputBytes(path)).toBe((await stat(path)).size + buffer.length);
-        const before = await inputHash(path);
+        expect(await inputBytesAsync(path)).toBe((await stat(path)).size + buffer.length);
+        const before = await inputHashAsync(path);
         buffer[0] = 1;
         await writeFile(join(cwd, "mesh.bin"), buffer);
-        expect(await inputHash(path)).not.toBe(before);
+        expect(await inputHashAsync(path)).not.toBe(before);
     });
 
     describe.skipIf(!browser)("browser-dependent CLI", () => {

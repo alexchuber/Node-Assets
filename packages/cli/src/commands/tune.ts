@@ -2,17 +2,17 @@ import { stat } from "node:fs/promises";
 import { basename, extname, join, resolve } from "node:path";
 
 import { parse, stringFlag } from "../arguments";
-import { writeAtomic } from "../files";
-import { normalizeGraph, writeGraph } from "../graphFiles";
+import { writeAtomicAsync } from "../files";
+import { normalizeGraph, writeGraphAsync } from "../graphFiles";
 import { commandHelp } from "../help";
-import { canonicalizeInputs, collect, inputHash, loadBytes } from "../inputs";
+import { canonicalizeInputsAsync, collectAsync, inputHashAsync, loadBytesAsync } from "../inputs";
 import { decoderBytes, decoderWarnings, NETWORKS, type Network } from "../measure";
 import { asError, CliError, mib, out, progress, rel, seconds } from "../output";
 import type { FidelityRenderer } from "../render";
 import { allocatePassDeadline } from "../tune/budget";
 import { createTuneExecutor } from "../tune/cache";
 import { GOALS, type Goal } from "../tune/plan";
-import { tune } from "../tune/search";
+import { tuneAsync } from "../tune/search";
 import { compileStages, type TuneStages } from "../tune/stages";
 
 function duration(value: string): number {
@@ -66,8 +66,8 @@ export async function tuneCommandAsync(argv: readonly string[]): Promise<number>
     const fileOutput = !output.endsWith("/") && extname(output).toLowerCase() === ".toon" && !(await stat(output).catch(() => null))?.isDirectory();
     if (fileOutput && (positionals.length !== 1 || goals.length !== 1))
         throw new CliError("USAGE", "-o FILE.toon requires exactly one input and one goal", ["Use -o graphs/ for several inputs or goals"]);
-    const { items: collected } = await collect(positionals);
-    const items = await canonicalizeInputs(collected);
+    const { items: collected } = await collectAsync(positionals);
+    const items = await canonicalizeInputsAsync(collected);
     const models = items.filter((item) => !item.error && !item.skip);
     if (fileOutput && models.length > 1) throw new CliError("USAGE", "-o FILE.toon requires exactly one input and one goal", ["Use -o graphs/ for several inputs or goals"]);
     const destinations = new Set<string>();
@@ -94,13 +94,13 @@ export async function tuneCommandAsync(argv: readonly string[]): Promise<number>
             }
             const name = basename(item.name, extname(item.name));
             try {
-                const glb = await loadBytes(item.input);
-                const hash = await inputHash(item.input);
+                const glb = await loadBytesAsync(item.input);
+                const hash = await inputHashAsync(item.input);
                 renderer ??= (await import("../render")).createRenderer();
                 progress(`tune: ${item.display} for ${goals.join(",")} (fidelity >= ${floor} at ${view}px; whole run limited to ${timeLimitValue})`);
                 for (const [passIndex, pass] of passes.entries()) {
                     const remainingPasses = (models.length - models.indexOf(item)) * passes.length - passIndex;
-                    const searched = await tune(glb, hash, {
+                    const searched = await tuneAsync(glb, hash, {
                         goals: pass,
                         floor,
                         view,
@@ -136,10 +136,10 @@ export async function tuneCommandAsync(argv: readonly string[]): Promise<number>
                         });
                         const file = fileOutput ? output : join(output, `${name}.${goal}.toon`);
                         const preview = file.slice(0, -5) + ".png";
-                        await renderer.evaluate(winner.glb);
-                        const png = await renderer.preview(winner.worstView);
-                        await writeGraph(file, graph);
-                        await writeAtomic(preview, png);
+                        await renderer.evaluateAsync(winner.glb);
+                        const png = await renderer.previewAsync(winner.worstView);
+                        await writeGraphAsync(file, graph);
+                        await writeAtomicAsync(preview, png);
                         const geometry = winner.stages.geometry;
                         results.push({
                             input: item.display,
@@ -196,7 +196,7 @@ export async function tuneCommandAsync(argv: readonly string[]): Promise<number>
         }
     } finally {
         executor.clear();
-        await renderer?.stop();
+        await renderer?.stopAsync();
     }
     out({
         limits: {

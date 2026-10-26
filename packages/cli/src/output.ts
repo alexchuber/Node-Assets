@@ -56,14 +56,14 @@ export function seconds(value: number): number {
 let diagnosticsDepth = 0;
 let savedConsole: Pick<typeof console, "log" | "info" | "warn" | "debug" | "error"> | undefined;
 
-export async function withDiagnostics<T>(action: () => Promise<T>): Promise<T> {
+export async function withDiagnosticsAsync<T>(actionAsync: () => Promise<T>): Promise<T> {
     if (diagnosticsDepth++ === 0) {
         savedConsole = { log: console.log, info: console.info, warn: console.warn, debug: console.debug, error: console.error };
         const silent = () => {};
         Object.assign(console, { log: silent, info: silent, warn: silent, debug: silent, error: silent });
     }
     try {
-        return await action();
+        return await actionAsync();
     } finally {
         if (--diagnosticsDepth === 0) {
             Object.assign(console, savedConsole);

@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 
 import { describe, expect, it } from "vitest";
 
-import { graphHash, normalizeGraph, parseGraphFile, readGraph, serializeGraphFile } from "../../packages/cli/src/graphFiles";
+import { graphHash, normalizeGraph, parseGraphFile, readGraphAsync, serializeGraphFile } from "../../packages/cli/src/graphFiles";
 
 describe("CLI graph files", () => {
     it("fills defaults and round trips metadata", () => {
@@ -49,10 +49,10 @@ describe("CLI graph files", () => {
     });
 
     it("resolves bare built-ins but treats extension arguments as files", async () => {
-        const builtin = await readGraph("optimize");
+        const builtin = await readGraphAsync("optimize");
         const text = await readFile(new URL("../../packages/cli/graphs/optimize.toon", import.meta.url), "utf8");
         expect(builtin).toEqual(parseGraphFile(text));
-        await expect(readGraph("optimize.toon")).rejects.toThrow();
-        await expect(readGraph("unknown")).rejects.toThrow();
+        await expect(readGraphAsync("optimize.toon")).rejects.toThrow();
+        await expect(readGraphAsync("unknown")).rejects.toThrow();
     });
 });

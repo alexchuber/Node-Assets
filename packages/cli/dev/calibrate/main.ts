@@ -3,15 +3,15 @@ import { dirname, extname, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { fileURLToPath } from "node:url";
 
-import { readDoc } from "../../src/document";
-import { writeAtomic } from "../../src/files";
-import { loadBytes } from "../../src/inputs";
+import { readDocAsync } from "../../src/document";
+import { writeAtomicAsync } from "../../src/files";
+import { loadBytesAsync } from "../../src/inputs";
 import { features, type LoadFeatures } from "../../src/loadModel";
-import { asError, CliError, out, progress, withDiagnostics } from "../../src/output";
+import { asError, CliError, out, progress, withDiagnosticsAsync } from "../../src/output";
 
-import { startColdLoader } from "./coldLoad";
+import { startColdLoaderAsync } from "./coldLoad";
 import { fitLoadModel } from "./fit";
-import { calibrationVariants, executeVariant, type Variant } from "./variants";
+import { calibrationVariants, executeVariantAsync, type Variant } from "./variants";
 
 interface CalibrationRow extends Variant {
     readonly input: string;
@@ -54,7 +54,7 @@ function median(values: readonly number[]): number {
     return sorted.length % 2 ? sorted[middle]! : (sorted[middle - 1]! + sorted[middle]!) / 2;
 }
 
-async function main(): Promise<void> {
+async function mainAsync(): Promise<void> {
     let args;
     try {
         args = parseArgs({
@@ -91,19 +91,19 @@ async function main(): Promise<void> {
     }
     const variants = allVariants.slice(0, limit);
     progress(`Calibrating ${inputs.length} model(s), ${variants.length} variants each, ${reps} cold load(s) per variant.`);
-    const loader = await startColdLoader(cliRoot);
+    const loader = await startColdLoaderAsync(cliRoot);
     const rows: CalibrationRow[] = [];
     let babylonVersion = "";
     try {
         for (const input of inputs) {
-            const original = await loadBytes(input);
+            const original = await loadBytesAsync(input);
             for (const variant of variants) {
-                const bytes = await executeVariant(original, variant);
-                const observed = features(await readDoc(bytes), bytes.byteLength);
+                const bytes = await executeVariantAsync(original, variant);
+                const observed = features(await readDocAsync(bytes), bytes.byteLength);
                 const samples: number[] = [];
                 const decoders = new Set<string>();
                 for (let repetition = 0; repetition < reps; repetition++) {
-                    const result = await loader.measure(bytes);
+                    const result = await loader.measureAsync(bytes);
                     babylonVersion = result.babylonVersion;
                     samples.push(result.ms);
                     result.decoders.forEach((name) => decoders.add(name));
@@ -115,7 +115,7 @@ async function main(): Promise<void> {
             }
         }
     } finally {
-        await loader.stop();
+        await loader.stopAsync();
     }
     const fit = fitLoadModel(rows);
     const source = `Babylon.js ${babylonVersion}, ${loader.browserName}, ${new Date().toISOString().slice(0, 10)}`;
@@ -150,9 +150,9 @@ async function main(): Promise<void> {
         decoderFiles: loader.decoders,
         rows,
     };
-    await writeAtomic(values.out, JSON.stringify(report, null, 4) + "\n");
+    await writeAtomicAsync(values.out, JSON.stringify(report, null, 4) + "\n");
     if (values.write) {
-        await writeAtomic(coefficientsPath, JSON.stringify({ coefficients: fit.coefficients, source, fitted: fit.fitted }, null, 4) + "\n");
+        await writeAtomicAsync(coefficientsPath, JSON.stringify({ coefficients: fit.coefficients, source, fitted: fit.fitted }, null, 4) + "\n");
     }
     out({
         source,
@@ -169,8 +169,10 @@ async function main(): Promise<void> {
     });
 }
 
-void withDiagnostics(main).catch((error: unknown) => {
-    const failure = asError(error);
-    out({ error: failure.message, code: failure.code, help: failure.help });
-    process.exitCode = failure.exit;
-});
+if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {
+    void withDiagnosticsAsync(mainAsync).catch((error: unknown) => {
+        const failure = asError(error);
+        out({ error: failure.message, code: failure.code, help: failure.help });
+        process.exitCode = failure.exit;
+    });
+}

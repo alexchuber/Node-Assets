@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { fitLoadModel, nnls } from "../../packages/cli/dev/calibrate/fit";
-import { calibrationVariants, executeVariant, variantGraph } from "../../packages/cli/dev/calibrate/variants";
-import { readDoc } from "../../packages/cli/src/document";
-import { executeGraph } from "../../packages/cli/src/execution";
+import { calibrationVariants, executeVariantAsync, variantGraph } from "../../packages/cli/dev/calibrate/variants";
+import { readDocAsync } from "../../packages/cli/src/document";
+import { executeGraphAsync } from "../../packages/cli/src/execution";
 import { instantiateGraph } from "../../packages/cli/src/graphFiles";
 import { COEF_SOURCE, decodeMs, features } from "../../packages/cli/src/loadModel";
 import { createGridDocument } from "../helpers/document";
@@ -134,8 +134,8 @@ describe("load calibration", () => {
         { codec: "meshopt", extension: "EXT_meshopt_compression", geo: "quantize" as const },
         { codec: "meshopt", extension: "EXT_meshopt_compression", geo: "none" as const },
     ])("does not retain source $codec compression in a $geo variant", async ({ codec, extension, geo }) => {
-        const compressed = await executeGraph(instantiateGraph({ graph: 1, blocks: [{ type: `transform.encode-${codec}` }] }), createGridDocument(1));
-        const source = await readDoc(compressed);
+        const compressed = await executeGraphAsync(instantiateGraph({ graph: 1, blocks: [{ type: `transform.encode-${codec}` }] }), createGridDocument(1));
+        const source = await readDocAsync(compressed);
         expect(
             source
                 .getRoot()
@@ -143,8 +143,8 @@ describe("load calibration", () => {
                 .map((value) => value.extensionName)
         ).toContain(extension);
         expect(features(source, compressed.byteLength)[codec]).toBe(1);
-        const output = await executeVariant(compressed, { tex: "keep", size: 256, geo });
-        const document = await readDoc(output);
+        const output = await executeVariantAsync(compressed, { tex: "keep", size: 256, geo });
+        const document = await readDocAsync(output);
         const used = document
             .getRoot()
             .listExtensionsUsed()

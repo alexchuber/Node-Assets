@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { parseGraph, serializeGraph, type Graph, type SerializedGraph } from "@babylonjs/node-assets";
 import { decode } from "@toon-format/toon";
 
-import { writeAtomic } from "./files";
+import { writeAtomicAsync } from "./files";
 import { asError, CliError, serialize } from "./output";
 
 export interface GraphFile extends SerializedGraph {
@@ -73,7 +73,7 @@ export function parseGraphFile(text: string): GraphFile {
     return normalizeGraph(value);
 }
 
-export async function readGraph(argument: string): Promise<GraphFile> {
+export async function readGraphAsync(argument: string): Promise<GraphFile> {
     const isFile = /[/\\]/.test(argument) || argument.endsWith(".toon");
     if (!isFile && argument !== "optimize")
         throw new CliError("BAD_GRAPH", `Unknown built-in graph ${argument}`, ["Built-in graphs: optimize; use a path or .toon extension for a graph file"]);
@@ -95,8 +95,8 @@ export function serializeGraphFile(graph: GraphFile): string {
     return serialize(normalizeGraph(graph));
 }
 
-export async function writeGraph(file: string, graph: GraphFile): Promise<void> {
-    await writeAtomic(file, serializeGraphFile(graph));
+export async function writeGraphAsync(file: string, graph: GraphFile): Promise<void> {
+    await writeAtomicAsync(file, serializeGraphFile(graph));
 }
 
 export function graphHash(graph: SerializedGraph): string {

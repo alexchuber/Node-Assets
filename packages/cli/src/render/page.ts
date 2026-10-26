@@ -48,7 +48,7 @@ export function initialize(): void {
     let reference: { size: number; views: number; frame: Frame; prepared: ReturnType<typeof scorer.prepare>[]; pixels: Uint8Array[] } | undefined;
     let last: Uint8Array[] | undefined;
 
-    async function renderViews(url: string, size: number, views: number, frame?: Frame) {
+    async function renderViewsAsync(url: string, size: number, views: number, frame?: Frame) {
         engine.setSize(size, size);
         const scene = new Scene(engine);
         scene.useRightHandedSystem = true;
@@ -58,7 +58,7 @@ export function initialize(): void {
         scene.imageProcessingConfiguration.toneMappingEnabled = false;
         scene.animationsEnabled = false;
         try {
-            scene.environmentTexture = await environment(scene);
+            scene.environmentTexture = await environmentAsync(scene);
             const start = performance.now();
             await AppendSceneAsync(url, scene, { pluginExtension: ".glb", pluginOptions: { gltf: { animationStartMode: 0 } } });
             scene.animationGroups.forEach((animation) => animation.stop());
@@ -101,14 +101,14 @@ export function initialize(): void {
         async setReference(url, { size, views }): Promise<ReferenceResult> {
             reference = undefined;
             last = undefined;
-            const result = await renderViews(url, size, views);
+            const result = await renderViewsAsync(url, size, views);
             reference = { size, views, frame: result.frame, pixels: result.pixels, prepared: result.pixels.map((pixels) => scorer.prepare(pixels, size)) };
             return { frame: result.frame, loadMs: result.loadMs };
         },
         async evaluate(url) {
             if (!reference) throw new Error("No reference is loaded.");
             last = undefined;
-            const result = await renderViews(url, reference.size, reference.views, reference.frame);
+            const result = await renderViewsAsync(url, reference.size, reference.views, reference.frame);
             let worst = 1;
             let worstView = 0;
             for (let i = 0; i < result.pixels.length; i++) {
@@ -159,7 +159,7 @@ function getFrame(scene: Scene): Frame {
     return { c: [center.x, center.y, center.z], r: radius };
 }
 
-async function environment(scene: Scene): Promise<RawCubeTexture> {
+async function environmentAsync(scene: Scene): Promise<RawCubeTexture> {
     const size = 32;
     const faces: Uint8Array[] = [];
     for (let face = 0; face < 6; face++) {

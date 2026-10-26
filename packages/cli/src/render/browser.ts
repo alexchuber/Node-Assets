@@ -51,11 +51,11 @@ export function browserCandidates({ platform, env, home }: { readonly platform: 
 }
 
 /** Finds a browser without launching it. Invalid overrides and missing browsers throw actionable NO_BROWSER errors. */
-export async function findBrowser(): Promise<BrowserLocation> {
+export async function findBrowserAsync(): Promise<BrowserLocation> {
     const override = process.env.NODE_ASSETS_CHROMIUM;
     const candidates = browserCandidates({ platform: process.platform, env: process.env, home: homedir() });
     for (const candidate of candidates) {
-        if (await executableExists(candidate.executablePath)) return candidate;
+        if (await executableExistsAsync(candidate.executablePath)) return candidate;
         if (candidate.executablePath === override) {
             const message = `NODE_ASSETS_CHROMIUM is not an executable file: ${override}`;
             throw Object.assign(new Error(message), {
@@ -67,7 +67,7 @@ export async function findBrowser(): Promise<BrowserLocation> {
     }
     const { chromium } = await import("playwright-core");
     const executablePath = chromium.executablePath();
-    if (await executableExists(executablePath)) return { executablePath, name: "Chromium" };
+    if (await executableExistsAsync(executablePath)) return { executablePath, name: "Chromium" };
     throw Object.assign(new Error("No Chromium browser found."), {
         error: "No Chromium browser found.",
         code: "NO_BROWSER",
@@ -75,7 +75,7 @@ export async function findBrowser(): Promise<BrowserLocation> {
     });
 }
 
-async function executableExists(path: string): Promise<boolean> {
+async function executableExistsAsync(path: string): Promise<boolean> {
     try {
         if (!(await stat(path)).isFile()) return false;
         await access(path, constants.X_OK);

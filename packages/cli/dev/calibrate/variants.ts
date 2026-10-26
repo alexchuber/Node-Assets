@@ -1,7 +1,7 @@
 import type { SerializedGraph } from "@babylonjs/node-assets";
 
-import { readDoc } from "../../src/document";
-import { executeGraph } from "../../src/execution";
+import { readDocAsync } from "../../src/document";
+import { executeGraphAsync } from "../../src/execution";
 import { instantiateGraph } from "../../src/graphFiles";
 
 export interface Variant {
@@ -55,9 +55,9 @@ export function variantGraph(variant: Variant): SerializedGraph {
     return { graph: 1, blocks };
 }
 
-export async function executeVariant(original: Uint8Array, variant: Variant): Promise<Uint8Array> {
-    const document = await readDoc(original);
+export async function executeVariantAsync(original: Uint8Array, variant: Variant): Promise<Uint8Array> {
+    const document = await readDocAsync(original);
     document.disposeExtension("KHR_draco_mesh_compression");
     document.disposeExtension("EXT_meshopt_compression");
-    return executeGraph(instantiateGraph(variantGraph(variant)), document);
+    return executeGraphAsync(instantiateGraph(variantGraph(variant)), document);
 }

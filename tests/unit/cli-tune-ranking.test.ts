@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import { writeGlb } from "../../packages/cli/src/document";
+import { writeGlbAsync } from "../../packages/cli/src/document";
 import type { FidelityRenderer } from "../../packages/cli/src/render";
-import { tune } from "../../packages/cli/src/tune/search";
+import { tuneAsync } from "../../packages/cli/src/tune/search";
 import { createGridDocument } from "../helpers/document";
 
 describe("tune fidelity tie-breaking", () => {
@@ -11,7 +11,7 @@ describe("tune fidelity tie-breaking", () => {
         const candidates: Uint8Array[] = [];
         for (const length of [1000, 1004, 1008]) {
             doc.getRoot().setExtras({ padding: "x".repeat(length) });
-            candidates.push(await writeGlb(doc));
+            candidates.push(await writeGlbAsync(doc));
         }
         const [baseline, draco, meshopt] = candidates as [Uint8Array, Uint8Array, Uint8Array];
         expect(meshopt.length).toBeLessThanOrEqual(baseline.length * 1.01);
@@ -22,13 +22,13 @@ describe("tune fidelity tie-breaking", () => {
         ]);
         const renderer: FidelityRenderer = {
             browserName: "test",
-            start: async () => {},
-            stop: async () => {},
-            setReference: async () => ({ frame: { c: [0, 0, 0], r: 1 }, loadMs: 0 }),
-            evaluate: async (bytes) => ({ worst: fidelity.get(bytes)!, worstView: 0, loadMs: 0 }),
-            preview: async () => Buffer.alloc(0),
+            startAsync: async () => {},
+            stopAsync: async () => {},
+            setReferenceAsync: async () => ({ frame: { c: [0, 0, 0], r: 1 }, loadMs: 0 }),
+            evaluateAsync: async (bytes) => ({ worst: fidelity.get(bytes)!, worstView: 0, loadMs: 0 }),
+            previewAsync: async () => Buffer.alloc(0),
         };
-        const result = await tune(baseline, "ranking", {
+        const result = await tuneAsync(baseline, "ranking", {
             goals: ["size"],
             floor: 0.9,
             view: 64,
@@ -39,7 +39,7 @@ describe("tune fidelity tie-breaking", () => {
             renderer,
             executor: {
                 clear: () => {},
-                execute: async (_hash, _input, stages) =>
+                executeAsync: async (_hash, _input, stages) =>
                     stages.geometry.mode === "meshopt" ? meshopt : stages.geometry.mode === "draco" && stages.geometry.dracoPosition === 14 ? draco : baseline,
             },
         });

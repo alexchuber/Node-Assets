@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { decode, out, progress, withDiagnostics } from "../../packages/cli/src/output";
+import { decode, out, progress, withDiagnosticsAsync } from "../../packages/cli/src/output";
 
 describe("CLI library diagnostics", () => {
     let stdout: string;
@@ -27,7 +27,7 @@ describe("CLI library diagnostics", () => {
     });
 
     it("silences library consoles without hiding CLI output, progress, or errors", async () => {
-        await withDiagnostics(async () => {
+        await withDiagnosticsAsync(async () => {
             console.log("library log");
             console.info("library info");
             console.warn("library warning");
@@ -46,12 +46,12 @@ describe("CLI library diagnostics", () => {
         let releaseSecond!: () => void;
         const firstGate = new Promise<void>((resolve) => (releaseFirst = resolve));
         const secondGate = new Promise<void>((resolve) => (releaseSecond = resolve));
-        const first = withDiagnostics(async () => firstGate);
-        const second = withDiagnostics(async () => secondGate);
+        const first = withDiagnosticsAsync(async () => firstGate);
+        const second = withDiagnosticsAsync(async () => secondGate);
         try {
             releaseFirst();
             await first;
-            await withDiagnostics(async () => console.info("nested library output"));
+            await withDiagnosticsAsync(async () => console.info("nested library output"));
             console.info("overlapping library output");
             expect(stdout).toBe("");
             expect(stderr).toBe("");
@@ -67,8 +67,8 @@ describe("CLI library diagnostics", () => {
         const before = { log: console.log, info: console.info, warn: console.warn, debug: console.debug, error: console.error };
         const failure = new Error("failed execution");
         await expect(
-            withDiagnostics(async () =>
-                withDiagnostics(async () => {
+            withDiagnosticsAsync(async () =>
+                withDiagnosticsAsync(async () => {
                     console.error("library error");
                     throw failure;
                 })
