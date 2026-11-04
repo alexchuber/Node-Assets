@@ -1,14 +1,8 @@
 import type { ISceneLoaderPluginFactory } from "@babylonjs/core/Loading/sceneLoader.js";
 import { OBJFileLoaderMetadata } from "@babylonjs/loaders/OBJ/objFileLoader.metadata.js";
 
-import { GltfDocumentType } from "../connectionPoints/gltfDocument";
-import { UrlType } from "../connectionPoints/url";
-import { convertBabylonSceneToDocumentAsync } from "../helpers/convertBabylonSceneToDocument";
-import { loadSceneWithPluginAsync } from "../helpers/loadSceneWithPlugin";
-import { NullEngineResource } from "../resources/nullEngineResource";
-import { PlatformIOResource } from "../resources/platformIOResource";
 import { Block, type BlockOptions } from "./block";
-import { defineBlock } from "./blockDefinition";
+import { defineBabylonSceneInputBlock } from "./babylonSceneInputBlock";
 
 const ObjLoaderFactory = {
     ...OBJFileLoaderMetadata,
@@ -18,22 +12,13 @@ const ObjLoaderFactory = {
     },
 } satisfies ISceneLoaderPluginFactory;
 
-const ObjInputBlockDefinition = /* @__PURE__ */ defineBlock({
+const ObjInputBlockDefinition = /* @__PURE__ */ defineBabylonSceneInputBlock({
     type: "input.obj",
-    input: UrlType,
-    output: GltfDocumentType,
-    resources: {
-        engine: NullEngineResource,
-        io: PlatformIOResource,
+    loaderFactory: ObjLoaderFactory,
+    loadOptions: {
+        pluginExtension: ".obj",
+        pluginOptions: { obj: { materialLoadingFailsSilently: false } },
     },
-    runAsync: async (url, _config, { engine, io }) =>
-        convertBabylonSceneToDocumentAsync(
-            await loadSceneWithPluginAsync(url, engine, ObjLoaderFactory, {
-                pluginExtension: ".obj",
-                pluginOptions: { obj: { materialLoadingFailsSilently: false } },
-            }),
-            io
-        ),
 });
 
 /** Loads an OBJ URL or Node filesystem path using Babylon's dependency resolution. */

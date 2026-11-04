@@ -91,6 +91,40 @@ describe("browser consumer bundle", () => {
         expect(chunks.some((chunk) => chunk.dynamicImports.some((id) => /ktx2Decoder|msc-transcoder/.test(id)))).toBe(false);
     }, 120_000);
 
+    it("tree-shakes unused Babylon scene loaders from an OBJ-only published consumer", async () => {
+        const result = await build({
+            configFile: false,
+            logLevel: "silent",
+            plugins: [rejectNodeOnlyDependencies(), createObjOnlyConsumerPlugin()],
+            build: {
+                assetsInlineLimit: 0,
+                rollupOptions: {
+                    input: "node-assets:obj-only-browser-consumer",
+                },
+                write: false,
+            },
+        });
+        if (Array.isArray(result) || !("output" in result)) {
+            throw new Error("Expected one consumer bundle");
+        }
+
+        const chunks = new Map(result.output.filter((entry) => entry.type === "chunk").map((chunk) => [chunk.fileName, chunk]));
+        const executableChunks = new Set([...chunks.values()].filter((chunk) => chunk.isEntry));
+        for (const chunk of executableChunks) {
+            for (const importedFile of [...chunk.imports, ...chunk.dynamicImports]) {
+                const importedChunk = chunks.get(importedFile);
+                if (importedChunk) {
+                    executableChunks.add(importedChunk);
+                }
+            }
+        }
+
+        const moduleIds = [...executableChunks].flatMap((chunk) => Object.keys(chunk.modules));
+        expect(moduleIds.some((id) => id.includes("@babylonjs/loaders/OBJ/objFileLoader"))).toBe(true);
+        expect(moduleIds.some((id) => id.includes("@babylonjs/loaders/FBX/fbxFileLoader"))).toBe(false);
+        expect(moduleIds.some((id) => id.includes("@babylonjs/loaders/STL/stlFileLoader"))).toBe(false);
+    }, 120_000);
+
     it("runs the published entry in Node", async () => {
         const url = "https://example.com/model.gltf";
         vi.stubGlobal(
@@ -165,6 +199,21 @@ function createEncoderOnlyConsumerPlugin(): Plugin {
                 ? `
                     import { EncodeKTX2Block } from ${JSON.stringify(PublishedPackageName)};
                     globalThis.EncodeKTX2Block = EncodeKTX2Block;
+                `
+                : undefined,
+    };
+}
+
+function createObjOnlyConsumerPlugin(): Plugin {
+    const moduleId = "\0node-assets-obj-only-browser-consumer";
+    return {
+        name: "node-assets-obj-only-browser-consumer",
+        resolveId: (id) => (id === "node-assets:obj-only-browser-consumer" ? moduleId : undefined),
+        load: (id) =>
+            id === moduleId
+                ? `
+                    import { ObjInputBlock } from ${JSON.stringify(PublishedPackageName)};
+                    globalThis.ObjInputBlock = ObjInputBlock;
                 `
                 : undefined,
     };
