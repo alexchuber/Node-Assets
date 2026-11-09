@@ -1,0 +1,1936 @@
+<!doctype html>
+<html lang="en" data-lavish-annotate="on">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>node-assets CLI: proposed contract after Alex's comments</title>
+<script>
+  (() => {
+    const param = new URLSearchParams(window.location.search).get("scoutTheme");
+    const theme =
+      param || (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+    document.documentElement.setAttribute("data-theme", theme);
+  })();
+</script>
+<style>
+:root {
+  color-scheme: light;
+  --cp-bg: #f7f4ef;
+  --cp-bg-elevated: #fcfbf8;
+  --cp-surface: #ffffff;
+  --cp-surface-soft: #f5f5f5;
+  --cp-border: #dedede;
+  --cp-border-strong: #919191;
+  --cp-text: #242424;
+  --cp-text-muted: #5c5c5c;
+  --cp-text-soft: #6f6f6f;
+  --cp-accent: #b11f4b;
+  --cp-accent-hover: #9a1a41;
+  --cp-accent-soft: rgba(177, 31, 75, 0.08);
+  --cp-accent-fg: #ffffff;
+  --cp-success: #16a34a;
+  --cp-danger: #dc2626;
+  --cp-warning: #f59e0b;
+  --cp-link: #0078d4;
+  --cp-shadow: 0 18px 48px rgba(0, 0, 0, 0.12);
+  --cp-overlay: rgba(255, 255, 255, 0.8);
+  --cp-panel: rgba(255, 255, 255, 0.86);
+  --cp-panel-strong: rgba(255, 255, 255, 0.96);
+  --cp-sheen: rgba(255, 255, 255, 0.55);
+  --cp-highlight: rgba(177, 31, 75, 0.12);
+  --cp-card-shadow: 0 0 2px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.14);
+}
+html[data-theme="dark"] {
+  color-scheme: dark;
+  --cp-bg: #3d3b3a;
+  --cp-bg-elevated: #343231;
+  --cp-surface: #292929;
+  --cp-surface-soft: #2e2e2e;
+  --cp-border: #474747;
+  --cp-border-strong: #5f5f5f;
+  --cp-text: #dedede;
+  --cp-text-muted: #919191;
+  --cp-text-soft: #b0b0b0;
+  --cp-accent: #fd8ea1;
+  --cp-accent-hover: #fb7b91;
+  --cp-accent-soft: rgba(253, 142, 161, 0.14);
+  --cp-accent-fg: #1a1a1a;
+  --cp-success: #4ade80;
+  --cp-danger: #f87171;
+  --cp-warning: #fbbf24;
+  --cp-link: #4da6ff;
+  --cp-shadow: 0 18px 48px rgba(0, 0, 0, 0.32);
+  --cp-overlay: rgba(41, 41, 41, 0.88);
+  --cp-panel: rgba(41, 41, 41, 0.72);
+  --cp-panel-strong: rgba(41, 41, 41, 0.96);
+  --cp-sheen: rgba(255, 255, 255, 0.04);
+  --cp-highlight: rgba(253, 142, 161, 0.12);
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--cp-bg); color: var(--cp-text); }
+body {
+  font-family: "Segoe UI", Aptos, Calibri, -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 15px;
+  line-height: 1.55;
+}
+code, pre, kbd, .mono { font-family: Consolas, "Courier New", Courier, monospace; }
+code { font-size: 0.92em; background: var(--cp-surface-soft); border: 1px solid var(--cp-border); border-radius: 6px; padding: 0 4px; overflow-wrap: anywhere; }
+a { color: var(--cp-link); }
+h1, h2, h3 { line-height: 1.25; margin: 0; }
+h1 { font-size: 30px; }
+h2 { font-size: 22px; }
+h3 { font-size: 16px; margin-bottom: 6px; }
+p { margin: 8px 0; }
+ul, ol { margin: 8px 0; padding-left: 22px; }
+li { margin: 3px 0; }
+
+.layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 24px; max-width: 1240px; margin: 0 auto; padding: 24px 20px 64px; }
+@media (min-width: 1100px) { .layout { grid-template-columns: 200px minmax(0, 1fr); } }
+nav.toc { display: none; }
+@media (min-width: 1100px) {
+  nav.toc { display: block; position: sticky; top: 20px; align-self: start; font-size: 13.5px; }
+  nav.toc a { display: block; padding: 4px 10px; border-radius: 10px; color: var(--cp-text-muted); text-decoration: none; }
+  nav.toc a:hover { background: var(--cp-accent-soft); color: var(--cp-text); }
+  nav.toc .toc-title { font-weight: 600; color: var(--cp-text); padding: 4px 10px 8px; }
+}
+main { min-width: 0; display: grid; gap: 20px; }
+
+.card { background: var(--cp-surface); border: 1px solid var(--cp-border); border-radius: 16px; box-shadow: var(--cp-card-shadow); padding: 20px 22px; min-width: 0; }
+.soft { background: var(--cp-surface-soft); border: 1px solid var(--cp-border); border-radius: 10px; padding: 12px 14px; min-width: 0; }
+.section-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
+.section-head p { margin: 4px 0 0; color: var(--cp-text-muted); }
+.section-head > div { min-width: 0; flex: 1 1 320px; }
+.eyebrow { font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--cp-accent); font-weight: 600; }
+.muted { color: var(--cp-text-muted); }
+.small { font-size: 13px; }
+
+.hero h1 { margin: 6px 0 10px; }
+.hero .question { font-size: 17px; color: var(--cp-text-muted); margin: 0 0 6px; }
+.hero .answer { font-size: 18px; margin: 0 0 14px; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; padding: 3px 10px; border-radius: 999px; border: 1px solid var(--cp-border); background: var(--cp-bg-elevated); color: var(--cp-text-muted); white-space: nowrap; }
+.chip.accent { border-color: var(--cp-accent); color: var(--cp-accent); background: var(--cp-accent-soft); }
+
+.btn { font: inherit; font-size: 13.5px; border-radius: 10px; border: 1px solid var(--cp-border-strong); background: var(--cp-surface); color: var(--cp-text); padding: 5px 12px; cursor: pointer; white-space: nowrap; }
+.btn:hover { border-color: var(--cp-accent); color: var(--cp-accent); }
+.btn:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, .mod:focus-visible, .steps button:focus-visible { outline: 2px solid var(--cp-accent); outline-offset: 1px; }
+.btn.primary { background: var(--cp-accent); border-color: var(--cp-accent); color: var(--cp-accent-fg); }
+.btn.primary:hover { background: var(--cp-accent-hover); color: var(--cp-accent-fg); }
+.btn.suggest::before { content: "✎ "; }
+.btn.small { font-size: 12.5px; padding: 3px 9px; }
+.btn[aria-pressed="true"] { background: var(--cp-accent-soft); border-color: var(--cp-accent); color: var(--cp-accent); }
+.btn-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+
+.howto { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; margin-top: 10px; }
+.howto .soft b { display: block; margin-bottom: 2px; }
+
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; }
+.grid4 { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+dl.glossary { display: grid; grid-template-columns: minmax(0, 140px) minmax(0, 1fr); gap: 6px 14px; margin: 10px 0 0; }
+dl.glossary dt { font-weight: 600; }
+dl.glossary dd { margin: 0; color: var(--cp-text-muted); }
+@media (max-width: 560px) { dl.glossary { grid-template-columns: minmax(0, 1fr); } dl.glossary dd { margin-bottom: 6px; } }
+
+.table-wrap { overflow-x: auto; border: 1px solid var(--cp-border); border-radius: 10px; margin-top: 10px; }
+table { border-collapse: collapse; width: 100%; font-size: 14px; }
+th, td { text-align: left; vertical-align: top; padding: 8px 10px; border-bottom: 1px solid var(--cp-border); }
+th { background: var(--cp-surface-soft); font-weight: 600; font-size: 13px; color: var(--cp-text-muted); white-space: nowrap; }
+tr:last-child td { border-bottom: none; }
+td code { white-space: nowrap; }
+td.wrap code { white-space: normal; }
+
+svg.diagram { width: 100%; height: auto; display: block; margin: 8px 0; }
+svg.diagram text { fill: var(--cp-text); font-family: "Segoe UI", Aptos, Calibri, -apple-system, BlinkMacSystemFont, sans-serif; font-size: 14px; }
+svg.diagram text.sub { fill: var(--cp-text-muted); font-size: 12px; }
+svg.diagram text.note { fill: var(--cp-text-muted); font-size: 12.5px; }
+svg.diagram text.edge-label { fill: var(--cp-text-muted); font-size: 12px; }
+svg.diagram text.mono-sm { fill: var(--cp-text-muted); font-family: Consolas, "Courier New", Courier, monospace; font-size: 12px; }
+svg.diagram .node rect { fill: var(--cp-surface); stroke: var(--cp-border-strong); stroke-width: 1.2; }
+svg.diagram .node.accent rect { fill: var(--cp-accent-soft); stroke: var(--cp-accent); }
+svg.diagram .edge { fill: none; stroke: var(--cp-text-muted); stroke-width: 1.5; }
+svg.diagram .arrowhead { fill: var(--cp-text-muted); }
+
+pre.term { margin: 8px 0 0; padding: 12px 14px; background: var(--cp-surface-soft); border: 1px solid var(--cp-border); border-radius: 10px; font-size: 12.5px; line-height: 1.5; overflow-x: auto; white-space: pre; color: var(--cp-text); }
+pre.term .stderr { color: var(--cp-text-soft); font-style: italic; }
+pre.term .cmd { color: var(--cp-accent); }
+.label-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px; }
+
+.builder { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; margin-top: 10px; }
+@media (min-width: 900px) { .builder { grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); } }
+.fields { display: grid; gap: 10px; align-content: start; }
+.field { display: grid; gap: 3px; }
+.field label { font-size: 13px; font-weight: 600; }
+.field .hint { font-size: 12px; color: var(--cp-text-muted); }
+.field input[type="text"], .field select, dialog input[type="text"], dialog select, dialog textarea, .calc input, .calc select, .filter input {
+  font: inherit; font-size: 14px; width: 100%; padding: 6px 9px; border-radius: 10px; border: 1px solid var(--cp-border-strong); background: var(--cp-bg-elevated); color: var(--cp-text); min-width: 0;
+}
+.checks { display: flex; gap: 16px; flex-wrap: wrap; font-size: 14px; }
+.result { display: grid; gap: 10px; align-content: start; min-width: 0; }
+.cmdline { display: flex; gap: 8px; align-items: stretch; }
+.cmdline pre { flex: 1 1 auto; margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.status { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-weight: 600; }
+.status.ok { color: var(--cp-success); }
+.status.err { color: var(--cp-danger); }
+
+.formula { font-family: Consolas, "Courier New", Courier, monospace; font-size: 12.5px; background: var(--cp-surface-soft); border: 1px solid var(--cp-border); border-radius: 10px; padding: 6px 8px; margin: 6px 0; overflow-wrap: anywhere; }
+.calc { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; margin-top: 12px; }
+@media (min-width: 900px) { .calc { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
+.calc-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; align-content: start; }
+.calc-out .big { font-size: 26px; font-weight: 600; }
+.calc-out td.num, .calc-out th.num { text-align: right; }
+
+.stepper { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; margin-top: 10px; }
+@media (min-width: 900px) { .stepper { grid-template-columns: minmax(0, 260px) minmax(0, 1fr); } }
+.steps { display: grid; gap: 4px; align-content: start; }
+.steps button { text-align: left; font: inherit; font-size: 13.5px; border: 1px solid transparent; background: transparent; color: var(--cp-text-muted); border-radius: 10px; padding: 5px 10px; cursor: pointer; }
+.steps button:hover { background: var(--cp-accent-soft); color: var(--cp-text); }
+.steps button[aria-current="step"] { border-color: var(--cp-accent); color: var(--cp-text); background: var(--cp-accent-soft); }
+.steps button .n { display: inline-block; width: 24px; color: var(--cp-accent); font-weight: 600; }
+.steps button.na { opacity: 0.55; }
+.steps button.na::after { content: " · skipped"; font-size: 12px; }
+.step-detail h3 { font-size: 18px; }
+.goal-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin-top: 8px; }
+.goal-grid .soft b { display: block; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--cp-accent); }
+
+.ladder { list-style: none; padding: 0; margin: 10px 0 0; display: grid; gap: 8px; }
+.ladder li { display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 10px; align-items: start; margin: 0; }
+.ladder .rung { width: 30px; height: 30px; border-radius: 50%; border: 1.5px solid var(--cp-accent); color: var(--cp-accent); display: grid; place-items: center; font-weight: 600; font-size: 13px; background: var(--cp-accent-soft); }
+.ladder .rung.end { border-color: var(--cp-danger); color: var(--cp-danger); background: transparent; }
+
+.layers { display: grid; gap: 6px; margin-top: 10px; }
+.layer { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; border: 1px solid var(--cp-border); border-radius: 10px; padding: 10px 12px; background: var(--cp-bg-elevated); }
+@media (min-width: 760px) { .layer { grid-template-columns: 150px minmax(0, 1fr); } }
+.layer .lname { font-weight: 600; }
+.layer .lname span { display: block; font-weight: 400; font-size: 12.5px; color: var(--cp-text-muted); }
+.mods { display: flex; flex-wrap: wrap; gap: 8px; min-width: 0; }
+.mod { font: inherit; text-align: left; border: 1px solid var(--cp-border); border-radius: 10px; background: var(--cp-surface); color: var(--cp-text); padding: 6px 10px; cursor: pointer; max-width: 100%; min-width: 0; }
+.mod:hover { border-color: var(--cp-accent); }
+.mod b { font-family: Consolas, "Courier New", Courier, monospace; font-size: 13px; font-weight: 600; }
+.mod .lines { font-size: 12px; color: var(--cp-text-muted); margin-left: 6px; }
+.mod .role { display: block; font-size: 12.5px; color: var(--cp-text-muted); }
+.layer-arrow { text-align: center; color: var(--cp-text-muted); font-size: 13px; }
+
+.tag { display: inline-block; font-size: 11.5px; font-weight: 600; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--cp-border); white-space: nowrap; }
+.tag.verified { color: var(--cp-success); border-color: var(--cp-success); }
+.tag.older { color: var(--cp-text); border-color: var(--cp-warning); }
+.tag.historical, .tag.provisional { color: var(--cp-text-muted); border-color: var(--cp-border-strong); }
+.tag.inferred { color: var(--cp-accent); border-color: var(--cp-accent); }
+
+figure { margin: 10px 0 0; }
+figure img { width: 100%; height: auto; border-radius: 10px; border: 1px solid var(--cp-border); display: block; }
+figcaption { font-size: 13px; color: var(--cp-text-muted); margin-top: 6px; }
+
+dialog { border: 1px solid var(--cp-border); border-radius: 16px; background: var(--cp-surface); color: var(--cp-text); box-shadow: var(--cp-shadow); padding: 0; width: min(560px, calc(100vw - 32px)); }
+dialog::backdrop { background: var(--cp-overlay); }
+dialog form { display: grid; gap: 12px; padding: 20px 22px; }
+dialog textarea { min-height: 110px; resize: vertical; }
+dialog .files { font-size: 12.5px; color: var(--cp-text-muted); overflow-wrap: anywhere; }
+.queue-bar { position: sticky; bottom: 12px; z-index: 5; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; justify-content: space-between; background: var(--cp-panel-strong); border: 1px solid var(--cp-border); border-radius: 16px; box-shadow: var(--cp-shadow); padding: 10px 14px; font-size: 13.5px; }
+.queue-bar > div { min-width: 0; }
+.queue-bar ol { margin: 4px 0 0; padding-left: 20px; font-size: 13px; color: var(--cp-text-muted); }
+.toast { min-height: 20px; font-size: 13px; color: var(--cp-text-muted); }
+.filter { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 8px; }
+.filter input { max-width: 320px; }
+.hidden { display: none !important; }
+</style>
+</head>
+<body>
+<div class="layout">
+<nav class="toc" aria-label="Sections">
+  <div class="toc-title">node-assets CLI</div>
+  <a href="#overview">Overview</a>
+  <a href="#commands">Commands</a>
+  <a href="#try">Try a command</a>
+  <a href="#goals">Goals &amp; scores</a>
+  <a href="#tune">How tune searches</a>
+  <a href="#fidelity">Fidelity check</a>
+  <a href="#graphs">Graph files</a>
+  <a href="#output">Output &amp; errors</a>
+  <a href="#browser">Browser</a>
+  <a href="#code">Code map</a>
+  <a href="#evidence">Evidence &amp; limits</a>
+  <a href="#noticed">Noticed while writing</a>
+  <a href="#next">What's left</a>
+</nav>
+<main>
+
+<header class="card hero" id="top">
+  <div class="eyebrow">Interactive review guide · proposed contract</div>
+  <h1>node-assets CLI, updated from Alex's comments</h1>
+  <p class="question">What does the CLI do, how does each part work, and where is the code?</p>
+  <p class="answer"><b>tune</b> renders candidate settings in a headless browser, keeps the smallest (or fastest) result that still looks like the original, and saves the recipe as a small graph file. <b>run</b> applies that graph, or the built-in <code>optimize</code> graph, to as many models as you like.</p>
+  <div class="chips">
+    <span class="chip accent">Proposal · 17 comments received</span>
+    <span class="chip">unchanged baseline <span class="mono">ab42afe</span></span>
+    <span class="chip">Babylon.js renderer</span>
+    <span class="chip">preview package · unreleased</span>
+    <button class="btn small" type="button" id="theme-toggle" aria-label="Switch light or dark theme">Light / dark</button>
+  </div>
+  <p class="small"><b>This is the proposed contract, not the installed package.</b> Source baseline: <code>ab42afe1ac1816cc4232b89bc123375c82d3dfbd</code>. Only this guide changed; no source changes or code approval are implied.</p>
+  <div class="soft small" data-feedback-uids="2,4,1,6,7,8,9,10,11,12,13,14,15,16,17,19,20">
+    <b>Applied to the proposal:</b> drop compat, provenance extras, saved limits, run checks, and shared-codec calculations; use help flags, --compare, opt-in load-time, Chrome-style throttling names, numeric-second timeouts, and paths without a required trailing slash.
+    <br><b>Needs a decision:</b> goal naming/split; render image size vs max texture size (and 4096); SSIM vs pixel-diff naming; load measurement and throttle rates; no-op/overwrite policy; ambiguous missing positional paths. Details are inline. A 97% browser-support filter is deferred, not added.
+  </div>
+</header>
+
+<section class="card" id="how-to-suggest" aria-labelledby="how-to-suggest-h">
+  <div class="section-head">
+    <div>
+      <h2 id="how-to-suggest-h">Suggest a change to the CLI</h2>
+      <p>This page is a review surface for the proposal. Your 17 delivered comments are already incorporated or recorded inline; you don't need to submit them again. Further suggestions don't approve source changes.</p>
+    </div>
+    <button class="btn suggest" type="button" data-suggest-target="The CLI in general" data-suggest-files="packages/cli/" data-suggest-section="general">Suggest a change</button>
+  </div>
+  <div class="howto">
+    <div class="soft"><b>1 · Point at it</b>Use Lavish's annotate tool to mark any text, row, or diagram box and type a note.</div>
+    <div class="soft"><b>2 · Or use a form</b>Press a <span class="mono">✎ Suggest</span> button. It fills in the command or file for you.</div>
+    <div class="soft"><b>3 · Send to agent</b>Suggestions queue up in Lavish. Press <b>Send to Agent</b> when you're done to deliver them all at once.</div>
+  </div>
+</section>
+
+<section class="card" id="overview" aria-labelledby="overview-h">
+  <div class="section-head">
+    <div>
+      <div class="eyebrow">Overview</div>
+      <h2 id="overview-h">Two main jobs: find settings, then apply them</h2>
+      <p><code>inspect</code> reports a model's properties; <code>show</code> prints the recipe. Limits belong only to a temporary <code>tune</code> run, never to the saved graph.</p>
+    </div>
+    <button class="btn suggest small" type="button" data-suggest-target="Overall workflow (tune → graph → run)" data-suggest-files="packages/cli/src/commands/" data-suggest-section="overview">Suggest</button>
+  </div>
+  <svg class="diagram" viewBox="0 0 960 300" role="img" aria-labelledby="ov-title ov-desc">
+    <title id="ov-title">CLI data flow</title>
+    <desc id="ov-desc">A model goes into tune, which writes a recipe with no saved limits. run applies that graph, or optimize, and writes GLB without provenance hashes in extras.</desc>
+    <defs>
+      <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path class="arrowhead" d="M0,0 L10,5 L0,10 z"/>
+      </marker>
+    </defs>
+    <path class="edge" d="M170,140 C200,140 200,60 228,60" marker-end="url(#arrow)"/>
+    <path class="edge" d="M400,60 L458,60" marker-end="url(#arrow)"/>
+    <path class="edge" d="M650,60 C690,60 680,140 708,140" marker-end="url(#arrow)"/>
+    <path class="edge" d="M650,240 C690,240 680,162 708,162" marker-end="url(#arrow)"/>
+    <path class="edge" d="M170,152 L708,152" marker-end="url(#arrow)"/>
+    <path class="edge" d="M820,150 L858,150" marker-end="url(#arrow)"/>
+    <text class="edge-label" x="330" y="146">same model (or any others)</text>
+
+    <g class="node" id="ov-model"><title>Your model: .glb .gltf .fbx .obj .stl .usd .usda .usdc .usdz</title>
+      <rect x="20" y="118" width="150" height="64" rx="10"/>
+      <text x="95" y="146" text-anchor="middle">model</text>
+      <text class="sub" x="95" y="164" text-anchor="middle">.glb .gltf .fbx .obj .stl .usd*</text>
+    </g>
+    <g class="node accent" id="ov-tune"><title>tune: search for the best settings per goal</title>
+      <rect x="230" y="28" width="170" height="64" rx="10"/>
+      <text x="315" y="56" text-anchor="middle">tune</text>
+      <text class="sub" x="315" y="74" text-anchor="middle">--for size,gpu,load</text>
+    </g>
+    <g class="node" id="ov-graph"><title>Graph file: recipe only, no fidelity or other run limits</title>
+      <rect x="460" y="28" width="190" height="64" rx="10"/>
+      <text class="mono-sm" x="555" y="56" text-anchor="middle">&lt;model&gt;.&lt;goal&gt;.toon</text>
+      <text class="sub" x="555" y="74" text-anchor="middle">+ preview .png</text>
+    </g>
+    <g class="node" id="ov-builtin"><title>Built-in optimize graph: a safe default recipe, no search</title>
+      <rect x="460" y="208" width="190" height="64" rx="10"/>
+      <text x="555" y="236" text-anchor="middle">built-in optimize</text>
+      <text class="sub" x="555" y="254" text-anchor="middle">no browser needed</text>
+    </g>
+    <g class="node accent" id="ov-run"><title>run: apply a graph to one or many models</title>
+      <rect x="710" y="118" width="110" height="64" rx="10"/>
+      <text x="765" y="146" text-anchor="middle">run</text>
+      <text class="sub" x="765" y="164" text-anchor="middle">many inputs</text>
+    </g>
+    <g class="node" id="ov-out"><title>Output GLB, no provenance hashes in extras in the proposal</title>
+      <rect x="860" y="118" width="90" height="64" rx="10"/>
+      <text x="905" y="146" text-anchor="middle">out.glb</text>
+      <text class="sub" x="905" y="164" text-anchor="middle">no hashes</text>
+    </g>
+    <text class="note" x="315" y="112" text-anchor="middle">needs a browser</text>
+    <text class="note" x="765" y="200" text-anchor="middle">no saved limits</text>
+    <text class="note" x="20" y="250">inspect: headless metrics by default</text>
+    <text class="note" x="20" y="270">--compare: render · --include load-time: proposed opt-in</text>
+    <text class="note" x="20" y="290">show: print a graph</text>
+  </svg>
+  <dl class="glossary">
+    <dt>graph</dt><dd>An ordered list of processing steps (blocks) plus a few settings. The CLI adds the input and output steps when it runs one.</dd>
+    <dt>block</dt><dd>One step from the core library, e.g. <code>weld</code>, <code>resize-textures</code>, <code>encode-draco</code>. Each has a <code>type</code> and a <code>config</code>.</dd>
+    <dt>TOON</dt><dd>A compact, line-based text format, similar to YAML. Graph files and all command output use it, so both people and agents can read them.</dd>
+    <dt>goal</dt><dd>Keep <b>size</b>, <b>gpu</b>, and <b>load</b> for now; compat is removed. Alex's question about <code>disk-size</code>, <code>download-size</code>, and <code>load-speed</code> is pending, not an accepted rename.</dd>
+    <dt>fidelity</dt><dd>Worst-64px-region SSIM over four rendered views. The default 0.9 threshold applies only during that tune run; it is not saved. This is not a pixel-difference ratio.</dd>
+    <dt>decoder</dt><dd>Code needed to read Draco, meshopt or KTX2. Count each required codec once per model for size/load scoring; do not divide its cost across inputs. A viewer may share or cache codecs across models, but the CLI doesn't predict that.</dd>
+  </dl>
+</section>
+
+<section class="card" id="commands" aria-labelledby="commands-h">
+  <div class="section-head">
+    <div>
+      <div class="eyebrow">Commands</div>
+      <h2 id="commands-h">What each command does</h2>
+      <p>Four work commands and <code>--help</code>. Structured results use TOON on stdout; progress goes to stderr. Source paths below refer to the unchanged baseline, not completed implementation.</p>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Command</th><th>What it does</th><th>Browser?</th><th>Writes files</th><th>Source</th><th></th></tr></thead>
+      <tbody>
+        <tr><td><code>node-assets</code></td><td>Same help as <code>node-assets --help</code>; no current-folder model or graph listing. An unknown top-level command also shows this help.</td><td>No</td><td>Nothing</td><td><code>cli.ts</code>, <code>commands/home.ts</code></td><td><button class="btn suggest small" type="button" data-suggest-target="node-assets (top-level help)" data-suggest-files="packages/cli/src/commands/home.ts" data-suggest-section="commands">Suggest</button></td></tr>
+        <tr><td><code>--help</code></td><td>Conventional usage, description, flags and examples. Use <code>node-assets tune --help</code> for a command. Missing/unknown command input shows its nearest command's help, not a help pseudo-command.</td><td>No</td><td>Nothing</td><td><code>help.ts</code>, <code>cli.ts</code></td><td><button class="btn suggest small" type="button" data-suggest-target="node-assets --help" data-suggest-files="packages/cli/src/help.ts, packages/cli/src/cli.ts" data-suggest-section="commands">Suggest</button></td></tr>
+        <tr><td><code>inspect</code></td><td>Headless metrics only by default: bytes, GPU estimate, triangles, textures, codecs and extensions. Codec download cost is per model, with a shared/cache-cost note rather than batch calculations.</td><td>No</td><td>Nothing</td><td><code>commands/inspect.ts</code></td><td><button class="btn suggest small" type="button" data-suggest-target="node-assets inspect" data-suggest-files="packages/cli/src/commands/inspect.ts" data-suggest-section="commands">Suggest</button></td></tr>
+        <tr><td><code>inspect --compare</code></td><td>Adds SSIM against one original, or same-named originals in a folder (extension ignored). Renamed from the baseline comparison flag; same usage.</td><td>Yes</td><td>Nothing</td><td><code>commands/inspect.ts</code></td><td><button class="btn suggest small" type="button" data-suggest-target="node-assets inspect --compare" data-suggest-files="packages/cli/src/commands/inspect.ts, packages/cli/src/render/" data-suggest-section="commands">Suggest</button></td></tr>
+        <tr><td><code>tune</code></td><td>Searches settings for each goal. Saves the winning graph and a preview image.</td><td>Yes</td><td><code>.toon</code> + <code>.png</code></td><td><code>commands/tune.ts</code>, <code>tune/</code></td><td><button class="btn suggest small" type="button" data-suggest-target="node-assets tune" data-suggest-files="packages/cli/src/commands/tune.ts, packages/cli/src/tune/" data-suggest-section="commands">Suggest</button></td></tr>
+        <tr><td><code>run</code></td><td>Applies a graph to one or more models, without rendering, saved limits or provenance extras. No-op/overwrite behavior after removing hashes still needs a decision.</td><td>No</td><td><code>.glb</code></td><td><code>commands/run.ts</code></td><td><button class="btn suggest small" type="button" data-suggest-target="node-assets run" data-suggest-files="packages/cli/src/commands/run.ts" data-suggest-section="commands">Suggest</button></td></tr>
+        <tr><td><code>inspect --include load-time</code></td><td>Proposed comma-separated opt-in list. Only <code>load-time</code> is named so far. Actual browser load measurement and throttle rates are pending, not implemented.</td><td>Proposed</td><td>Nothing</td><td><code>commands/inspect.ts</code></td><td><button class="btn suggest small" type="button" data-suggest-target="Opt-in load-time measurement" data-suggest-files="packages/cli/src/commands/inspect.ts" data-suggest-section="commands">Suggest</button></td></tr>
+        <tr><td><code>show</code></td><td>Prints a graph (built-in or file) so you can read or copy it.</td><td>No</td><td>Nothing</td><td><code>commands/show.ts</code></td><td><button class="btn suggest small" type="button" data-suggest-target="node-assets show" data-suggest-files="packages/cli/src/commands/show.ts" data-suggest-section="commands">Suggest</button></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="small muted" data-feedback-uids="6,7">Help examples: <code>node-assets foo</code> → top-level help; <code>node-assets tune</code> or <code>node-assets tune foo</code> → tune help in principle. But <code>foo</code> can also be a positional model path: deciding when a nonexistent/unsupported path means help versus a file error is still open. Valid command file failures must not all become help. Help-fallback exit status is not decided here.</p>
+  <p class="small muted">The man page at <code>packages/cli/docs/node-assets.1.md</code> and <code>packages/cli/README.md</code> still describe the baseline.</p>
+</section>
+
+<section class="card" id="try" aria-labelledby="try-h">
+  <div class="section-head">
+    <div>
+      <div class="eyebrow">Try a command</div>
+      <h2 id="try-h">Build a command and see what it would do</h2>
+      <p><b>Illustrative proposed-command simulator, not the installed CLI.</b> Pick a command and fill in flags to see the proposed plan or validation. It does not execute commands, measure loads or guarantee baseline output. Leave a field empty to omit a flag.</p>
+    </div>
+  </div>
+  <div class="field" style="max-width: 420px;">
+    <label for="b-example">Load an example</label>
+    <select id="b-example">
+      <option value="">Pick an example…</option>
+      <option value="tune-ok">tune the duck for size and gpu</option>
+      <option value="tune-view">tune with --view 32 (error)</option>
+      <option value="tune-file">tune two goals into one .toon file (error)</option>
+      <option value="tune-time">tune with --timeout 2d (error)</option>
+      <option value="tune-time-ok">tune with --timeout 60 (seconds)</option>
+      <option value="run-check">run a tuned graph (no saved limits)</option>
+      <option value="run-dir">run on a folder into a .glb (error)</option>
+      <option value="inspect-against">inspect output with --compare</option>
+      <option value="inspect-net">opt into load-time with 3g throttling</option>
+      <option value="help-top">node-assets foo → top-level help</option>
+      <option value="help-tune">node-assets tune foo → tune help (path ambiguity)</option>
+      <option value="show-bad">show an unknown built-in (error)</option>
+    </select>
+  </div>
+  <div class="builder">
+    <form class="fields" id="builder" autocomplete="off" onsubmit="return false">
+      <fieldset class="checks" style="border: none; padding: 0; margin: 0;">
+        <legend class="small" style="font-weight: 600; margin-bottom: 4px;">Command</legend>
+        <label><input type="radio" name="b-cmd" value="inspect"> inspect</label>
+        <label><input type="radio" name="b-cmd" value="tune" checked> tune</label>
+        <label><input type="radio" name="b-cmd" value="run"> run</label>
+        <label><input type="radio" name="b-cmd" value="show"> show</label>
+        <label><input type="radio" name="b-cmd" value="help"> help / fallback</label>
+      </fieldset>
+
+      <div class="fields" data-cmd="inspect">
+        <div class="field"><label for="i-inputs">Inputs</label><input type="text" id="i-inputs" value="assets/"><span class="hint">Files or folders, separated by spaces.</span></div>
+        <div class="field"><label for="i-against">--compare</label><input type="text" id="i-against" value=""><span class="hint">An original file, or folder of same-named originals. Renders SSIM, without a pass/fail limit.</span></div>
+        <div class="field"><label for="i-view">--view · render comparison image size</label><input type="text" id="i-view" value=""><span class="hint">Not texture size. Default 1024 px; baseline inspect accepts integers ≥16 (tune: 64–4096). Naming/default decision below.</span></div>
+        <div class="field"><label for="i-include">--include</label><input type="text" id="i-include" value=""><span class="hint">Comma-separated list; currently only load-time is proposed. Browser measurement is pending.</span></div>
+        <div class="field"><label for="i-network">--network-throttling</label><input type="text" id="i-network" value=""><span class="hint">none (default), fast-4g, slow-4g, 3g. Exact rates pending; none has no fixed Mbps.</span></div>
+      </div>
+
+      <div class="fields" data-cmd="tune">
+        <div class="field"><label for="t-inputs">Inputs</label><input type="text" id="t-inputs" value="assets/duck.glb"><span class="hint">Files or folders, separated by spaces.</span></div>
+        <div class="field"><label for="t-for">--for</label><input type="text" id="t-for" value="size,gpu"><span class="hint">Required. size, gpu, load; comma-separated. Goal naming/split pending.</span></div>
+        <div class="field"><label for="t-out">-o</label><input type="text" id="t-out" value="graphs"><span class="hint">A folder (default .), or one .toon file. No trailing slash required; the real CLI must check the filesystem.</span></div>
+        <div class="field"><label for="t-fidelity">--fidelity · minimum worst-region SSIM</label><input type="text" id="t-fidelity" value=""><span class="hint">Temporary tune limit: &gt;0 to 1, default 0.9. Requested --min-pixel-diff-ratio name pending because SSIM is not pixel diff.</span></div>
+        <div class="field"><label for="t-view">--view · render comparison image size</label><input type="text" id="t-view" value=""><span class="hint">Whole number, 64–4096; baseline default 1024. Not max texture size. Requested rename/4096 need a decision.</span></div>
+        <div class="field"><label for="t-network">--network-throttling</label><input type="text" id="t-network" value=""><span class="hint">none (default), fast-4g, slow-4g, 3g. Proposed interface; measured load ranking/rates pending.</span></div>
+        <p class="small muted" id="t-amortize" data-feedback-uids="17">No shared-codec flag or amortization. Each codec's bytes count once per model; viewer sharing/caching is a note, not a score adjustment.</p>
+        <div class="field"><label for="t-keep">--keep</label><input type="text" id="t-keep" value=""><span class="hint">hierarchy, texture-size, geometry; comma-separated.</span></div>
+        <div class="field"><label for="t-time">--timeout</label><input type="text" id="t-time" value=""><span class="hint">Positive numeric seconds, e.g. --timeout 60. Default 420 seconds. No unit suffixes.</span></div>
+      </div>
+
+      <div class="fields" data-cmd="run">
+        <div class="field"><label for="r-graph">Graph</label><input type="text" id="r-graph" value="optimize"><span class="hint">A built-in name (optimize), or a path / .toon file.</span></div>
+        <div class="field"><label for="r-inputs">Inputs</label><input type="text" id="r-inputs" value="assets/duck.glb"><span class="hint">Files or folders, separated by spaces.</span></div>
+        <div class="field"><label for="r-out">-o</label><input type="text" id="r-out" value="public/duck.glb"><span class="hint">Required. A .glb file or a folder; no required trailing slash. Simulator cannot stat paths.</span></div>
+        <p class="small muted" id="r-check" data-feedback-uids="8,11">No run check flag or saved limits. For a comparison score, use inspect --compare; it does not enforce a threshold.</p>
+        <div class="checks"><label><input type="checkbox" id="r-force"> --force (overwrite policy pending)</label></div>
+      </div>
+
+      <div class="fields" data-cmd="show">
+        <div class="field"><label for="s-graph">Graph</label><input type="text" id="s-graph" value="optimize"><span class="hint">A built-in name (optimize), or a path / .toon file.</span></div>
+      </div>
+      <div class="fields" data-cmd="help">
+        <div class="field"><label for="h-input">Arguments after node-assets</label><input type="text" id="h-input" value="--help"><span class="hint">Try empty, foo, tune, tune --help, or tune foo. This illustrates help routing, not filesystem validation.</span></div>
+      </div>
+    </form>
+
+    <div class="result" aria-live="polite">
+      <div class="cmdline">
+        <pre class="term" id="b-line"></pre>
+        <button class="btn small" type="button" id="b-copy">Copy</button>
+      </div>
+      <div class="status" id="b-status"></div>
+      <div id="b-body"></div>
+      <div class="btn-row">
+        <button class="btn suggest small" type="button" id="b-suggest">Suggest a change to this behavior</button>
+      </div>
+      <p class="small muted">Proposal only; this deliberately differs from baseline <span class="mono">ab42afe</span>. The simulator guesses extensionless input paths are folders and .toon/.glb outputs are files. Real path kind/validity must come from the filesystem, so dotted folders and extensionless files cannot be resolved here. File failures remain distinct from usage help.</p>
+    </div>
+  </div>
+</section>
+
+<section class="card" id="goals" aria-labelledby="goals-h">
+  <div class="section-head">
+    <div>
+      <div class="eyebrow">Goals &amp; scores</div>
+      <h2 id="goals-h">What "best" means for each goal</h2>
+      <p>Every candidate must pass the fidelity limit first. Among those that pass, <code>tune</code> keeps the one with the lowest score. Scores within 1% of the best count as a tie; ties go to higher fidelity, then fewer bytes.</p>
+    </div>
+    <button class="btn suggest small" type="button" data-suggest-target="Proposed goal scoring (size / gpu / load)" data-suggest-files="packages/cli/src/measure.ts, packages/cli/src/tune/search.ts, packages/cli/src/loadModel.ts" data-suggest-section="goals">Suggest</button>
+  </div>
+  <div class="grid4">
+    <div class="soft">
+      <h3>size</h3>
+      <div class="formula">file bytes + bytes of each required codec once per model</div>
+      <p class="small">No shared-codec adjustment. This is not a measured gzip/Brotli transfer size. Pending: split into disk-size (file only) and download-size (includes codecs)?</p>
+    </div>
+    <div class="soft">
+      <h3>gpu</h3>
+      <div class="formula">Σ textures w·h·(KTX2 ? 1 : 4)·4/3 + Σ vertex data</div>
+      <p class="small" data-feedback-uids="20">Least estimated GPU memory. Use the existing 4 B/px approximation for non-KTX2 images, not a claim that every image has four channels. 4/3 approximates mipmaps; KTX2 and Draco handling retain baseline estimates. <b>Implementation TODO:</b> check actual R/RG/RGB/RGBA channel/storage behavior; no source TODO was added in this doc-only pass.</p>
+    </div>
+    <div class="soft">
+      <h3>load</h3>
+      <div class="formula">load ranking: measurement model pending</div>
+      <p class="small">Keep the load name while load-speed naming is discussed. Baseline uses provisional download + decode estimates, not measured browser loads. Proposed throttle presets don't yet define numeric rates. Each codec counts once per model, never shared across the batch.</p>
+    </div>
+    <div class="soft">
+      <h3>Goal names need a decision</h3>
+      <p class="small" data-feedback-uids="1,4">Compat is removed, not renamed. <code>disk-size</code> / <code>download-size</code> / <code>load-speed</code> were questions, so they are not accepted builder values yet. A browser-support filter around 97% global coverage is deferred, not a goal or working feature.</p>
+    </div>
+  </div>
+
+  <h3 style="margin-top: 18px;">Legacy provisional-estimate explainer</h3>
+  <p class="small muted">Historical decode coefficients from <code>measure.ts</code> / <code>loadModel.ts</code>, not proposed measured behavior. Duck presets come from <span class="mono">a9329e2</span>; tuned image bytes are estimates. This explainer removes the old shared-cost calculation and uses explicit, editable Mbps—not a mapping for none or Chrome presets. Its numbers are neither new evidence nor proposed CLI stdout.</p>
+  <div class="calc">
+    <div class="calc-fields">
+      <div class="field" style="grid-column: 1 / -1;"><label for="c-preset">Preset</label>
+        <select id="c-preset">
+          <option value="orig">Duck original (120,484 B, PNG)</option>
+          <option value="size">Duck tuned for size (meshopt + AVIF)</option>
+          <option value="gpu">Duck tuned for gpu (meshopt + KTX2)</option>
+          <option value="custom">Custom</option>
+        </select>
+      </div>
+      <div class="field"><label for="c-bytes">File bytes</label><input type="text" id="c-bytes" inputmode="numeric"></div>
+      <div class="field"><label for="c-img">Image bytes (inside file)</label><input type="text" id="c-img" inputmode="numeric"></div>
+      <div class="field"><label for="c-fmt">Image format</label>
+        <select id="c-fmt"><option value="png">PNG</option><option value="jpeg">JPEG</option><option value="webp">WebP</option><option value="avif">AVIF</option><option value="ktx2">KTX2</option><option value="none">No images</option></select>
+      </div>
+      <div class="field"><label for="c-mp">Image megapixels (total)</label><input type="text" id="c-mp" inputmode="decimal"></div>
+      <div class="field"><label for="c-geo">Geometry</label>
+        <select id="c-geo"><option value="plain">Plain or quantized</option><option value="meshopt">meshopt</option><option value="draco">Draco</option></select>
+      </div>
+      <div class="field"><label for="c-net">Illustrative bandwidth (Mbps)</label><input type="text" id="c-net" inputmode="decimal" value="9"><span class="hint">Legacy example only, not a Chrome preset or measured connection.</span></div>
+      <p class="small muted" id="c-amort">Codec bytes count once per model. Viewer reuse or caching may change real download costs; no cross-model prediction.</p>
+    </div>
+    <div class="calc-out" aria-live="polite">
+      <div class="small muted">Illustrative legacy estimate · not a measurement</div>
+      <div class="big" id="c-total"></div>
+      <div class="small" id="c-cli"></div>
+      <div class="table-wrap"><table><tbody id="c-parts"></tbody></table></div>
+      <p class="small muted" id="c-size"></p>
+    </div>
+  </div>
+</section>
+
+<section class="card" id="tune" aria-labelledby="tune-h">
+  <div class="section-head">
+    <div>
+      <div class="eyebrow">How tune searches</div>
+      <h2 id="tune-h">A fixed search plan, not trial and error</h2>
+      <p>The retained baseline search plan tests textures and geometry separately, narrows them, then builds promising pairs. Below it is adapted to three proposed goals and per-model codec costs; it has not been run on the proposal. Fidelity limits live only in this tune run, not the resulting graph.</p>
+    </div>
+    <button class="btn suggest small" type="button" data-suggest-target="tune search order" data-suggest-files="packages/cli/src/tune/search.ts, packages/cli/src/tune/plan.ts" data-suggest-section="tune">Suggest</button>
+  </div>
+  <div class="btn-row" role="group" aria-label="Show steps for goal">
+    <span class="small muted">Goal:</span>
+    <button class="btn small" type="button" data-goal="size" aria-pressed="true">size</button>
+    <button class="btn small" type="button" data-goal="gpu" aria-pressed="false">gpu</button>
+    <button class="btn small" type="button" data-goal="load" aria-pressed="false">load</button>
+  </div>
+  <div class="stepper">
+    <div class="steps" id="t-steps" role="list"></div>
+    <div class="step-detail soft" id="t-detail" aria-live="polite"></div>
+  </div>
+  <div class="grid2" style="margin-top: 16px;">
+    <div class="soft">
+      <h3>Shortcuts that save renders</h3>
+      <ul class="small">
+        <li><b>Cache:</b> a candidate with the same settings is never rendered twice. Intermediate models (after cleanup, after textures) are cached by their block list, so a new candidate re-runs only the stages that changed. Up to 6 are kept.</li>
+        <li><b>Predicted pairs:</b> pair bytes ≈ texture result + geometry result − baseline. Only the best 4 predictions per goal get built each round.</li>
+        <li><b>Early stop:</b> a round stops when the next pair can't beat the current best by 0.5%, or at the first pair that passes.</li>
+        <li><b>Skip doomed pairs:</b> if a pair failed, any pair whose texture and geometry are both the same or lossier is skipped.</li>
+      </ul>
+    </div>
+    <div class="soft">
+      <h3>Temporary tune timeout</h3>
+      <ul class="small">
+        <li><code>--timeout</code> (default <b>420 seconds</b>) covers the whole run, all inputs. <code>--timeout 60</code> means 60 seconds; unit suffixes such as <code>2d</code>, <code>90s</code> or <code>7m</code> are not accepted.</li>
+        <li>When time runs out, tune stops starting new work but always checks each input's baseline.</li>
+        <li>The retained search behavior writes the best result so far and reports <code>search: partial</code> in command output. Rerun with a longer timeout to continue searching; limits and timeout are not saved to the recipe.</li>
+        <li>Each candidate prints one progress line on stderr:<br><code>tune: &lt;label&gt;: &lt;MB&gt; MB, GPU &lt;MiB&gt; MiB, fidelity &lt;score&gt;</code>, plus <code>(below limit)</code> when it fails.</li>
+      </ul>
+    </div>
+  </div>
+  <h3 style="margin-top: 16px;">Which blocks each setting becomes</h3>
+  <p class="small muted">tune searches over a few "stages" and compiles the winner into blocks. Source: <code>tune/stages.ts</code>.</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Stage</th><th>Blocks, in order</th><th>When</th></tr></thead>
+      <tbody>
+        <tr><td>cleanup</td><td class="wrap"><code>metal-rough</code>, <code>dedup</code>, <code>cull-unused</code>, <code>weld</code></td><td>Always (lossless)</td></tr>
+        <tr><td></td><td class="wrap"><code>flatten</code></td><td>No animations, and no <code>--keep hierarchy</code></td></tr>
+        <tr><td></td><td class="wrap"><code>instance {min: 2}</code></td><td>No <code>--keep hierarchy</code></td></tr>
+        <tr><td>textures</td><td class="wrap"><code>resize-textures {maxSize, slots: all}</code></td><td>Chosen size is below the original's largest texture</td></tr>
+        <tr><td></td><td class="wrap"><code>encode-ktx2 {mode, slots: all, etc1sQuality 128, uastcQuality 1, zstd}</code></td><td>KTX2. Mode is etc1s or uastc if both map kinds match, else auto</td></tr>
+        <tr><td></td><td class="wrap"><code>encode-textures</code> ×2 (color at quality, data at data quality)</td><td>WebP, AVIF, JPEG, PNG. AVIF quality is scaled by 0.7, so q30 → 21</td></tr>
+        <tr><td>geometry</td><td class="wrap"><code>simplify {ratio, error: 0.002}</code></td><td>Ratio below 1</td></tr>
+        <tr><td></td><td class="wrap">one of <code>dequantize</code> · <code>quantize</code> · <code>encode-meshopt {level}</code> · <code>encode-draco</code> (14/10/12 or 11/8/10 bits)</td><td>Per the chosen geometry mode</td></tr>
+        <tr><td></td><td class="wrap"><code>cull-unused</code></td><td>Always last</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="card" id="fidelity" aria-labelledby="fidelity-h">
+  <div class="section-head">
+    <div>
+      <div class="eyebrow">Fidelity check</div>
+      <h2 id="fidelity-h">How "still looks like the original" is measured</h2>
+      <p>The retained metric is <b>worst-64px-region SSIM over four rendered views</b>. In tune, a candidate below that run's threshold is rejected. <code>inspect --compare</code> reports the score only: no pass/fail limit.</p>
+    </div>
+    <button class="btn suggest small" type="button" data-suggest-target="Fidelity check (render + SSIM)" data-suggest-files="packages/cli/src/render/index.ts, packages/cli/src/render/page.ts, packages/cli/src/render/ssim.ts" data-suggest-section="fidelity">Suggest</button>
+  </div>
+  <svg class="diagram" viewBox="0 0 960 150" role="img" aria-labelledby="fi-title fi-desc">
+    <title id="fi-title">Fidelity pipeline</title>
+    <desc id="fi-desc">Both GLBs are decoded in Node, served from a loopback server to a headless browser, rendered by Babylon.js from 4 views, and scored by the worst 64 pixel tile.</desc>
+    <defs>
+      <marker id="arrow2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path class="arrowhead" d="M0,0 L10,5 L0,10 z"/>
+      </marker>
+    </defs>
+    <path class="edge" d="M150,70 L166,70" marker-end="url(#arrow2)"/>
+    <path class="edge" d="M308,70 L324,70" marker-end="url(#arrow2)"/>
+    <path class="edge" d="M466,70 L482,70" marker-end="url(#arrow2)"/>
+    <path class="edge" d="M624,70 L640,70" marker-end="url(#arrow2)"/>
+    <path class="edge" d="M782,70 L798,70" marker-end="url(#arrow2)"/>
+    <g class="node"><title>The original model and one candidate result</title>
+      <rect x="10" y="30" width="140" height="80" rx="10"/>
+      <text x="80" y="64" text-anchor="middle">original</text>
+      <text x="80" y="84" text-anchor="middle">+ candidate</text>
+    </g>
+    <g class="node"><title>Draco and meshopt are decoded in Node before the browser sees the file</title>
+      <rect x="168" y="30" width="140" height="80" rx="10"/>
+      <text x="238" y="64" text-anchor="middle">decode in Node</text>
+      <text class="sub" x="238" y="84" text-anchor="middle">Draco, meshopt</text>
+    </g>
+    <g class="node"><title>A local HTTP server on 127.0.0.1, random port. Requests to any other origin are blocked.</title>
+      <rect x="326" y="30" width="140" height="80" rx="10"/>
+      <text x="396" y="64" text-anchor="middle">loopback server</text>
+      <text class="sub" x="396" y="84" text-anchor="middle">127.0.0.1 only</text>
+    </g>
+    <g class="node accent"><title>Headless Chrome, Edge or Chromium with software WebGL (SwiftShader); a Babylon.js scene loads the file. KTX2 decodes in the page from local files.</title>
+      <rect x="484" y="30" width="140" height="80" rx="10"/>
+      <text x="554" y="64" text-anchor="middle">headless browser</text>
+      <text class="sub" x="554" y="84" text-anchor="middle">Babylon.js scene</text>
+    </g>
+    <g class="node"><title>4 views around the model, 35° field of view, slightly above. Candidates reuse the original's camera framing.</title>
+      <rect x="642" y="30" width="140" height="80" rx="10"/>
+      <text x="712" y="64" text-anchor="middle">4 views</text>
+      <text class="sub" x="712" y="84" text-anchor="middle">render image: --view px</text>
+    </g>
+    <g class="node accent"><title>SSIM per 64 px tile on luminance. Tiles less than a quarter covered by the model are ignored. Score = worst tile, rounded to 3 decimals.</title>
+      <rect x="800" y="30" width="150" height="80" rx="10"/>
+      <text x="875" y="58" text-anchor="middle">worst 64 px tile</text>
+      <text x="875" y="78" text-anchor="middle">SSIM ≥ limit?</text>
+      <text class="sub" x="875" y="96" text-anchor="middle">tune only · default 0.9</text>
+    </g>
+  </svg>
+  <div class="soft small" data-feedback-uids="12,13,16">
+    <b>Render image size is not texture size.</b> At baseline, <code>--view</code> sets the comparison image resolution: default 1024 px, tune range 64–4096. Alex requested <code>--max-texture-size</code> and a 4096 default assuming it capped textures. Those changes remain an open question; this guide does not silently rename the render-size control or change its default.
+    <br><b>SSIM is not pixel diff.</b> <code>--fidelity</code> is a minimum SSIM threshold (&gt;0 to 1, default 0.9). Requested <code>--min-pixel-diff-ratio</code> naming needs a metric/naming decision; neither a new metric nor a rename is implemented here.
+  </div>
+  <div class="grid2">
+    <div>
+      <h3>Details that matter</h3>
+      <ul class="small">
+        <li>Score is SSIM on brightness (Rec. 709), over a 50% gray background. 1 means identical.</li>
+        <li>Only tiles more than 25% covered by the model count. The model mask is grown by 3 px so edges are included.</li>
+        <li>Candidates use the original's camera position, so a model that shrinks or moves loses points.</li>
+        <li>The tune limit holds only for that run at its render image size. For a larger comparison image (zoom, VR), use <code>--view 2048</code>; this does not set a maximum texture size.</li>
+        <li>Static pose only. Animations aren't checked.</li>
+        <li><b>It's a numeric check, not a perceptual guarantee.</b> The 0.9 default hasn't been re-validated on the Babylon.js renderer yet. Look at the preview images.</li>
+      </ul>
+    </div>
+    <figure>
+      <img src="duck.size.preview.png" alt="Side-by-side render: original duck on the left, size-tuned duck on the right, at the worst-scoring view." loading="lazy">
+      <figcaption>Legacy render evidence only: duck preview from <span class="mono">a9329e2</span>, original | result at the worst view, SSIM 0.929. Not a new render or verification of this proposal.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<section class="card" id="graphs" aria-labelledby="graphs-h">
+  <div class="section-head">
+    <div>
+      <div class="eyebrow">Graph files</div>
+      <h2 id="graphs-h">A graph is the recipe, saved as text</h2>
+      <p>Blocks run top to bottom; <code>run</code> adds input and output blocks. The proposed graph is a recipe, not a policy: <b>no fidelity or other limits, timeout, or saved tune constraints</b>. Applying it does not enforce the tune session's limits.</p>
+    </div>
+    <button class="btn suggest small" type="button" data-suggest-target="Graph file format" data-suggest-files="packages/cli/src/graphFiles.ts, packages/cli/graphs/optimize.toon" data-suggest-section="graphs">Suggest</button>
+  </div>
+  <div class="grid2">
+    <div>
+      <div class="label-row"><span class="tag inferred">proposed recipe · illustrative</span></div>
+<pre class="term">graph: 1
+name: duck.size
+goal: size
+blocks[2]:
+  - type: transform.dedup
+  - type: transform.cull-unused</pre>
+      <p class="small muted">Schema example, not a claimed tune winner. No saved limits or provenance extras.</p>
+      <details>
+      <summary class="small">Legacy baseline recording: show optimize (unchanged stdout)</summary>
+      <div class="label-row"><span class="tag verified">real output · ab42afe</span><span class="small muted">non-render smoke</span></div>
+<pre class="term"><span class="cmd">$ node-assets show optimize</span>
+graph: 1
+name: optimize
+blocks[9]:
+  - type: transform.metal-rough
+  - type: transform.dedup
+  - type: transform.cull-unused
+  - type: transform.weld
+  - type: transform.resize-textures
+    config:
+      maxSize: 2048
+      slots: all
+  - type: transform.encode-textures
+    config:
+      format: webp
+      quality: 90
+      slots: color
+  - type: transform.encode-textures
+    config:
+      format: webp
+      quality: 95
+      slots: data
+  - type: transform.quantize
+  - type: transform.cull-unused</pre>
+      </details>
+    </div>
+    <div>
+      <h3>Keys</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Key</th><th>Meaning</th></tr></thead>
+          <tbody>
+            <tr><td><code>graph</code></td><td>Format version. Must be 1.</td></tr>
+            <tr><td><code>name</code>, <code>goal</code></td><td>Labels. tune writes <code>duck.size</code> and <code>size</code>.</td></tr>
+            <tr><td><code>blocks</code></td><td>The steps. Each has a <code>type</code> and optional <code>config</code>; omitted settings use the block's defaults.</td></tr>
+            <tr><td>No limits</td><td>The baseline <code>check</code> field is removed. No threshold, timeout or other tune constraints are persisted.</td></tr>
+            <tr><td><code>tuned</code></td><td>If retained, descriptive observations only (e.g. input and result numbers), never constraints or shared-codec state. <code>run</code> does not turn observations into limits.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <h3 style="margin-top: 14px;">No provenance hashes in extras</h3>
+      <p class="small" data-feedback-uids="2">Proposed output has no CLI provenance hashes in <code>extras.nodeAssets</code>. The baseline's automatic no-op detection depends on those hashes, so <b>no-op and overwrite policy are unresolved</b>. No sidecar or replacement mechanism is proposed here, and preserved no-op behavior is not promised. Keep the existing safety rule against overwriting an input.</p>
+      <h3 style="margin-top: 14px;">Strict on purpose</h3>
+      <p class="small">Retain validation of unknown keys, blocks, settings and out-of-range block values as <code>BAD_GRAPH</code>. To customize: <code>node-assets show optimize &gt; graphs/mine.toon</code>, edit, apply with <code>run</code>, then optionally use <code>inspect output.glb --compare original.glb</code> for a score, not a saved pass/fail policy. Existing graphs with the removed field will need a migration decision; no silent compatibility is promised.</p>
+    </div>
+  </div>
+</section>
+
+<section class="card" id="output" aria-labelledby="output-h">
+  <div class="section-head">
+    <div>
+      <div class="eyebrow">Output &amp; errors</div>
+      <h2 id="output-h">Reading what the CLI prints</h2>
+      <p>The proposal retains TOON results/errors on <b>stdout</b> and progress on <b>stderr</b>. Help uses conventional usage/flags/examples. Unknown commands show nearest help instead of the old usage-error recording below. No new output has been verified.</p>
+    </div>
+    <button class="btn suggest small" type="button" data-suggest-target="Output format (TOON on stdout, progress on stderr)" data-suggest-files="packages/cli/src/output.ts" data-suggest-section="output">Suggest</button>
+  </div>
+  <div class="grid2">
+    <div class="soft">
+      <h3>TOON in 4 lines</h3>
+      <ul class="small">
+        <li><code>key: value</code> is one field.</li>
+        <li><code>help[2]: a,b</code> is a list of 2 values.</li>
+        <li><code>results[2]{input,goal,bytes}:</code> is a table: 2 rows follow, each comma-separated in that column order.</li>
+        <li>Strings are quoted only when needed: commas, colons, quotes, brackets, a leading <code>-</code> or <code>#</code>, or text that looks like a number or <code>true</code>.</li>
+      </ul>
+    </div>
+    <div class="soft">
+      <h3>Proposed structured error shape (illustrative)</h3>
+<pre class="term">error: "unknown goal \"speed\""
+code: USAGE
+help[1]: "goals: size, gpu, load"</pre>
+      <p class="small">Read <code>code</code> to decide what to do, and <code>help</code> for the fix. When one of many inputs fails, the others still run: <code>inspect</code> and <code>run</code> show it as a row with <code>status: failed</code>, and <code>tune</code> lists it under <code>failed</code>.</p>
+    </div>
+  </div>
+
+  <h3 style="margin-top: 16px;">Legacy evidence, not recommended commands</h3>
+  <details id="legacy-evidence">
+  <summary>Show unchanged baseline recordings and old flags</summary>
+  <p class="small muted">These are historical stdout/stderr, not updated proposed output. They deliberately retain old flags, current-folder discovery, estimated load_s, saved limits and hash-based no-op behavior. None proves the proposed removals/renames or measured loads. Do not copy these as the new contract.</p>
+  <div class="btn-row" role="group" aria-label="Choose an example run" id="ex-buttons"></div>
+  <div class="label-row" id="ex-label"></div>
+  <pre class="term" id="ex-out"></pre>
+  </details>
+
+  <h3 style="margin-top: 16px;">Exit codes</h3>
+  <div class="grid4">
+    <div class="soft"><h3>0 · success</h3><p class="small">Work succeeded. No-op success semantics after hash removal are pending.</p></div>
+    <div class="soft"><h3>1 · something failed</h3><p class="small">An input or processing step failed. There is no proposed run threshold check.</p></div>
+    <div class="soft"><h3>2 · usage error</h3><p class="small">Bad arguments. Nothing was done.</p></div>
+  </div>
+  <p class="small muted">Retained baseline work/error statuses, not new execution evidence. Help-fallback exit status still needs a decision; don't infer exit 2 from the legacy missing-input transcript.</p>
+
+  <h3 style="margin-top: 16px;">Error codes</h3>
+  <div class="filter">
+    <label for="err-filter" class="small">Filter</label>
+    <input type="text" id="err-filter" placeholder="e.g. graph, browser, exists">
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Code</th><th>When</th><th>Fix the CLI suggests</th><th>Source</th><th></th></tr></thead>
+      <tbody id="err-rows">
+        <tr><td><code>USAGE</code></td><td>Bad flag/value remains a validation error. Missing/unknown command input shows nearest help; ambiguous positional paths are unresolved.</td><td>Valid values or command help, as applicable</td><td><code>arguments.ts</code>, <code>cli.ts</code>, <code>commands/*</code></td><td><button class="btn suggest small" type="button" data-suggest-target="USAGE and nearest help" data-suggest-files="packages/cli/src/arguments.ts, packages/cli/src/commands/" data-suggest-section="errors">Suggest</button></td></tr>
+        <tr><td><code>INPUT_NOT_FOUND</code></td><td>An input path doesn't exist</td><td>"Paths are relative to &lt;cwd&gt;"</td><td><code>inputs.ts</code></td><td><button class="btn suggest small" type="button" data-suggest-target="INPUT_NOT_FOUND (missing input)" data-suggest-files="packages/cli/src/inputs.ts" data-suggest-section="errors">Suggest</button></td></tr>
+        <tr><td><code>INPUT_NOT_FOUND</code></td><td><code>--compare</code> folder has no same-named original</td><td>Pass the original directly: <code>--compare &lt;original&gt;</code></td><td><code>commands/inspect.ts</code></td><td><button class="btn suggest small" type="button" data-suggest-target="INPUT_NOT_FOUND (no original for --compare)" data-suggest-files="packages/cli/src/commands/inspect.ts" data-suggest-section="errors">Suggest</button></td></tr>
+        <tr><td><code>INPUT_NOT_FOUND</code></td><td>A graph file can't be read</td><td>"node-assets show optimize &gt; mine.toon"</td><td><code>graphFiles.ts</code></td><td><button class="btn suggest small" type="button" data-suggest-target="INPUT_NOT_FOUND (graph file)" data-suggest-files="packages/cli/src/graphFiles.ts" data-suggest-section="errors">Suggest</button></td></tr>
+        <tr><td><code>UNSUPPORTED_FORMAT</code></td><td>File extension isn't supported</td><td>How to export it (Blender, Maya, 3ds Max…) or the supported list</td><td><code>inputs.ts</code></td><td><button class="btn suggest small" type="button" data-suggest-target="UNSUPPORTED_FORMAT" data-suggest-files="packages/cli/src/inputs.ts" data-suggest-section="errors">Suggest</button></td></tr>
+        <tr><td><code>INVALID_INPUT</code></td><td>Not a regular file, broken model, disallowed resource paths, or no tune candidate met that run's temporary limit</td><td>e.g. longer <code>--timeout</code> or lower SSIM threshold with <code>--fidelity</code> (name pending)</td><td><code>inputs.ts</code>, <code>tune/search.ts</code></td><td><button class="btn suggest small" type="button" data-suggest-target="INVALID_INPUT" data-suggest-files="packages/cli/src/inputs.ts, packages/cli/src/tune/search.ts" data-suggest-section="errors">Suggest</button></td></tr>
+        <tr><td><code>OUTPUT_EXISTS</code></td><td>Existing output safety; exact policy after hash removal is unresolved</td><td>Choose a separate output; <code>--force</code> semantics remain pending</td><td><code>commands/run.ts</code>, <code>files.ts</code></td><td><button class="btn suggest small" type="button" data-suggest-target="OUTPUT_EXISTS after provenance removal" data-suggest-files="packages/cli/src/commands/run.ts, packages/cli/src/files.ts" data-suggest-section="errors">Suggest</button></td></tr>
+        <tr><td><code>BAD_GRAPH</code></td><td>Unknown built-in, invalid TOON, unknown key or block or setting, value out of range</td><td>Names the valid choices</td><td><code>graphFiles.ts</code></td><td><button class="btn suggest small" type="button" data-suggest-target="BAD_GRAPH" data-suggest-files="packages/cli/src/graphFiles.ts" data-suggest-section="errors">Suggest</button></td></tr>
+        <tr><td><code>NO_BROWSER</code></td><td>No usable browser for rendering, or <code>$NODE_ASSETS_CHROMIUM</code> isn't an executable</td><td>"npx playwright install chromium"</td><td><code>render/browser.ts</code></td><td><button class="btn suggest small" type="button" data-suggest-target="NO_BROWSER" data-suggest-files="packages/cli/src/render/browser.ts" data-suggest-section="errors">Suggest</button></td></tr>
+        <tr><td><code>INTERNAL</code></td><td>Anything unexpected. Shows the first line of the message.</td><td>None</td><td><code>output.ts</code></td><td><button class="btn suggest small" type="button" data-suggest-target="INTERNAL errors" data-suggest-files="packages/cli/src/output.ts" data-suggest-section="errors">Suggest</button></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="small muted hidden" id="err-empty">No error codes match that filter.</p>
+</section>
+
+<section class="card" id="browser" aria-labelledby="browser-h">
+  <div class="section-head">
+    <div>
+      <div class="eyebrow">Browser</div>
+      <h2 id="browser-h">Which browser renders, and how</h2>
+      <p><code>tune</code> and <code>inspect --compare</code> render; <code>run</code> and default inspect do not. Browser-based <code>inspect --include load-time</code> is proposed, not implemented. The discovery ladder below describes baseline rendering only; it is not evidence of load measurement.</p>
+    </div>
+    <button class="btn suggest small" type="button" data-suggest-target="Browser discovery" data-suggest-files="packages/cli/src/render/browser.ts" data-suggest-section="browser">Suggest</button>
+  </div>
+  <div class="grid2">
+    <ol class="ladder">
+      <li><span class="rung">1</span><div><code>$NODE_ASSETS_CHROMIUM</code><div class="small muted">If set but not an executable, fail with <code>NO_BROWSER</code>. No fallback, so a typo can't silently pick another browser.</div></div></li>
+      <li><span class="rung">2</span><div>Google Chrome<div class="small muted">Standard install paths on macOS, Windows, Linux.</div></div></li>
+      <li><span class="rung">3</span><div>Microsoft Edge<div class="small muted">Same.</div></div></li>
+      <li><span class="rung">4</span><div>Chromium (Linux only)<div class="small muted"><code>chromium</code> / <code>chromium-browser</code> on PATH, <code>/usr/bin</code>, <code>/snap/bin</code>.</div></div></li>
+      <li><span class="rung">5</span><div>Playwright's Chromium<div class="small muted">If <code>npx playwright install chromium</code> was run.</div></div></li>
+      <li><span class="rung end">✕</span><div><code>NO_BROWSER</code><div class="small muted">help: <code>npx playwright install chromium</code></div></div></li>
+    </ol>
+    <div class="soft">
+      <h3>Render setup</h3>
+      <ul class="small">
+        <li>Headless, with software WebGL (SwiftShader), so results don't depend on the GPU.</li>
+        <li>Files are served from <code>127.0.0.1</code> on a random port. Requests to any other origin are blocked.</li>
+        <li>Browser profile and scratch files go in <code>./_render-&lt;uuid&gt;</code> and are removed afterwards.</li>
+        <li>Scores can still differ slightly between browsers and machines.</li>
+      </ul>
+      <p class="small"><code>--network-throttling</code>: <code>none</code> (default), <code>fast-4g</code>, <code>slow-4g</code>, <code>3g</code>. Familiar Chrome labels, not guaranteed fixed rates. Exact rates and measurement implementation are pending. Baseline estimated load_s does not exercise real browser throttling.</p>
+    </div>
+  </div>
+</section>
+
+<section class="card" id="code" aria-labelledby="code-h">
+  <div class="section-head">
+    <div>
+      <div class="eyebrow">Code map</div>
+      <h2 id="code-h">Where the code lives</h2>
+      <p><b>Unchanged source map at baseline ab42afe</b> (about 2,630 TypeScript lines), not an implemented proposal. Click a module to discuss a future change. Counts, files and old tests remain historical source context.</p>
+    </div>
+  </div>
+  <div class="layers">
+    <div class="layer"><div class="lname">Entry<span>parse, dispatch, print</span></div><div class="mods">
+      <button class="mod" type="button" data-file="packages/cli/src/cli.ts"><b>cli.ts</b><span class="lines">29</span><span class="role">Picks the command, sets the exit code</span></button>
+      <button class="mod" type="button" data-file="packages/cli/src/arguments.ts"><b>arguments.ts</b><span class="lines">54</span><span class="role">Flag definitions per command, shared checks</span></button>
+      <button class="mod" type="button" data-file="packages/cli/src/output.ts"><b>output.ts</b><span class="lines">73</span><span class="role">TOON output, CliError, progress</span></button>
+      <button class="mod" type="button" data-file="packages/cli/src/help.ts"><b>help.ts</b><span class="lines">69</span><span class="role">Per-command --help, manual from the man page</span></button>
+    </div></div>
+    <div class="layer-arrow">↓</div>
+    <div class="layer"><div class="lname">Commands<span>one file each</span></div><div class="mods">
+      <button class="mod" type="button" data-file="packages/cli/src/commands/home.ts"><b>home.ts</b><span class="lines">55</span><span class="role">Baseline discovery; proposal uses help, no listing</span></button>
+      <button class="mod" type="button" data-file="packages/cli/src/commands/help.ts"><b>help.ts</b><span class="lines">12</span><span class="role">Legacy command; proposal uses --help</span></button>
+      <button class="mod" type="button" data-file="packages/cli/src/commands/inspect.ts"><b>inspect.ts</b><span class="lines">107</span></button>
+      <button class="mod" type="button" data-file="packages/cli/src/commands/tune.ts"><b>tune.ts</b><span class="lines">218</span></button>
+      <button class="mod" type="button" data-file="packages/cli/src/commands/run.ts"><b>run.ts</b><span class="lines">160</span></button>
+      <button class="mod" type="button" data-file="packages/cli/src/commands/show.ts"><b>show.ts</b><span class="lines">14</span></button>
+    </div></div>
+    <div class="layer-arrow">↓</div>
+    <div class="layer"><div class="lname">Shared<span>used by several commands</span></div><div class="mods">
+      <button class="mod" type="button" data-file="packages/cli/src/inputs.ts"><b>inputs.ts</b><span class="lines">200</span><span class="role">Find, check, and load input files</span></button>
+      <button class="mod" type="button" data-file="packages/cli/src/measure.ts"><b>measure.ts</b><span class="lines">116</span><span class="role">Baseline estimates; 4 B/px TODO still to add</span></button>
+      <button class="mod" type="button" data-file="packages/cli/src/loadModel.ts"><b>loadModel.ts</b><span class="lines">47</span><span class="role">Decode-time model + coefficients JSON</span></button>
+      <button class="mod" type="button" data-file="packages/cli/src/graphFiles.ts"><b>graphFiles.ts</b><span class="lines">107</span><span class="role">Baseline parsing/hash; proposed graphs have no limits</span></button>
+      <button class="mod" type="button" data-file="packages/cli/src/provenance.ts"><b>provenance.ts</b><span class="lines">54</span><span class="role">Baseline only: GLB hashes removed from proposal</span></button>
+      <button class="mod" type="button" data-file="packages/cli/src/document.ts"><b>document.ts</b><span class="lines">36</span><span class="role">Read/write GLB</span></button>
+      <button class="mod" type="button" data-file="packages/cli/src/execution.ts"><b>execution.ts</b><span class="lines">35</span><span class="role">Run a graph with the core library</span></button>
+      <button class="mod" type="button" data-file="packages/cli/src/files.ts"><b>files.ts</b><span class="lines">22</span><span class="role">Atomic file writes</span></button>
+    </div></div>
+    <div class="layer-arrow">↓</div>
+    <div class="layer"><div class="lname">tune/<span>search only</span></div><div class="mods">
+      <button class="mod" type="button" data-file="packages/cli/src/tune/search.ts"><b>search.ts</b><span class="lines">317</span><span class="role">The search plan and ranking</span></button>
+      <button class="mod" type="button" data-file="packages/cli/src/tune/stages.ts"><b>stages.ts</b><span class="lines">115</span><span class="role">Settings → blocks</span></button>
+      <button class="mod" type="button" data-file="packages/cli/src/tune/plan.ts"><b>plan.ts</b><span class="lines">39</span><span class="role">What each goal tries</span></button>
+      <button class="mod" type="button" data-file="packages/cli/src/tune/cache.ts"><b>cache.ts</b><span class="lines">52</span><span class="role">Reuse intermediate models</span></button>
+      <button class="mod" type="button" data-file="packages/cli/src/tune/budget.ts"><b>budget.ts</b><span class="lines">3</span><span class="role">Baseline 7m; proposed --timeout 420 seconds</span></button>
+    </div></div>
+    <div class="layer-arrow">↓</div>
+    <div class="layer"><div class="lname">render/<span>browser + scoring</span></div><div class="mods">
+      <button class="mod" type="button" data-file="packages/cli/src/render/index.ts"><b>index.ts</b><span class="lines">243</span><span class="role">Server, browser launch, renderer API</span></button>
+      <button class="mod" type="button" data-file="packages/cli/src/render/page.ts"><b>page.ts</b><span class="lines">176</span><span class="role">Babylon.js scene and cameras (runs in page)</span></button>
+      <button class="mod" type="button" data-file="packages/cli/src/render/ssim.ts"><b>ssim.ts</b><span class="lines">135</span><span class="role">Tile SSIM scoring</span></button>
+      <button class="mod" type="button" data-file="packages/cli/src/render/browser.ts"><b>browser.ts</b><span class="lines">86</span><span class="role">Find a browser</span></button>
+      <button class="mod" type="button" data-file="packages/cli/src/render/protocol.ts"><b>protocol.ts</b><span class="lines">32</span><span class="role">Node ↔ page types</span></button>
+      <button class="mod" type="button" data-file="packages/cli/src/render/codecs.ts"><b>codecs.ts</b><span class="lines">19</span><span class="role">Local KTX2 decoder URLs</span></button>
+      <button class="mod" type="button" data-file="packages/cli/src/render/errors.ts"><b>errors.ts</b><span class="lines">4</span></button>
+    </div></div>
+    <div class="layer-arrow">↓</div>
+    <div class="layer"><div class="lname">Core library<span>bundled into the CLI</span></div><div class="mods">
+      <button class="mod" type="button" data-file="packages/core/"><b>@babylonjs/node-assets</b><span class="role">Blocks, graphs, codecs (packages/core)</span></button>
+    </div></div>
+  </div>
+  <div class="grid2" style="margin-top: 14px;">
+    <div class="soft small"><b>Baseline docs only</b><br><code>graphs/optimize.toon</code> · <code>docs/node-assets.1.md</code> (man page) · <code>docs/calibration.md</code> + <code>dev/calibrate</code> (load-model fitting, not run) · <code>README.md</code><br><code>skills/node-assets-cli/SKILL.md</code> still points at the legacy manual command. The proposal calls for <code>node-assets --help</code>; no skill/source file was edited.</div>
+    <div class="soft small"><b>Baseline test map, not new checks</b> (repo root <code>tests/</code>)<br>e2e: <code>cli</code>, <code>cliTune</code>, <code>cliTuneOptions</code> · integration: <code>cliRender</code> · unit: <code>cliBrowser</code>, <code>cliCalibrate</code>, <code>cliCommands</code>, <code>cliDiagnostics</code>, <code>cliExecution</code>, <code>cliGraphFiles</code>, <code>cliInputs</code>, <code>cliMeasure</code>, <code>cliProvenance</code>, <code>cliRun</code>, <code>cliTuneBudget</code>, <code>cliTuneCache</code>, <code>cliTuneCompat</code>, <code>cliTuneRanking</code>, <code>cliTuneStages</code>. Legacy compat/provenance tests do not make those features part of the proposal.</div>
+  </div>
+</section>
+
+<section class="card" id="evidence" aria-labelledby="evidence-h">
+  <div class="section-head">
+    <div>
+      <div class="eyebrow">Evidence &amp; limits</div>
+      <h2 id="evidence-h">What's proven, and on which code</h2>
+      <p><b>No new CLI tests, render runs or calibration in this guide update.</b> Historical checks below apply only to their recorded baseline, never to the proposed flags, removals or measured loads.</p>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Claim</th><th>Status</th><th>Basis</th></tr></thead>
+      <tbody>
+        <tr><td>Historical install, help, show, inspect, run optimize, hash-based no-op re-run, usage error</td><td><span class="tag verified">baseline only · ab42afe</span></td><td>Previously recorded disposable install of <span class="mono">node-assets-cli-0.1.0.tgz</span> (sha256 <span class="mono">8e111cc1…9b76</span>). No rendering. Full source identity: <code>ab42afe1ac1816cc4232b89bc123375c82d3dfbd</code>.</td></tr>
+        <tr><td>Legacy tune, run with its old check flag, and inspect with its old comparison flag on duck/helmet</td><td><span class="tag older">legacy render · a9329e2</span></td><td>Real render run before the 6-commit structure cleanup. The cleanup was checked by tests and an output comparison, not a new render. Old stdout is folded under legacy evidence.</td></tr>
+        <tr><td>Agents using tune got within 1.09× of the best result, vs 2.11× worse setting options by hand</td><td><span class="tag historical">historical</span></td><td>54 graded agent runs on the research prototype, with a different renderer. Not re-run on this build. Source: <code>research/cli-v2/docs/node-assets.2.md</code></td></tr>
+        <tr><td>SSIM ≥ 0.9 means "looks the same"</td><td><span class="tag provisional">numeric only</span></td><td>A numeric check, not a perceptual guarantee. Not re-validated on Babylon.js yet; a Scout handoff is drafted.</td></tr>
+        <tr><td>Baseline load_s</td><td><span class="tag provisional">estimate, not measured</span></td><td>Headless download + decode estimate with provisional coefficients. No real load measurement/throttling exists; proposed include-list and throttle labels do not change this fact.</td></tr>
+        <tr><td>Platforms</td><td><span class="tag older">macOS only</span></td><td>Windows and Linux browser paths exist but are untested.</td></tr>
+        <tr><td>Proposed <code>size</code> score</td><td><span class="tag inferred">not implemented</span></td><td>File bytes plus codec bytes once per model, no shared adjustment; not measured gzip/Brotli transfer size. Goal naming/split is pending.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="card" id="noticed" aria-labelledby="noticed-h">
+  <div class="section-head">
+    <div>
+      <div class="eyebrow">Noticed while writing this</div>
+      <h2 id="noticed-h">Remaining questions, with your comments already recorded</h2>
+      <p>These are unresolved details, not a request to repeat decided changes. Compat, shared-cost calculations, saved limits and provenance extras are already removed from the proposal. The source remains unchanged.</p>
+    </div>
+  </div>
+  <div class="grid2" id="noticed-list"></div>
+</section>
+
+<section class="card" id="next" aria-labelledby="next-h">
+  <div class="eyebrow">What's left</div>
+  <h2 id="next-h">Not in v0.1.0</h2>
+  <div class="grid2" style="margin-top: 10px;">
+    <ul class="small">
+      <li>A stronger built-in <code>optimize</code> preset (deferred).</li>
+      <li>A strict "clean tree" guard before packing (deferred).</li>
+      <li>Measured load-time implementation and precise throttling rates are pending; the old coefficient model is only an explainer.</li>
+      <li>Re-validating the 0.9 SSIM default remains separate work (no rendering in this pass).</li>
+      <li>Windows and Linux testing.</li>
+      <li>USD input needs <code>NODE_OPTIONS=--experimental-web-worker</code> on Node versions that offer it.</li>
+    </ul>
+    <ul class="small">
+      <li><b>Proposal details:</b> goal naming/split, render size naming/default, metric naming, no-op/overwrite policy and positional help ambiguity remain open inline.</li>
+      <li>No implementation, push, publication or release is authorized by this doc update.</li>
+      <li>Deeper reading: <code>packages/cli/README.md</code>, <code>packages/cli/docs/node-assets.1.md</code>, <code>research/cli-v2/HANDOFF.md</code>.</li>
+    </ul>
+  </div>
+</section>
+
+<div class="queue-bar" id="queue-bar">
+  <div>
+    <b id="queue-count">No suggestions queued yet.</b>
+    <ol id="queue-list"></ol>
+  </div>
+  <div class="toast" id="queue-toast" role="status"></div>
+</div>
+
+</main>
+</div>
+
+<dialog id="suggest-dialog" aria-labelledby="sd-title">
+  <form method="dialog" id="suggest-form">
+    <div>
+      <div class="eyebrow">Suggest a change</div>
+      <h2 id="sd-title" style="font-size: 19px; margin-top: 4px;">About: <span id="sd-target-label"></span></h2>
+    </div>
+    <div class="field"><label for="sd-kind">Kind of change</label>
+      <select id="sd-kind">
+        <option>Change behavior</option>
+        <option>Rename or reword</option>
+        <option>Change output</option>
+        <option>Add something</option>
+        <option>Remove something</option>
+        <option>Docs only</option>
+        <option>Question, no change yet</option>
+      </select>
+    </div>
+    <div class="field"><label for="sd-details">What should change, and why?</label>
+      <textarea id="sd-details" required placeholder="e.g. Clarify render image size separately from maximum texture size."></textarea>
+    </div>
+    <div class="files" id="sd-files"></div>
+    <div class="files hidden" id="sd-context" style="white-space: pre-wrap; font-family: Consolas, 'Courier New', Courier, monospace; max-height: 160px; overflow: auto;"></div>
+    <div class="btn-row" style="justify-content: flex-end;">
+      <button class="btn" type="button" id="sd-cancel">Cancel</button>
+      <button class="btn primary" type="submit" id="sd-submit" value="queue">Queue suggestion</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Real CLI output, generated from saved transcripts. Do not edit by hand. -->
+<script type="text/plain" class="example" id="ex-home" data-label="Home screen" data-commit="a9329e2" data-note="older build, before the structure cleanup · stdout only · paths redacted" data-render="false">
+$ node-assets
+bin: <temporary-prefix>/bin/node-assets
+description: "Make 3D models small and web-ready: inspect models, tune a graph for size, gpu, load or compat, and run graphs"
+models[2]{file,bytes}:
+  assets/helmet.glb,3773916
+  assets/duck.glb,120484
+graphs: 0 graphs found under the current directory
+builtins[1]{name,file,description}:
+  optimize,<temporary-prefix>/lib/node_modules/node-assets-cli/graphs/optimize.toon,"WebP up to 2048 px (color q90, data q95), quantized geometry, lossless cleanup"
+help[5]: "node-assets inspect <file|dir>: size, GPU memory, load time and decoders","node-assets tune <input> --for size|gpu|load|compat -o graphs/: search for a goal within a fidelity limit","node-assets run optimize <input> -o <out.glb|dir/>: apply the built-in graph","node-assets show optimize: print every block setting","node-assets <command> --help: flags and examples; node-assets help: full manual"
+</script>
+<script type="text/plain" class="example" id="ex-inspect" data-label="inspect a file" data-commit="ab42afe" data-note="baseline install evidence · stdout + stderr · paths redacted" data-render="false">
+$ node-assets inspect duck.glb
+file: duck.glb
+status: ok
+bytes: 120484
+gpu_mib: 1.4
+load_s: 0.15
+triangles: 4212
+textures: 1x png 512x512
+decoders: none
+required_extensions: none
+[exit 0]
+</script>
+<script type="text/plain" class="example" id="ex-inspect-dir" data-label="inspect a folder" data-commit="a9329e2" data-note="older build, before the structure cleanup · stdout only · paths redacted" data-render="false">
+$ node-assets inspect assets/
+count: 2 models found
+models[2]{file,status,bytes,gpu_mib,load_s,triangles,textures,decoders,required_extensions}:
+  assets/helmet.glb,ok,3773916,107.2,3.57,15452,5x jpeg 2048x2048,none,none
+  assets/duck.glb,ok,120484,1.4,0.15,4212,1x png 512x512,none,none
+</script>
+<script type="text/plain" class="example" id="ex-tune" data-label="tune for size + gpu" data-commit="a9329e2" data-note="older build, before the structure cleanup · stdout only · paths redacted" data-render="true">
+$ node-assets tune assets/duck.glb --for size,gpu -o graphs/
+limits:
+  fidelity: ">= 0.9 (worst 64px-region SSIM vs original, 4 views at 1024px)"
+  network: 4g (9 Mbps)
+  decoders_amortized_over: 1 asset(s)
+originals[1]{input,bytes,gpu_mib,load_s}:
+  assets/duck.glb,120484,1.4,0.15
+results[2]{input,goal,graph,bytes,decoder_bytes,gpu_mib,load_s,fidelity,textures,geometry,decoders,search,preview}:
+  assets/duck.glb,size,graphs/duck.size.toon,22724,6694,0.4,0.07,0.929,avif q30/30 (color/data maps) <=256px,meshopt-high simplify 0.25,meshopt,complete,graphs/duck.size.png
+  assets/duck.glb,gpu,graphs/duck.gpu.toon,28140,271362,0.1,0.58,0.929,ktx2 etc1s+uastc <=256px,meshopt-high simplify 0.25,meshopt+ktx2,complete,graphs/duck.gpu.png
+warnings[4]: "duck.size: output needs the meshopt decoder (7 KB gzip): Babylon.js loads it automatically; other viewers must be set up to load it","duck.size: uses AVIF textures (EXT_texture_avif): no decoder download, but the browser must support AVIF","duck.gpu: output needs the meshopt decoder (7 KB gzip): Babylon.js loads it automatically; other viewers must be set up to load it","duck.gpu: output needs the ktx2 decoder (265 KB gzip): Babylon.js loads it automatically; other viewers must be set up to load it"
+help[3]: Run `node-assets run <graph> <input> -o <out.glb>` to apply a graph (add --check on other models to verify it suits them),"Every result meets the fidelity limit at 1024px (worst-region SSIM >= 0.9; previews show the worst view). If the model will be shown larger or up close (VR, zoom), tune again with --view 2048; for extra margin, raise --fidelity","Edit a graph file to mix blocks from different goals, then use `node-assets run <graph> <input> -o <out.glb> --check`"
+</script>
+<script type="text/plain" class="example" id="ex-check" data-label="run --check" data-commit="a9329e2" data-note="older build, before the structure cleanup · stdout only · paths redacted" data-render="true">
+$ node-assets run graphs/duck.size.toon assets/duck.glb -o public/duck.glb --check
+count: "1 written or up to date, 0 failed, 0 skipped"
+results[1]{input,output,status,bytes_before,bytes_after,gpu_mib,decoders,fidelity,check}:
+  assets/duck.glb,public/duck.glb,ok,120484,22796,0.4,meshopt,0.929,pass
+total: 120484 bytes -> 22796 bytes
+warnings[2]: "output needs the meshopt decoder (7 KB gzip): Babylon.js loads it automatically; other viewers must be set up to load it","uses AVIF textures (EXT_texture_avif): the browser must support AVIF"
+</script>
+<script type="text/plain" class="example" id="ex-run" data-label="run optimize, twice" data-commit="ab42afe" data-note="baseline install evidence · stdout + stderr · paths redacted" data-render="false">
+$ node-assets run optimize duck.glb -o out/duck.glb
+run: duck.glb
+count: "1 written or up to date, 0 failed, 0 skipped"
+results[1]{input,output,status,bytes_before,bytes_after,gpu_mib,decoders}:
+  duck.glb,out/duck.glb,ok,120484,82852,1.4,none
+total: 120484 bytes -> 82852 bytes
+help[1]: "node-assets inspect <output> --against <input>: measure fidelity and load time"
+[exit 0]
+
+$ node-assets run optimize duck.glb -o out/duck.glb
+count: "1 written or up to date, 0 failed, 0 skipped"
+results[1]{input,output,status,bytes_before,bytes_after,gpu_mib,decoders}:
+  duck.glb,out/duck.glb,up to date (no-op),120484,82852,1.4,none
+total: 120484 bytes -> 82852 bytes
+help[1]: "node-assets inspect <output> --against <input>: measure fidelity and load time"
+[exit 0]
+</script>
+<script type="text/plain" class="example" id="ex-against" data-label="inspect --against" data-commit="a9329e2" data-note="older build, before the structure cleanup · stdout only · paths redacted" data-render="true">
+$ node-assets inspect public/ --against assets/
+count: 2 models found
+models[2]{file,status,bytes,gpu_mib,load_s,triangles,textures,decoders,required_extensions,against,fidelity,original{file,bytes,gpu_mib,load_s}}:
+  public/helmet.glb,ok,3101808,107,2.98,15452,5x webp 2048x2048,none,EXT_texture_webp+KHR_mesh_quantization,assets/helmet.glb,0.987,assets/helmet.glb,3773916,107.2,3.57
+  public/duck.glb,ok,22796,0.4,0.07,2526,1x avif 256x256,meshopt,EXT_meshopt_compression+EXT_texture_avif+KHR_mesh_quantization,assets/duck.glb,0.929,assets/duck.glb,120484,1.4,0.15
+warnings[2]: "output needs the meshopt decoder (7 KB gzip): Babylon.js loads it automatically; other viewers must be set up to load it","uses AVIF textures (EXT_texture_avif): the browser must support AVIF"
+note: fidelity = worst 64px-region SSIM over 4 views at 1024px; load_s is estimated on 4g with provisional decode coefficients
+</script>
+<script type="text/plain" class="example" id="ex-show" data-label="show optimize" data-commit="ab42afe" data-note="baseline install evidence · stdout + stderr · paths redacted" data-render="false">
+$ node-assets show optimize
+graph: 1
+name: optimize
+blocks[9]:
+  - type: transform.metal-rough
+  - type: transform.dedup
+  - type: transform.cull-unused
+  - type: transform.weld
+  - type: transform.resize-textures
+    config:
+      maxSize: 2048
+      slots: all
+  - type: transform.encode-textures
+    config:
+      format: webp
+      quality: 90
+      slots: color
+  - type: transform.encode-textures
+    config:
+      format: webp
+      quality: 95
+      slots: data
+  - type: transform.quantize
+  - type: transform.cull-unused
+[exit 0]
+</script>
+<script type="text/plain" class="example" id="ex-cmd-help" data-label="show --help" data-commit="ab42afe" data-note="baseline install evidence · stdout + stderr · paths redacted" data-render="false">
+$ node-assets show --help
+usage: node-assets show <graph>
+description: "Print a graph file or built-in graph as TOON, with every block setting filled in. Bare names select built-ins; a path or .toon extension selects a file."
+flags[1]: "-h, --help"
+examples[3]: node-assets show optimize,node-assets show optimize > mine.toon,node-assets show mine.toon
+[exit 0]
+</script>
+<script type="text/plain" class="example" id="ex-usage" data-label="usage error" data-commit="ab42afe" data-note="baseline install evidence · stdout + stderr · paths redacted" data-render="false">
+$ node-assets tune
+error: missing <input>
+code: USAGE
+help[1]: "node-assets tune <input>... --for GOAL[,GOAL...] [-o <dir/|file.toon>] [--fidelity F] [--view PX] [--network NET] [--amortize N] [--keep hierarchy,texture-size,geometry] [--time-limit DUR]"
+[exit 2]
+</script>
+
+<script>
+(() => {
+  "use strict";
+  const $ = (selector, root = document) => root.querySelector(selector);
+  const $$ = (selector, root = document) => Array.from(root.querySelectorAll(selector));
+  const esc = (value) => String(value).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+  const COMMIT = "ab42afe1ac1816cc4232b89bc123375c82d3dfbd";
+
+  // ---------- Theme ----------
+  $("#theme-toggle").addEventListener("click", () => {
+    const html = document.documentElement;
+    html.setAttribute("data-theme", html.getAttribute("data-theme") === "dark" ? "light" : "dark");
+  });
+
+  // ---------- Clipboard ----------
+  async function copyText(text) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch {
+      const area = document.createElement("textarea");
+      area.value = text;
+      area.setAttribute("readonly", "");
+      area.style.position = "fixed";
+      area.style.opacity = "0";
+      document.body.append(area);
+      area.select();
+      const ok = document.execCommand("copy");
+      area.remove();
+      return ok;
+    }
+  }
+
+  // ---------- Suggestions ----------
+  const dialog = $("#suggest-dialog");
+  const form = $("#suggest-form");
+  const details = $("#sd-details");
+  const kind = $("#sd-kind");
+  const toast = $("#queue-toast");
+  const queued = [];
+  let current = null;
+
+  function openSuggest({ target, files = "", section = "", context = "", element = null }) {
+    current = { target, files, section, context, element };
+    $("#sd-target-label").textContent = target;
+    $("#sd-files").textContent = files ? `Files: ${files}` : "";
+    $("#sd-context").textContent = context;
+    $("#sd-context").classList.toggle("hidden", !context);
+    details.value = "";
+    kind.selectedIndex = 0;
+    dialog.showModal();
+    details.focus();
+  }
+
+  function promptFor({ target, files, section, context }, kindText, detailText) {
+    const lines = [`CLI suggestion about a proposed contract updated from Alex's 17 received comments.`, `Unchanged source baseline: ${COMMIT}; this guide is not a description of the installed package.`, `About: ${target}`, `Kind: ${kindText}`];
+    if (files) lines.push(`Files: ${files}`);
+    if (section) lines.push(`Guide section: #${section}`);
+    if (context) lines.push(`Context:\n${context}`);
+    lines.push(`Suggestion:\n${detailText}`, "", "The comments update the guide only; they do not approve source changes. Reply with a short plan first. Don't change code until I approve it.");
+    return lines.join("\n");
+  }
+
+  function renderQueue() {
+    const sent = queued.filter((q) => q.status === "queued").length;
+    const copied = queued.length - sent;
+    const parts = [];
+    if (sent) parts.push(`${sent} queued in Lavish. Click Send to Agent to send ${sent === 1 ? "it" : "them"}.`);
+    if (copied) parts.push(`${copied} copied to the clipboard. Paste into the chat.`);
+    $("#queue-count").textContent = parts.join(" ") || "No suggestions queued yet.";
+    $("#queue-list").innerHTML = queued.map((q) => `<li>${esc(q.target)} · ${esc(q.kind)} · <b>${q.status === "queued" ? "queued" : "copied"}</b></li>`).join("");
+  }
+
+  function say(message) {
+    toast.textContent = message;
+  }
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const detailText = details.value.trim();
+    if (!detailText) {
+      details.value = "";
+      details.reportValidity();
+      return;
+    }
+    const kindText = kind.value;
+    const suggestion = current;
+    const prompt = promptFor(suggestion, kindText, detailText);
+    const data = { target: suggestion.target, kind: kindText, files: suggestion.files, section: suggestion.section, details: detailText, commit: COMMIT, contract: "proposed", baselineCommit: COMMIT };
+    dialog.close();
+    let status = "copied";
+    if (window.lavish && typeof window.lavish.queuePrompt === "function") {
+      try {
+        await Promise.resolve(window.lavish.queuePrompt(prompt, { tag: "cli-suggestion", text: suggestion.target, element: suggestion.element || undefined, data }));
+        status = "queued";
+      } catch {
+        status = "copied";
+      }
+    }
+    if (status === "copied") {
+      const ok = await copyText(prompt);
+      say(ok ? "Lavish isn't connected, so the suggestion was copied to the clipboard." : "Couldn't queue or copy the suggestion. Please try again.");
+      if (!ok) return;
+    } else {
+      say(`Queued: ${suggestion.target}`);
+    }
+    queued.push({ target: suggestion.target, kind: kindText, status });
+    renderQueue();
+    suggestion.element?.focus?.();
+  });
+
+  $("#sd-cancel").addEventListener("click", () => {
+    dialog.close();
+    current?.element?.focus?.();
+  });
+
+  document.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-suggest-target]");
+    if (button) {
+      openSuggest({
+        target: button.dataset.suggestTarget,
+        files: button.dataset.suggestFiles || "",
+        section: button.dataset.suggestSection || button.closest("section")?.id || "",
+        element: button,
+      });
+      return;
+    }
+    const mod = event.target.closest(".mod");
+    if (mod) openSuggest({ target: `Module ${mod.dataset.file}`, files: mod.dataset.file, section: "code", element: mod });
+  });
+
+  window.guide = { openSuggest, copyText, esc, $, $$ };
+
+  // ---------- Command builder ----------
+  const NETWORKS = ["none", "fast-4g", "slow-4g", "3g"];
+  const GOALS = ["size", "gpu", "load"];
+  const KEEP = ["hierarchy", "texture-size", "geometry"];
+  const USAGE = {
+    inspect: "node-assets inspect <file|dir>... [--compare <original|dir>] [--view PX] [--include load-time] [--network-throttling PRESET] [--help]",
+    tune: "node-assets tune <input>... --for GOAL[,GOAL...] [-o <dir|file.toon>] [--fidelity F] [--view PX] [--network-throttling PRESET] [--keep hierarchy,texture-size,geometry] [--timeout SECONDS] [--help]",
+    run: "node-assets run <graph> <input>... -o <out.glb|dir> [--force] [--help]",
+    show: "node-assets show <graph> [--help]",
+  };
+
+  // Mirrors isSafeUnquoted + escapeString in @toon-format/toon 4.4.0 (the CLI's encoder).
+  function toonString(value) {
+    const s = String(value);
+    const safe =
+      s !== "" &&
+      !/^[ \t]|[ \t]$/.test(s) &&
+      s !== "true" && s !== "false" && s !== "null" &&
+      !/^[+-]?\d+(?:\.\d+)?(?:e[+-]?\d+)?$/i.test(s) &&
+      !/[:"\\[\]{},\u0000-\u001F]/.test(s) &&
+      !s.startsWith("-") &&
+      !s.startsWith("#");
+    if (safe) return s;
+    const escaped = s
+      .replace(/\\/g, "\\\\")
+      .replace(/"/g, '\\"')
+      .replace(/\n/g, "\\n")
+      .replace(/\r/g, "\\r")
+      .replace(/\t/g, "\\t")
+      .replace(/[\u0000-\u001F]/g, (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, "0")}`);
+    return `"${escaped}"`;
+  }
+
+  function toonError(code, message, help) {
+    const helpLine = help.length ? `help[${help.length}]: ${help.map(toonString).join(",")}` : "help: []";
+    return `error: ${toonString(message)}\ncode: ${code}\n${helpLine}`;
+  }
+
+  const shellWord = (word) => (/^[A-Za-z0-9_./,:=@%+-]+$/.test(word) ? word : `'${word.replace(/'/g, "'\\''")}'`);
+  const val = (id) => $(`#${id}`).value.trim();
+  const words = (id) => val(id).split(/\s+/).filter(Boolean);
+  const flag = (name, value) => (value === "" ? [] : [name, value]);
+  const isDir = (path) => path.endsWith("/") || path.endsWith("\\") || path === "." || path === ".." || !extname(path);
+  const base = (path) => path.replace(/[\\/]+$/, "").split(/[\\/]/).pop() || path;
+  const extname = (path) => {
+    const name = base(path);
+    const dot = name.lastIndexOf(".");
+    return dot > 0 ? name.slice(dot).toLowerCase() : "";
+  };
+  const stem = (path) => {
+    const name = base(path);
+    const dot = name.lastIndexOf(".");
+    return dot > 0 ? name.slice(0, dot) : name;
+  };
+  const join = (dir, name) => (dir === "." ? name : `${dir.replace(/[\\/]+$/, "")}/${name}`);
+  const norm = (path) => path.replace(/\\/g, "/").replace(/\/{2,}/g, "/").replace(/^(\.\/)+/, "").toLowerCase();
+  const code = (text) => `<code>${esc(text)}</code>`;
+
+  class Fail {
+    constructor(code, message, help = []) {
+      this.code = code;
+      this.message = message;
+      this.help = help;
+    }
+  }
+  const fail = (codeName, message, help) => {
+    throw new Fail(codeName, message, help);
+  };
+  const usage = (message, help) => fail("USAGE", message, help);
+
+  function helpPlan(scope = "") {
+    const command = ["node-assets", scope, "--help"].filter(Boolean).join(" ");
+    return [
+      `Shows the same help as ${code(command)}: conventional usage, description, flags and examples. No current-folder discovery.`,
+      scope ? `Proposed usage: ${code(USAGE[scope])}` : `Commands: ${["inspect", "tune", "run", "show"].map(code).join(", ")}; help is a flag, not a subcommand.`,
+      "Help-fallback exit status is pending. A positional path can be mistaken for an unknown word; missing/unsupported file policy still needs a decision, not a blanket conversion of file errors to help.",
+    ];
+  }
+
+  function builtinOrFile(graph) {
+    const isFile = /[/\\]/.test(graph) || graph.endsWith(".toon");
+    if (!isFile && graph !== "optimize") fail("BAD_GRAPH", `Unknown built-in graph ${graph}`, ["Built-in graphs: optimize; use a path or .toon extension for a graph file"]);
+    return isFile
+      ? `Reads the graph file ${code(graph)}. A missing file fails with ${code("INPUT_NOT_FOUND")}; an invalid one with ${code("BAD_GRAPH")}.`
+      : `Uses the built-in ${code("optimize")} graph: WebP textures up to 2048 px (color q90, data maps q95), quantized geometry, lossless cleanup. No fidelity search.`;
+  }
+
+  function inputsLine(inputs) {
+    const dirs = inputs.filter(isDir);
+    return `Reads ${inputs.map(code).join(" ")}${dirs.length ? ". Folders are searched for supported models" : ""}.`;
+  }
+
+  const COMMANDS = {
+    inspect() {
+      const inputs = words("i-inputs");
+      const compare = val("i-against");
+      const view = val("i-view");
+      const network = val("i-network");
+      const includeValue = val("i-include");
+      const argv = ["inspect", ...inputs, ...flag("--compare", compare), ...flag("--view", view), ...flag("--include", includeValue), ...flag("--network-throttling", network)];
+      const check = () => {
+        if (!inputs.length) return helpPlan("inspect");
+        const net = network || "none";
+        if (!NETWORKS.includes(net)) usage("Unknown network throttling preset", [`presets: ${NETWORKS.join(", ")}`]);
+        const include = includeValue ? includeValue.split(",").map((item) => item.trim()) : [];
+        if (include.some((item) => item !== "load-time")) usage("Unknown --include metric", ["Proposed metrics: load-time; use a comma-separated list"]);
+        const px = view === "" ? 1024 : Number(view);
+        if (!Number.isInteger(px) || px < 16) usage("--view render image size must be an integer of at least 16", ["e.g. --view 1024; not max texture size"]);
+        const plan = [
+          inputsLine(inputs),
+          "Default headless metrics: file bytes, estimated GPU memory, triangles, textures, codecs and required extensions. No default browser load-time measurement.",
+          "Reports each codec's cost once per model. A viewer may reuse/cache codecs across models; no shared-cost arithmetic predicts that.",
+        ];
+        if (compare) {
+          plan.push(
+            isDir(compare)
+              ? `Renders each file and the same-named original in ${code(compare)} (extension ignored) in ${px} px images from 4 views. Reports worst-region SSIM with no pass/fail limit; needs a browser.`
+              : `Renders each file and ${code(compare)} in ${px} px images from 4 views. Reports worst-region SSIM with no pass/fail limit; needs a browser.`,
+          );
+        } else if (view !== "") {
+          plan.push(`${code("--view")} sizes comparison images, so without ${code("--compare")} it has no effect.`);
+        }
+        if (include.includes("load-time")) plan.push(`Requests opt-in browser load-time via a comma-separated include list, throttling ${code(net)}. Measurement implementation and exact rates are pending; no measured values are simulated.`);
+        else {
+          plan.push("No opt-in load-time requested. Without a comparison, no browser is needed.");
+          if (network !== "") plan.push(`${code("--network-throttling")} has no load-time measurement to configure without ${code("--include load-time")}.`);
+        }
+        plan.push("Writes nothing. Work exit 0, or 1 if an input fails; this simulator does not inspect the filesystem.");
+        return plan;
+      };
+      return { argv, check, files: "packages/cli/src/commands/inspect.ts" };
+    },
+
+    tune() {
+      const inputs = words("t-inputs");
+      const forValue = val("t-for");
+      const out = val("t-out");
+      const fidelity = val("t-fidelity");
+      const view = val("t-view");
+      const network = val("t-network");
+      const keepValue = val("t-keep");
+      const time = val("t-time");
+      const argv = ["tune", ...inputs, ...flag("--for", forValue), ...flag("-o", out), ...flag("--fidelity", fidelity), ...flag("--view", view), ...flag("--network-throttling", network), ...flag("--keep", keepValue), ...flag("--timeout", time)];
+      const check = () => {
+        if (!inputs.length) return helpPlan("tune");
+        if (!forValue) usage("missing --for <goal>", [`goals: ${GOALS.join(", ")}`]);
+        const goals = [];
+        for (const goal of forValue.split(",").map((g) => g.trim())) {
+          if (!GOALS.includes(goal)) usage(`unknown goal "${goal}"`, [`goals: ${GOALS.join(", ")}`]);
+          if (!goals.includes(goal)) goals.push(goal);
+        }
+        const floor = Number(fidelity === "" ? 0.9 : fidelity);
+        if (!(floor > 0 && floor <= 1)) usage("--fidelity must be greater than 0 and at most 1", ["e.g. --fidelity 0.9"]);
+        const px = Number(view === "" ? 1024 : view);
+        if (!Number.isInteger(px) || px < 64 || px > 4096) usage("--view must be an integer from 64 to 4096", ["e.g. --view 1024"]);
+        const net = network || "none";
+        if (!NETWORKS.includes(net)) usage("Unknown network throttling preset", [`presets: ${NETWORKS.join(", ")}`]);
+        const keep = new Set(keepValue === "" ? [] : keepValue.split(",").map((k) => k.trim()));
+        for (const k of keep) if (!KEEP.includes(k)) usage("--keep accepts hierarchy, texture-size, geometry", []);
+        const raw = time || "420";
+        const seconds = /^(?:\d+(?:\.\d*)?|\.\d+)$/.test(raw) ? Number(raw) : NaN;
+        if (!Number.isFinite(seconds) || seconds <= 0) usage(`invalid --timeout "${raw}"`, ["Use positive numeric seconds, e.g. --timeout 60 (default 420); no unit suffixes"]);
+        const output = out || ".";
+        const fileOutput = !output.endsWith("/") && extname(output) === ".toon";
+        if (fileOutput && (inputs.length !== 1 || goals.length !== 1)) usage("-o FILE.toon requires exactly one input and one goal", ["Use -o graphs for several inputs or goals; trailing slash not required"]);
+        const files = inputs.filter((input) => !isDir(input));
+        const destinations = new Set();
+        for (const input of files)
+          for (const goal of goals) {
+            const key = norm(fileOutput ? output : join(output, `${stem(input)}.${goal}.toon`));
+            if (destinations.has(key)) usage("Inputs would produce the same graph file", ["Tune these inputs separately with different -o paths"]);
+            destinations.add(key);
+          }
+        const dirs = inputs.filter(isDir);
+        const writes = fileOutput
+          ? [`${output}`, `${output.slice(0, -5)}.png`]
+          : [...files.flatMap((input) => goals.flatMap((goal) => [join(output, `${stem(input)}.${goal}.toon`), join(output, `${stem(input)}.${goal}.png`)])), ...dirs.flatMap((dir) => goals.map((goal) => join(output, `<model>.${goal}.toon + .png`)))];
+        const plan = [
+          inputsLine(inputs),
+          `Renders each original from 4 views at ${px} px, then searches settings for ${goals.map(code).join(", ")}. A candidate passes only if its worst 64 px region scores SSIM ≥ ${floor}.`,
+        ];
+        if (goals.includes("load")) plan.push(`Requests ${code(net)} network throttling for load scoring. Measured load ranking and exact rates are pending; none is not a fixed bandwidth. No load-time number is invented.`);
+        else if (network !== "") plan.push(`${code("--network-throttling")} applies to load scoring, not size/gpu.`);
+        plan.push("Codec bytes count once per model, without shared-codec adjustment. Viewer caching/sharing may differ; goal naming/split remains pending.");
+        if (keep.has("hierarchy")) plan.push("Keeps the node hierarchy: no flattening or instancing.");
+        if (keep.has("texture-size")) plan.push("Keeps texture sizes: no downscaling.");
+        if (keep.has("geometry")) plan.push("Keeps all triangles: no simplification.");
+        plan.push(`Stops starting new search work after ${seconds} seconds. Each input's baseline is always checked. A cut-short run reports ${code("search: partial")}. This timeout and all fidelity limits are temporary to this tune run, never saved in the graph.`);
+        if (fileOutput && dirs.length) plan.push(`If ${code(dirs[0])} holds more than one model, this fails at run time: ${code("-o FILE.toon")} takes one model.`);
+        plan.push(`Writes ${writes.map(code).join(", ")}. Saved graphs contain recipes without limits. Writes no models; use ${code("run")} for that. Paths need no trailing slash; filesystem validity must be checked by the real CLI.`);
+        plan.push("Needs a browser. Exit 0, or 1 if any input fails.");
+        return plan;
+      };
+      return { argv, check, files: "packages/cli/src/commands/tune.ts, packages/cli/src/tune/search.ts" };
+    },
+
+    run() {
+      const graph = val("r-graph");
+      const inputs = words("r-inputs");
+      const out = val("r-out");
+      const force = $("#r-force").checked;
+      const argv = ["run", ...(graph ? [graph] : []), ...inputs, ...flag("-o", out), ...(force ? ["--force"] : [])];
+      const check = () => {
+        if (!graph || !inputs.length || !out) return helpPlan("run");
+        const multi = inputs.length > 1 || inputs.some(isDir);
+        const directory = isDir(out) || extname(out) !== ".glb";
+        if (multi && !directory) usage("Several inputs or a directory cannot write one .glb file", ["Use -o public; no trailing slash required"]);
+        const files = inputs.filter((input) => !isDir(input));
+        const mapping = files.map((input) => [input, directory ? join(out, `${stem(input)}.glb`) : out]);
+        const seen = new Set();
+        for (const [, output] of mapping) {
+          if (seen.has(norm(output))) usage("Inputs would produce the same output file", ["Run these inputs separately with different -o paths"]);
+          seen.add(norm(output));
+          if (files.some((input) => norm(input) === norm(output))) usage("An output is also an input; nothing written", ["Choose a separate output file or directory"]);
+        }
+        const graphLine = builtinOrFile(graph);
+        const plan = [graphLine, inputsLine(inputs)];
+        for (const [input, output] of mapping) plan.push(`${code(input)} → ${code(output)}`);
+        for (const dir of inputs.filter(isDir)) plan.push(`Each model in ${code(dir)} → ${code(join(out, "<model>.glb"))}`);
+        plan.push("Writes no CLI provenance hashes in GLB extras. No-op detection and existing-output/overwrite policy after removing hashes are unresolved; no replacement mechanism is assumed.");
+        if (force) plan.push(`${code("--force")} requests overwrite, but exact existing-output semantics remain pending; this simulator cannot promise replacement.`);
+        plan.push("No rendering, saved limits or threshold enforcement. Needs no browser. To report a score separately, use inspect --compare.");
+        plan.push("Output path kind comes from the filesystem in the real CLI; no trailing slash is required.");
+        plan.push("Exit 0 if every input succeeds, else 1.");
+        return plan;
+      };
+      return { argv, check, files: "packages/cli/src/commands/run.ts" };
+    },
+
+    show() {
+      const graphs = words("s-graph");
+      const argv = ["show", ...graphs];
+      const check = () => {
+        if (!graphs.length) return helpPlan("show");
+        if (graphs.length !== 1) usage("show requires one graph", [USAGE.show]);
+        return [builtinOrFile(graphs[0]), "Prints it as TOON on stdout with every block setting filled in. Writes nothing.", `Save a copy to edit: ${code(`node-assets show ${graphs[0]} > graphs/mine.toon`)}`];
+      };
+      return { argv, check, files: "packages/cli/src/commands/show.ts" };
+    },
+
+    help() {
+      const argv = words("h-input");
+      const scope = Object.hasOwn(USAGE, argv[0]) ? argv[0] : "";
+      return { argv, check: () => helpPlan(scope), files: "packages/cli/src/cli.ts, packages/cli/src/help.ts" };
+    },
+  };
+
+  const builder = $("#builder");
+  const selected = () => $('input[name="b-cmd"]:checked', builder).value;
+  let lastResult = { line: "", text: "", files: "" };
+
+  function updateBuilder() {
+    const cmd = selected();
+    for (const group of $$("div.fields[data-cmd]", builder)) group.classList.toggle("hidden", group.dataset.cmd !== cmd);
+    const { argv, check, files } = COMMANDS[cmd]();
+    const line = ["node-assets", ...argv].map(shellWord).join(" ");
+    $("#b-line").innerHTML = `<span class="cmd">$</span> ${esc(line)}`;
+    const status = $("#b-status");
+    const body = $("#b-body");
+    try {
+      const plan = check();
+      status.className = "status ok";
+      status.textContent = "✓ Illustrative proposed plan · not executed";
+      body.innerHTML = `<ul class="small">${plan.map((item) => `<li>${item}</li>`).join("")}</ul>`;
+      lastResult = { line, text: plan.map((item) => `- ${item.replace(/<[^>]+>/g, "").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&").replace(/&quot;/g, '"').replace(/&#39;/g, "'")}`).join("\n"), files };
+    } catch (error) {
+      if (!(error instanceof Fail)) throw error;
+      const exit = error.code === "USAGE" ? 2 : 1;
+      const out = toonError(error.code, error.message, error.help);
+      status.className = "status err";
+      status.textContent = `✕ Proposed validation · ${error.code} · illustrative exit ${exit}`;
+      body.innerHTML = `<pre class="term">${esc(out)}</pre>`;
+      lastResult = { line, text: `${out}\n[exit ${exit}]`, files };
+    }
+  }
+
+  const EXAMPLES = {
+    "tune-ok": { cmd: "tune", set: {} },
+    "tune-view": { cmd: "tune", set: { "t-view": "32" } },
+    "tune-file": { cmd: "tune", set: { "t-out": "graphs/duck.toon" } },
+    "tune-time": { cmd: "tune", set: { "t-time": "2d" } },
+    "tune-time-ok": { cmd: "tune", set: { "t-time": "60" } },
+    "run-check": { cmd: "run", set: { "r-graph": "graphs/duck.size.toon", "r-inputs": "assets/", "r-out": "public" } },
+    "run-dir": { cmd: "run", set: { "r-inputs": "assets/", "r-out": "public/models.glb" } },
+    "inspect-against": { cmd: "inspect", set: { "i-inputs": "public/", "i-against": "assets/" } },
+    "inspect-net": { cmd: "inspect", set: { "i-include": "load-time", "i-network": "3g" } },
+    "help-top": { cmd: "help", set: { "h-input": "foo" } },
+    "help-tune": { cmd: "help", set: { "h-input": "tune foo" } },
+    "show-bad": { cmd: "show", set: { "s-graph": "optimise" } },
+  };
+
+  $("#b-example").addEventListener("change", (event) => {
+    const example = EXAMPLES[event.target.value];
+    if (!example) return;
+    $(`input[name="b-cmd"][value="${example.cmd}"]`, builder).checked = true;
+    for (const input of $$(`div.fields[data-cmd="${example.cmd}"] input`, builder)) {
+      if (input.type === "checkbox") input.checked = input.defaultChecked;
+      else input.value = input.defaultValue;
+    }
+    for (const [id, value] of Object.entries(example.set)) {
+      const input = $(`#${id}`);
+      if (input.type === "checkbox") input.checked = value;
+      else input.value = value;
+    }
+    updateBuilder();
+  });
+
+  builder.addEventListener("input", updateBuilder);
+  builder.addEventListener("change", updateBuilder);
+
+  $("#b-copy").addEventListener("click", async (event) => {
+    const button = event.currentTarget;
+    const ok = await copyText(lastResult.line);
+    button.textContent = ok ? "Copied" : "Copy failed";
+    setTimeout(() => (button.textContent = "Copy"), 1500);
+  });
+
+  $("#b-suggest").addEventListener("click", (event) => {
+    openSuggest({
+      target: `Behavior of: ${lastResult.line}`,
+      files: lastResult.files,
+      section: "try",
+      context: `$ ${lastResult.line}\n${lastResult.text}`,
+      element: event.currentTarget,
+    });
+  });
+
+  updateBuilder();
+  window.guide.toonString = toonString;
+  window.guide.commands = COMMANDS;
+})();
+</script>
+
+<script>
+(() => {
+  "use strict";
+  const { $, $$, esc } = window.guide;
+  const code = (text) => `<code>${esc(text)}</code>`;
+  const suggestButton = (target, files, section, label = "Suggest") =>
+    `<button class="btn suggest small" type="button" data-suggest-target="${esc(target)}" data-suggest-files="${esc(files)}" data-suggest-section="${esc(section)}">${esc(label)}</button>`;
+
+  // ---------- Legacy provisional-estimate explainer ----------
+  const COEF = { c0: 38.28, draco: 39.84, meshopt: 0, ktx2: 271.48, draco_mb: 180.93, meshopt_mb: 19.58, plain_mb: 7.53, mp_avif: 9, mp_webp: 8.77, mp_jpeg: 8.41, mp_png: 13.27, mp_ktx2: 22.03 };
+  const DECODER_BYTES = { draco: 74865, meshopt: 6694, ktx2: 264668 };
+  const PRESETS = {
+    orig: { bytes: 120484, img: 16302, fmt: "png", mp: 0.262144, geo: "plain" },
+    size: { bytes: 22724, img: 4000, fmt: "avif", mp: 0.065536, geo: "meshopt" },
+    gpu: { bytes: 28140, img: 10000, fmt: "ktx2", mp: 0.065536, geo: "meshopt" },
+  };
+  const calcFields = ["c-bytes", "c-img", "c-fmt", "c-mp", "c-geo", "c-net"];
+  const fmtMs = (ms) => `${ms.toFixed(1)} ms`;
+  const fmtInt = (n) => Math.round(n).toLocaleString("en-US");
+
+  function applyPreset(name) {
+    const preset = PRESETS[name];
+    if (!preset) return;
+    $("#c-bytes").value = preset.bytes;
+    $("#c-img").value = preset.img;
+    $("#c-fmt").value = preset.fmt;
+    $("#c-mp").value = preset.mp;
+    $("#c-geo").value = preset.geo;
+    $("#c-net").value = "9";
+  }
+
+  function computeLoad() {
+    const num = (id) => ($(`#${id}`).value.trim() === "" ? NaN : Number($(`#${id}`).value));
+    const bytes = num("c-bytes");
+    const fmt = $("#c-fmt").value;
+    const img = fmt === "none" ? 0 : num("c-img");
+    const mp = fmt === "none" ? 0 : num("c-mp");
+    const geo = $("#c-geo").value;
+    const mbps = num("c-net");
+    if (![bytes, img, mp].every((n) => Number.isFinite(n) && n >= 0) || img > bytes || !Number.isFinite(mbps) || mbps <= 0) {
+      $("#c-total").textContent = "—";
+      $("#c-cli").textContent = "Enter numbers ≥ 0, image bytes ≤ file bytes, and illustrative bandwidth > 0 Mbps.";
+      $("#c-parts").innerHTML = "";
+      $("#c-size").textContent = "";
+      return;
+    }
+    const geometryMB = Math.max(0, bytes - img) / 1e6;
+    const terms = [["c0", "Fixed overhead", 1]];
+    if (geo !== "plain") terms.push([geo, `${geo} decoder start-up`, 1]);
+    if (fmt === "ktx2") terms.push(["ktx2", "ktx2 decoder start-up", 1]);
+    terms.push([`${geo}_mb`, `Geometry: ${geometryMB.toFixed(3)} MB × ${COEF[`${geo}_mb`]} ms/MB`, geometryMB]);
+    if (fmt !== "none" && mp > 0) terms.push([`mp_${fmt}`, `Images: ${mp} MP ${fmt.toUpperCase()} × ${COEF[`mp_${fmt}`]} ms/MP`, mp]);
+    const decodeRows = terms.map(([key, label, amount]) => [label, COEF[key] * amount]);
+    const decodeMs = Math.max(0, decodeRows.reduce((sum, [, ms]) => sum + ms, 0));
+    const decoders = [...(geo !== "plain" ? [geo] : []), ...(fmt === "ktx2" ? ["ktx2"] : [])];
+    const decoderBytes = decoders.reduce((sum, name) => sum + DECODER_BYTES[name], 0);
+    const sent = bytes + decoderBytes;
+    const downloadS = (sent * 8) / (mbps * 1e6);
+    const total = downloadS + decodeMs / 1000;
+    $("#c-total").textContent = `${total.toFixed(3)} s`;
+    $("#c-cli").innerHTML = `Legacy-style rounded estimate: ${code(Math.round(total * 100) / 100)} s. Not proposed measured output.`;
+    $("#c-parts").innerHTML = [
+      `<tr><th>Download</th><th class="num">${fmtMs(downloadS * 1000)}</th></tr>`,
+      `<tr><td>${fmtInt(bytes)} B file${decoderBytes ? ` + ${fmtInt(decoderBytes)} B codecs (${decoders.join(" + ")}, once per model)` : ""} at illustrative ${mbps} Mbps</td><td class="num"></td></tr>`,
+      `<tr><th>Decode (provisional)</th><th class="num">${fmtMs(decodeMs)}</th></tr>`,
+      ...decodeRows.map(([label, ms]) => `<tr><td>${esc(label)}</td><td class="num">${fmtMs(ms)}</td></tr>`),
+    ].join("");
+    $("#c-size").textContent = `Per-model byte cost: ${fmtInt(bytes)} + ${fmtInt(decoderBytes)} = ${fmtInt(sent)} B. Real viewers may share/cache codecs; no cross-model prediction. Goal naming is pending.`;
+  }
+
+  $("#c-preset").addEventListener("change", (event) => {
+    applyPreset(event.target.value);
+    computeLoad();
+  });
+  for (const id of calcFields)
+    $(`#${id}`).addEventListener("input", (event) => {
+      $("#c-preset").value = "custom";
+      if (id === "c-fmt" && event.target.value === "none") {
+        $("#c-img").value = 0;
+        $("#c-mp").value = 0;
+      }
+      computeLoad();
+    });
+  applyPreset("orig");
+  computeLoad();
+
+  // ---------- Baseline search adapted to the proposed goals ----------
+  const STEPS = [
+    {
+      title: "Reference render",
+      what: `Renders the original from 4 views at ${code("--view")} px (default 1024). Every candidate is compared to these images.`,
+      fn: "setReferenceAsync",
+      goals: { size: "Same for every goal.", gpu: "Same for every goal.", load: "Same for every goal." },
+    },
+    {
+      title: "Baseline",
+      what: `Lossless cleanup, plus quantized geometry. The progress line calls it ${code("baseline (cleanup only)")}, which hides the quantize. Always checked, even when time is up.`,
+      fn: "evaluateAsync(\"baseline (cleanup only)\")",
+      goals: {
+        size: "Cleanup + quantize.",
+        gpu: "Cleanup + quantize.",
+        load: "Cleanup + quantize.",
+      },
+    },
+    {
+      title: "First geometry options",
+      what: "Tries each goal's first geometry choices on top of the baseline.",
+      fn: "geoEvalAsync, PLAN[goal].geo[0]",
+      goals: {
+        size: "Draco (14/10/12 bits), then meshopt high.",
+        gpu: "meshopt medium.",
+        load: "meshopt high, then Draco (14/10/12 bits).",
+      },
+    },
+    {
+      title: "First textures, largest size",
+      what: "Tries each goal's first texture format at the original's largest texture size, quality 90/90. If that fails, the format is dropped.",
+      fn: "sizeTopAsync",
+      goals: { size: "AVIF.", gpu: null, load: "AVIF." },
+      skip: { gpu: "KTX2 has no quality setting, so nothing renders here. Its largest size is tried in the size search." },
+    },
+    {
+      title: "Combine",
+      what: "Pairs every passing texture result with every passing geometry result. Predicted bytes = textures + geometry − baseline. Builds the best 4 predictions per goal, stopping at the first that passes or when none can beat the current best by 0.5%. Skips pairs at least as lossy as one that already failed.",
+      fn: "combineAsync",
+      goals: { size: "Ranked by file bytes + each codec's bytes once per model.", gpu: "Ranked by estimated GPU memory.", load: "Load measurement/ranking is pending; baseline provisional estimates are not measured loads." },
+    },
+    {
+      title: "Texture size search",
+      what: `Binary search for the smallest texture size that passes. Sizes are 256, 512, 768, 1024, 1536, 2048, 3072, 4096 below the original's largest, plus the original's largest. With ${code("--keep texture-size")}, only the original size.`,
+      fn: "sizeSearchAsync",
+      goals: { size: "AVIF, if step 4 passed.", gpu: "KTX2 (ETC1S color + UASTC data), all sizes.", load: "AVIF, if step 4 passed." },
+    },
+    { title: "Combine", what: "Same as step 5, with the new texture results.", fn: "combineAsync", goals: { size: "", gpu: "", load: "" } },
+    {
+      title: "Texture quality search",
+      what: "At the chosen size: the lowest quality below 90 that passes with both maps equal, then a lower color quality, then a lower data quality. Levels are 30–90 in steps of 10.",
+      fn: "qualitySearchAsync",
+      goals: { size: "AVIF.", gpu: null, load: "AVIF." },
+      skip: { gpu: "KTX2 quality isn't searched." },
+    },
+    {
+      title: "Second geometry options",
+      what: "Tries each goal's second geometry choices.",
+      fn: "geoEvalAsync, PLAN[goal].geo[1]",
+      goals: { size: "Draco low (11/8/10 bits).", gpu: null, load: "meshopt medium." },
+      skip: { gpu: "No second choice." },
+    },
+    {
+      title: "Simplify",
+      what: `Only for models with more than 2,000 triangles and no ${code("--keep geometry")}. Finds the lowest ratio of 0.25, 0.5 or 0.75 that passes. The ratio is a target: an error limit of 0.002 can make it keep more triangles. If a ratio passes, retries the first geometry options at that ratio.`,
+      fn: "simplifySearchAsync",
+      goals: { size: "Searched with quantize; then retries Draco and meshopt high.", gpu: "Searched with quantize; then retries meshopt medium.", load: "Searched with quantize; then retries meshopt high and Draco." },
+    },
+    { title: "Combine", what: "Same as step 5, with the new geometry results.", fn: "combineAsync", goals: { size: "", gpu: "", load: "" } },
+    {
+      title: "Second texture formats",
+      what: "Tries each goal's fallback texture formats.",
+      fn: "sizeSearchAsync, qualitySearchAsync",
+      goals: {
+        size: "WebP: largest size, size search, quality search.",
+        gpu: "KTX2 all-UASTC at sizes below the step 6 winner, and KTX2 all-ETC1S at the same size. If step 6 found nothing, a full size search for each.",
+        load: "WebP: largest size, size search, quality search.",
+      },
+    },
+    { title: "Combine", what: "Same as step 5, with the new texture results.", fn: "combineAsync", goals: { size: "", gpu: "", load: "" } },
+    {
+      title: "Pick winners",
+      what: `Lowest score among candidates passing this tune run's SSIM threshold. Retain the baseline 1% tie rule: higher fidelity (2 decimals), then fewer bytes. Write a recipe and preview PNG, never limits or timeout in the graph. If nothing passed: ${code("INVALID_INPUT")}; try a longer ${code("--timeout")} or lower SSIM threshold via ${code("--fidelity")} (name pending).`,
+      fn: "winners loop at the end of tuneAsync",
+      goals: { size: "", gpu: "", load: "" },
+    },
+  ];
+  let goal = "size";
+  let stepIndex = 0;
+  const stepList = $("#t-steps");
+  const detail = $("#t-detail");
+
+  stepList.innerHTML = STEPS.map((step, i) => `<div role="listitem"><button type="button" data-step="${i}"><span class="n">${i + 1}</span>${esc(step.title)}</button></div>`).join("");
+  const stepButtons = $$("button[data-step]", stepList);
+
+  function renderStepper() {
+    stepButtons.forEach((button, i) => {
+      button.classList.toggle("na", STEPS[i].goals[goal] === null);
+      if (i === stepIndex) button.setAttribute("aria-current", "step");
+      else button.removeAttribute("aria-current");
+    });
+    for (const button of $$("[data-goal]")) button.setAttribute("aria-pressed", String(button.dataset.goal === goal));
+    const step = STEPS[stepIndex];
+    const forGoal = step.goals[goal];
+    const goalLine = forGoal === null ? `<p><b>For ${esc(goal)}:</b> skipped. ${step.skip?.[goal] ?? ""}</p>` : forGoal ? `<p><b>For ${esc(goal)}:</b> ${forGoal}</p>` : "";
+    detail.innerHTML = `
+      <div class="eyebrow">Step ${stepIndex + 1} of ${STEPS.length}</div>
+      <h3>${esc(step.title)}</h3>
+      <p>${step.what}</p>
+      ${goalLine}
+      <p class="small muted">Adapted baseline source: ${code("packages/cli/src/tune/search.ts")} · ${code(step.fn)}${step.fn.includes("PLAN") ? ` · lists in ${code("tune/plan.ts")}` : ""}. Proposed flow, not new run evidence. Timeout defaults to 420 seconds; steps after the baseline may be skipped. All limits are temporary to this tune run.</p>
+      <div class="btn-row">
+        <button class="btn small" type="button" data-move="-1" ${stepIndex === 0 ? "disabled" : ""}>← Previous</button>
+        <button class="btn small" type="button" data-move="1" ${stepIndex === STEPS.length - 1 ? "disabled" : ""}>Next →</button>
+        ${suggestButton(`tune step ${stepIndex + 1}: ${step.title}`, "packages/cli/src/tune/search.ts, packages/cli/src/tune/plan.ts", "tune")}
+      </div>`;
+  }
+
+  stepList.addEventListener("click", (event) => {
+    const button = event.target.closest("button[data-step]");
+    if (!button) return;
+    stepIndex = Number(button.dataset.step);
+    renderStepper();
+  });
+  stepList.addEventListener("keydown", (event) => {
+    const delta = { ArrowDown: 1, ArrowUp: -1 }[event.key];
+    if (!delta) return;
+    event.preventDefault();
+    stepIndex = Math.min(STEPS.length - 1, Math.max(0, stepIndex + delta));
+    renderStepper();
+    stepButtons[stepIndex].focus();
+  });
+  detail.addEventListener("click", (event) => {
+    const button = event.target.closest("button[data-move]");
+    if (!button) return;
+    stepIndex = Math.min(STEPS.length - 1, Math.max(0, stepIndex + Number(button.dataset.move)));
+    renderStepper();
+  });
+  for (const button of $$("[data-goal]"))
+    button.addEventListener("click", () => {
+      goal = button.dataset.goal;
+      renderStepper();
+    });
+  renderStepper();
+
+  // ---------- Real runs ----------
+  const examples = $$("script.example").map((script) => ({
+    id: script.id.replace(/^ex-/, ""),
+    label: script.dataset.label,
+    commit: script.dataset.commit,
+    note: script.dataset.note,
+    render: script.dataset.render === "true",
+    text: script.textContent.replace(/^\n/, "").replace(/\n$/, ""),
+  }));
+  const exButtons = $("#ex-buttons");
+  exButtons.innerHTML = examples.map((example) => `<button class="btn small" type="button" data-example="${esc(example.id)}" aria-pressed="false">${esc(example.label)}</button>`).join("");
+
+  function lineHtml(line) {
+    if (line.startsWith("$ ")) return `<span class="cmd">${esc(line)}</span>`;
+    if (/^(run|tune|inspect): /.test(line) || /^\[exit \d+\]$/.test(line)) return `<span class="stderr">${esc(line)}</span>`;
+    return esc(line);
+  }
+
+  function showExample(id) {
+    const example = examples.find((e) => e.id === id) ?? examples[0];
+    for (const button of $$("button[data-example]", exButtons)) button.setAttribute("aria-pressed", String(button.dataset.example === example.id));
+    const verified = example.commit === "ab42afe";
+    $("#ex-label").innerHTML = [
+      `<span class="tag ${verified ? "verified" : "older"}">legacy ${verified ? "baseline" : "render-era baseline"} · ${esc(example.commit)}</span>`,
+      example.render ? `<span class="chip">historical browser run</span>` : `<span class="chip">historical non-render run</span>`,
+      `<span class="small muted">${esc(example.note)} · unchanged old stdout/flags, not proposed commands</span>`,
+      suggestButton(`Legacy baseline output (not proposed): ${example.label}`, "packages/cli/src/output.ts", "output"),
+    ].join("");
+    $("#ex-out").innerHTML = example.text.split("\n").map(lineHtml).join("\n");
+  }
+
+  exButtons.addEventListener("click", (event) => {
+    const button = event.target.closest("button[data-example]");
+    if (button) showExample(button.dataset.example);
+  });
+  if (examples.length) showExample(examples.find((e) => e.id === "tune")?.id ?? examples[0].id);
+
+  // ---------- Error filter ----------
+  const errRows = $$("#err-rows tr");
+  $("#err-filter").addEventListener("input", (event) => {
+    const query = event.target.value.trim().toLowerCase();
+    let shown = 0;
+    for (const row of errRows) {
+      const match = !query || row.textContent.toLowerCase().includes(query);
+      row.classList.toggle("hidden", !match);
+      shown += match;
+    }
+    $("#err-empty").classList.toggle("hidden", shown > 0);
+  });
+
+  // ---------- Noticed ----------
+  const NOTICED = [
+    {
+      title: "Goal names and support filter",
+      body: `Compat removal is decided. The ${code("disk-size")} / ${code("download-size")} / ${code("load-speed")} split is not. Current size/gpu/load names remain placeholders. A roughly 97% browser-support threshold is deferred, not implemented.`,
+      files: "packages/cli/src/measure.ts, packages/cli/src/tune/plan.ts",
+    },
+    {
+      title: "Render image size vs texture size",
+      body: `${code("--view")} sizes rendered comparison images, not textures: baseline default 1024, tune range 64–4096 (baseline inspect accepts integers ≥16). Alex's ${code("--max-texture-size")} / 4096 request assumed a different meaning. Keep render control naming/default open; don't silently change its purpose or impose a new validation rule.`,
+      files: "packages/cli/src/arguments.ts, packages/cli/src/commands/tune.ts",
+    },
+    {
+      title: "Requested metric name doesn't match SSIM",
+      body: `${code("--min-pixel-diff-ratio")} was requested for the visual threshold, but the retained metric is worst-region SSIM over four views, not pixel difference. Keep ${code("--fidelity")} with an explicit SSIM label until metric/naming is decided. The &gt;0..1 threshold is temporary to tune only.`,
+      files: "packages/cli/src/commands/tune.ts, packages/cli/src/render/ssim.ts",
+    },
+    {
+      title: "Opt-in loads and real throttle rates",
+      body: `${code("--include load-time")} is a comma-separated opt-in interface; no second metric has been invented. ${code("--network-throttling")} accepts none/fast-4g/slow-4g/3g, default none. Baseline load_s is headless provisional arithmetic. Browser measurement and exact rates remain pending; none has no fixed Mbps.`,
+      files: "packages/cli/src/commands/inspect.ts, packages/cli/src/measure.ts, packages/cli/src/loadModel.ts",
+    },
+    {
+      title: "No-op and overwrite after removing hashes",
+      body: `No provenance hashes in extras is decided. Baseline no-op detection uses those hashes, so no-op/overwrite policy and ${code("--force")} details need a decision. No sidecars or alternative tracking are assumed. Old graph migration after removing saved limits also remains open.`,
+      files: "packages/cli/src/provenance.ts, packages/cli/src/commands/run.ts, packages/cli/src/graphFiles.ts",
+    },
+    {
+      title: "Nearest help vs positional file failures",
+      body: `No-args/unknown commands show nearest help with ${code("--help")}; no live folder discovery. But ${code("tune foo")} can contain a model path. Missing/unsupported positional-path policy and help exit status need a decision, not a blanket conversion of file errors to help.`,
+      files: "packages/cli/src/cli.ts, packages/cli/src/help.ts, packages/cli/src/inputs.ts",
+    },
+    {
+      title: "GPU approximation TODO is recorded, not coded",
+      body: `Keep the 4 B/px non-KTX2 approximation. Actual R/RG/RGB/RGBA storage needs checking; add the source TODO during an approved implementation, not this guide-only pass.`,
+      files: "packages/cli/src/measure.ts",
+    },
+    {
+      title: "Retained baseline cautions",
+      body: `“baseline (cleanup only)” also quantizes geometry. “simplify 0.25” is a target, not guaranteed 25%: the older a9329e2 duck kept 2,526/4,212 triangles (about 60%) with the 0.002 block error setting. These are historical details, not new tests.`,
+      files: "packages/cli/src/tune/search.ts, packages/cli/src/tune/stages.ts",
+    },
+  ];
+  $("#noticed-list").innerHTML = NOTICED.map(
+    (item) => `<div class="soft">
+      <div class="label-row" style="margin-top: 0;"><span class="tag inferred">inferred</span></div>
+      <h3>${esc(item.title)}</h3>
+      <p class="small">${item.body}</p>
+      <p class="small muted mono">${esc(item.files)}</p>
+      ${suggestButton(item.title, item.files, "noticed")}
+    </div>`,
+  ).join("");
+})();
+</script>
+</body>
+</html>

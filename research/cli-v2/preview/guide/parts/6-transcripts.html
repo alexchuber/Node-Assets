@@ -1,0 +1,125 @@
+
+<!-- Real CLI output, generated from saved transcripts. Do not edit by hand. -->
+<script type="text/plain" class="example" id="ex-home" data-label="Home screen" data-commit="a9329e2" data-note="older build, before the structure cleanup · stdout only · paths redacted" data-render="false">
+$ node-assets
+bin: <temporary-prefix>/bin/node-assets
+description: "Make 3D models small and web-ready: inspect models, tune a graph for size, gpu, load or compat, and run graphs"
+models[2]{file,bytes}:
+  assets/helmet.glb,3773916
+  assets/duck.glb,120484
+graphs: 0 graphs found under the current directory
+builtins[1]{name,file,description}:
+  optimize,<temporary-prefix>/lib/node_modules/node-assets-cli/graphs/optimize.toon,"WebP up to 2048 px (color q90, data q95), quantized geometry, lossless cleanup"
+help[5]: "node-assets inspect <file|dir>: size, GPU memory, load time and decoders","node-assets tune <input> --for size|gpu|load|compat -o graphs/: search for a goal within a fidelity limit","node-assets run optimize <input> -o <out.glb|dir/>: apply the built-in graph","node-assets show optimize: print every block setting","node-assets <command> --help: flags and examples; node-assets help: full manual"
+</script>
+<script type="text/plain" class="example" id="ex-inspect" data-label="inspect a file" data-commit="ab42afe" data-note="baseline install evidence · stdout + stderr · paths redacted" data-render="false">
+$ node-assets inspect duck.glb
+file: duck.glb
+status: ok
+bytes: 120484
+gpu_mib: 1.4
+load_s: 0.15
+triangles: 4212
+textures: 1x png 512x512
+decoders: none
+required_extensions: none
+[exit 0]
+</script>
+<script type="text/plain" class="example" id="ex-inspect-dir" data-label="inspect a folder" data-commit="a9329e2" data-note="older build, before the structure cleanup · stdout only · paths redacted" data-render="false">
+$ node-assets inspect assets/
+count: 2 models found
+models[2]{file,status,bytes,gpu_mib,load_s,triangles,textures,decoders,required_extensions}:
+  assets/helmet.glb,ok,3773916,107.2,3.57,15452,5x jpeg 2048x2048,none,none
+  assets/duck.glb,ok,120484,1.4,0.15,4212,1x png 512x512,none,none
+</script>
+<script type="text/plain" class="example" id="ex-tune" data-label="tune for size + gpu" data-commit="a9329e2" data-note="older build, before the structure cleanup · stdout only · paths redacted" data-render="true">
+$ node-assets tune assets/duck.glb --for size,gpu -o graphs/
+limits:
+  fidelity: ">= 0.9 (worst 64px-region SSIM vs original, 4 views at 1024px)"
+  network: 4g (9 Mbps)
+  decoders_amortized_over: 1 asset(s)
+originals[1]{input,bytes,gpu_mib,load_s}:
+  assets/duck.glb,120484,1.4,0.15
+results[2]{input,goal,graph,bytes,decoder_bytes,gpu_mib,load_s,fidelity,textures,geometry,decoders,search,preview}:
+  assets/duck.glb,size,graphs/duck.size.toon,22724,6694,0.4,0.07,0.929,avif q30/30 (color/data maps) <=256px,meshopt-high simplify 0.25,meshopt,complete,graphs/duck.size.png
+  assets/duck.glb,gpu,graphs/duck.gpu.toon,28140,271362,0.1,0.58,0.929,ktx2 etc1s+uastc <=256px,meshopt-high simplify 0.25,meshopt+ktx2,complete,graphs/duck.gpu.png
+warnings[4]: "duck.size: output needs the meshopt decoder (7 KB gzip): Babylon.js loads it automatically; other viewers must be set up to load it","duck.size: uses AVIF textures (EXT_texture_avif): no decoder download, but the browser must support AVIF","duck.gpu: output needs the meshopt decoder (7 KB gzip): Babylon.js loads it automatically; other viewers must be set up to load it","duck.gpu: output needs the ktx2 decoder (265 KB gzip): Babylon.js loads it automatically; other viewers must be set up to load it"
+help[3]: Run `node-assets run <graph> <input> -o <out.glb>` to apply a graph (add --check on other models to verify it suits them),"Every result meets the fidelity limit at 1024px (worst-region SSIM >= 0.9; previews show the worst view). If the model will be shown larger or up close (VR, zoom), tune again with --view 2048; for extra margin, raise --fidelity","Edit a graph file to mix blocks from different goals, then use `node-assets run <graph> <input> -o <out.glb> --check`"
+</script>
+<script type="text/plain" class="example" id="ex-check" data-label="run --check" data-commit="a9329e2" data-note="older build, before the structure cleanup · stdout only · paths redacted" data-render="true">
+$ node-assets run graphs/duck.size.toon assets/duck.glb -o public/duck.glb --check
+count: "1 written or up to date, 0 failed, 0 skipped"
+results[1]{input,output,status,bytes_before,bytes_after,gpu_mib,decoders,fidelity,check}:
+  assets/duck.glb,public/duck.glb,ok,120484,22796,0.4,meshopt,0.929,pass
+total: 120484 bytes -> 22796 bytes
+warnings[2]: "output needs the meshopt decoder (7 KB gzip): Babylon.js loads it automatically; other viewers must be set up to load it","uses AVIF textures (EXT_texture_avif): the browser must support AVIF"
+</script>
+<script type="text/plain" class="example" id="ex-run" data-label="run optimize, twice" data-commit="ab42afe" data-note="baseline install evidence · stdout + stderr · paths redacted" data-render="false">
+$ node-assets run optimize duck.glb -o out/duck.glb
+run: duck.glb
+count: "1 written or up to date, 0 failed, 0 skipped"
+results[1]{input,output,status,bytes_before,bytes_after,gpu_mib,decoders}:
+  duck.glb,out/duck.glb,ok,120484,82852,1.4,none
+total: 120484 bytes -> 82852 bytes
+help[1]: "node-assets inspect <output> --against <input>: measure fidelity and load time"
+[exit 0]
+
+$ node-assets run optimize duck.glb -o out/duck.glb
+count: "1 written or up to date, 0 failed, 0 skipped"
+results[1]{input,output,status,bytes_before,bytes_after,gpu_mib,decoders}:
+  duck.glb,out/duck.glb,up to date (no-op),120484,82852,1.4,none
+total: 120484 bytes -> 82852 bytes
+help[1]: "node-assets inspect <output> --against <input>: measure fidelity and load time"
+[exit 0]
+</script>
+<script type="text/plain" class="example" id="ex-against" data-label="inspect --against" data-commit="a9329e2" data-note="older build, before the structure cleanup · stdout only · paths redacted" data-render="true">
+$ node-assets inspect public/ --against assets/
+count: 2 models found
+models[2]{file,status,bytes,gpu_mib,load_s,triangles,textures,decoders,required_extensions,against,fidelity,original{file,bytes,gpu_mib,load_s}}:
+  public/helmet.glb,ok,3101808,107,2.98,15452,5x webp 2048x2048,none,EXT_texture_webp+KHR_mesh_quantization,assets/helmet.glb,0.987,assets/helmet.glb,3773916,107.2,3.57
+  public/duck.glb,ok,22796,0.4,0.07,2526,1x avif 256x256,meshopt,EXT_meshopt_compression+EXT_texture_avif+KHR_mesh_quantization,assets/duck.glb,0.929,assets/duck.glb,120484,1.4,0.15
+warnings[2]: "output needs the meshopt decoder (7 KB gzip): Babylon.js loads it automatically; other viewers must be set up to load it","uses AVIF textures (EXT_texture_avif): the browser must support AVIF"
+note: fidelity = worst 64px-region SSIM over 4 views at 1024px; load_s is estimated on 4g with provisional decode coefficients
+</script>
+<script type="text/plain" class="example" id="ex-show" data-label="show optimize" data-commit="ab42afe" data-note="baseline install evidence · stdout + stderr · paths redacted" data-render="false">
+$ node-assets show optimize
+graph: 1
+name: optimize
+blocks[9]:
+  - type: transform.metal-rough
+  - type: transform.dedup
+  - type: transform.cull-unused
+  - type: transform.weld
+  - type: transform.resize-textures
+    config:
+      maxSize: 2048
+      slots: all
+  - type: transform.encode-textures
+    config:
+      format: webp
+      quality: 90
+      slots: color
+  - type: transform.encode-textures
+    config:
+      format: webp
+      quality: 95
+      slots: data
+  - type: transform.quantize
+  - type: transform.cull-unused
+[exit 0]
+</script>
+<script type="text/plain" class="example" id="ex-cmd-help" data-label="show --help" data-commit="ab42afe" data-note="baseline install evidence · stdout + stderr · paths redacted" data-render="false">
+$ node-assets show --help
+usage: node-assets show <graph>
+description: "Print a graph file or built-in graph as TOON, with every block setting filled in. Bare names select built-ins; a path or .toon extension selects a file."
+flags[1]: "-h, --help"
+examples[3]: node-assets show optimize,node-assets show optimize > mine.toon,node-assets show mine.toon
+[exit 0]
+</script>
+<script type="text/plain" class="example" id="ex-usage" data-label="usage error" data-commit="ab42afe" data-note="baseline install evidence · stdout + stderr · paths redacted" data-render="false">
+$ node-assets tune
+error: missing <input>
+code: USAGE
+help[1]: "node-assets tune <input>... --for GOAL[,GOAL...] [-o <dir/|file.toon>] [--fidelity F] [--view PX] [--network NET] [--amortize N] [--keep hierarchy,texture-size,geometry] [--time-limit DUR]"
+[exit 2]
+</script>

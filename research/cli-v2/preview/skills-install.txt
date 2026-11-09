@@ -1,0 +1,32 @@
+
+│
+●   github_copilot_app_agent  Agent detected — installing non-interactively
+│
+◇  Source: <checkout>
+│
+◇  Local path validated
+│
+◇  Found 1 skill
+│
+●  Selected 1 skill: node-assets-cli
+
+│
+◇  Installation Summary ─────────────╮
+│                                    │
+│  ./.agents/skills/node-assets-cli  │
+│    copy → Claude Code              │
+│                                    │
+├────────────────────────────────────╯
+│
+◇  Installation complete
+
+│
+◇  Installed 1 skill ────────────────────╮
+│                                        │
+│  ✓ node-assets-cli (copied)            │
+│    → ./.claude/skills/node-assets-cli  │
+│                                        │
+├────────────────────────────────────────╯
+
+│
+└  Done!  Review skills before use; they run with full agent permissions.

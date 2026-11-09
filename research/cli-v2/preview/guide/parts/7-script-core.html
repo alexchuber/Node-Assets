@@ -1,0 +1,466 @@
+
+<script>
+(() => {
+  "use strict";
+  const $ = (selector, root = document) => root.querySelector(selector);
+  const $$ = (selector, root = document) => Array.from(root.querySelectorAll(selector));
+  const esc = (value) => String(value).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+  const COMMIT = "ab42afe1ac1816cc4232b89bc123375c82d3dfbd";
+
+  // ---------- Theme ----------
+  $("#theme-toggle").addEventListener("click", () => {
+    const html = document.documentElement;
+    html.setAttribute("data-theme", html.getAttribute("data-theme") === "dark" ? "light" : "dark");
+  });
+
+  // ---------- Clipboard ----------
+  async function copyText(text) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch {
+      const area = document.createElement("textarea");
+      area.value = text;
+      area.setAttribute("readonly", "");
+      area.style.position = "fixed";
+      area.style.opacity = "0";
+      document.body.append(area);
+      area.select();
+      const ok = document.execCommand("copy");
+      area.remove();
+      return ok;
+    }
+  }
+
+  // ---------- Suggestions ----------
+  const dialog = $("#suggest-dialog");
+  const form = $("#suggest-form");
+  const details = $("#sd-details");
+  const kind = $("#sd-kind");
+  const toast = $("#queue-toast");
+  const queued = [];
+  let current = null;
+
+  function openSuggest({ target, files = "", section = "", context = "", element = null }) {
+    current = { target, files, section, context, element };
+    $("#sd-target-label").textContent = target;
+    $("#sd-files").textContent = files ? `Files: ${files}` : "";
+    $("#sd-context").textContent = context;
+    $("#sd-context").classList.toggle("hidden", !context);
+    details.value = "";
+    kind.selectedIndex = 0;
+    dialog.showModal();
+    details.focus();
+  }
+
+  function promptFor({ target, files, section, context }, kindText, detailText) {
+    const lines = [`CLI suggestion about a proposed contract updated from Alex's 17 received comments.`, `Unchanged source baseline: ${COMMIT}; this guide is not a description of the installed package.`, `About: ${target}`, `Kind: ${kindText}`];
+    if (files) lines.push(`Files: ${files}`);
+    if (section) lines.push(`Guide section: #${section}`);
+    if (context) lines.push(`Context:\n${context}`);
+    lines.push(`Suggestion:\n${detailText}`, "", "The comments update the guide only; they do not approve source changes. Reply with a short plan first. Don't change code until I approve it.");
+    return lines.join("\n");
+  }
+
+  function renderQueue() {
+    const sent = queued.filter((q) => q.status === "queued").length;
+    const copied = queued.length - sent;
+    const parts = [];
+    if (sent) parts.push(`${sent} queued in Lavish. Click Send to Agent to send ${sent === 1 ? "it" : "them"}.`);
+    if (copied) parts.push(`${copied} copied to the clipboard. Paste into the chat.`);
+    $("#queue-count").textContent = parts.join(" ") || "No suggestions queued yet.";
+    $("#queue-list").innerHTML = queued.map((q) => `<li>${esc(q.target)} · ${esc(q.kind)} · <b>${q.status === "queued" ? "queued" : "copied"}</b></li>`).join("");
+  }
+
+  function say(message) {
+    toast.textContent = message;
+  }
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const detailText = details.value.trim();
+    if (!detailText) {
+      details.value = "";
+      details.reportValidity();
+      return;
+    }
+    const kindText = kind.value;
+    const suggestion = current;
+    const prompt = promptFor(suggestion, kindText, detailText);
+    const data = { target: suggestion.target, kind: kindText, files: suggestion.files, section: suggestion.section, details: detailText, commit: COMMIT, contract: "proposed", baselineCommit: COMMIT };
+    dialog.close();
+    let status = "copied";
+    if (window.lavish && typeof window.lavish.queuePrompt === "function") {
+      try {
+        await Promise.resolve(window.lavish.queuePrompt(prompt, { tag: "cli-suggestion", text: suggestion.target, element: suggestion.element || undefined, data }));
+        status = "queued";
+      } catch {
+        status = "copied";
+      }
+    }
+    if (status === "copied") {
+      const ok = await copyText(prompt);
+      say(ok ? "Lavish isn't connected, so the suggestion was copied to the clipboard." : "Couldn't queue or copy the suggestion. Please try again.");
+      if (!ok) return;
+    } else {
+      say(`Queued: ${suggestion.target}`);
+    }
+    queued.push({ target: suggestion.target, kind: kindText, status });
+    renderQueue();
+    suggestion.element?.focus?.();
+  });
+
+  $("#sd-cancel").addEventListener("click", () => {
+    dialog.close();
+    current?.element?.focus?.();
+  });
+
+  document.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-suggest-target]");
+    if (button) {
+      openSuggest({
+        target: button.dataset.suggestTarget,
+        files: button.dataset.suggestFiles || "",
+        section: button.dataset.suggestSection || button.closest("section")?.id || "",
+        element: button,
+      });
+      return;
+    }
+    const mod = event.target.closest(".mod");
+    if (mod) openSuggest({ target: `Module ${mod.dataset.file}`, files: mod.dataset.file, section: "code", element: mod });
+  });
+
+  window.guide = { openSuggest, copyText, esc, $, $$ };
+
+  // ---------- Command builder ----------
+  const NETWORKS = ["none", "fast-4g", "slow-4g", "3g"];
+  const GOALS = ["size", "gpu", "load"];
+  const KEEP = ["hierarchy", "texture-size", "geometry"];
+  const USAGE = {
+    inspect: "node-assets inspect <file|dir>... [--compare <original|dir>] [--view PX] [--include load-time] [--network-throttling PRESET] [--help]",
+    tune: "node-assets tune <input>... --for GOAL[,GOAL...] [-o <dir|file.toon>] [--fidelity F] [--view PX] [--network-throttling PRESET] [--keep hierarchy,texture-size,geometry] [--timeout SECONDS] [--help]",
+    run: "node-assets run <graph> <input>... -o <out.glb|dir> [--force] [--help]",
+    show: "node-assets show <graph> [--help]",
+  };
+
+  // Mirrors isSafeUnquoted + escapeString in @toon-format/toon 4.4.0 (the CLI's encoder).
+  function toonString(value) {
+    const s = String(value);
+    const safe =
+      s !== "" &&
+      !/^[ \t]|[ \t]$/.test(s) &&
+      s !== "true" && s !== "false" && s !== "null" &&
+      !/^[+-]?\d+(?:\.\d+)?(?:e[+-]?\d+)?$/i.test(s) &&
+      !/[:"\\[\]{},\u0000-\u001F]/.test(s) &&
+      !s.startsWith("-") &&
+      !s.startsWith("#");
+    if (safe) return s;
+    const escaped = s
+      .replace(/\\/g, "\\\\")
+      .replace(/"/g, '\\"')
+      .replace(/\n/g, "\\n")
+      .replace(/\r/g, "\\r")
+      .replace(/\t/g, "\\t")
+      .replace(/[\u0000-\u001F]/g, (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, "0")}`);
+    return `"${escaped}"`;
+  }
+
+  function toonError(code, message, help) {
+    const helpLine = help.length ? `help[${help.length}]: ${help.map(toonString).join(",")}` : "help: []";
+    return `error: ${toonString(message)}\ncode: ${code}\n${helpLine}`;
+  }
+
+  const shellWord = (word) => (/^[A-Za-z0-9_./,:=@%+-]+$/.test(word) ? word : `'${word.replace(/'/g, "'\\''")}'`);
+  const val = (id) => $(`#${id}`).value.trim();
+  const words = (id) => val(id).split(/\s+/).filter(Boolean);
+  const flag = (name, value) => (value === "" ? [] : [name, value]);
+  const isDir = (path) => path.endsWith("/") || path.endsWith("\\") || path === "." || path === ".." || !extname(path);
+  const base = (path) => path.replace(/[\\/]+$/, "").split(/[\\/]/).pop() || path;
+  const extname = (path) => {
+    const name = base(path);
+    const dot = name.lastIndexOf(".");
+    return dot > 0 ? name.slice(dot).toLowerCase() : "";
+  };
+  const stem = (path) => {
+    const name = base(path);
+    const dot = name.lastIndexOf(".");
+    return dot > 0 ? name.slice(0, dot) : name;
+  };
+  const join = (dir, name) => (dir === "." ? name : `${dir.replace(/[\\/]+$/, "")}/${name}`);
+  const norm = (path) => path.replace(/\\/g, "/").replace(/\/{2,}/g, "/").replace(/^(\.\/)+/, "").toLowerCase();
+  const code = (text) => `<code>${esc(text)}</code>`;
+
+  class Fail {
+    constructor(code, message, help = []) {
+      this.code = code;
+      this.message = message;
+      this.help = help;
+    }
+  }
+  const fail = (codeName, message, help) => {
+    throw new Fail(codeName, message, help);
+  };
+  const usage = (message, help) => fail("USAGE", message, help);
+
+  function helpPlan(scope = "") {
+    const command = ["node-assets", scope, "--help"].filter(Boolean).join(" ");
+    return [
+      `Shows the same help as ${code(command)}: conventional usage, description, flags and examples. No current-folder discovery.`,
+      scope ? `Proposed usage: ${code(USAGE[scope])}` : `Commands: ${["inspect", "tune", "run", "show"].map(code).join(", ")}; help is a flag, not a subcommand.`,
+      "Help-fallback exit status is pending. A positional path can be mistaken for an unknown word; missing/unsupported file policy still needs a decision, not a blanket conversion of file errors to help.",
+    ];
+  }
+
+  function builtinOrFile(graph) {
+    const isFile = /[/\\]/.test(graph) || graph.endsWith(".toon");
+    if (!isFile && graph !== "optimize") fail("BAD_GRAPH", `Unknown built-in graph ${graph}`, ["Built-in graphs: optimize; use a path or .toon extension for a graph file"]);
+    return isFile
+      ? `Reads the graph file ${code(graph)}. A missing file fails with ${code("INPUT_NOT_FOUND")}; an invalid one with ${code("BAD_GRAPH")}.`
+      : `Uses the built-in ${code("optimize")} graph: WebP textures up to 2048 px (color q90, data maps q95), quantized geometry, lossless cleanup. No fidelity search.`;
+  }
+
+  function inputsLine(inputs) {
+    const dirs = inputs.filter(isDir);
+    return `Reads ${inputs.map(code).join(" ")}${dirs.length ? ". Folders are searched for supported models" : ""}.`;
+  }
+
+  const COMMANDS = {
+    inspect() {
+      const inputs = words("i-inputs");
+      const compare = val("i-against");
+      const view = val("i-view");
+      const network = val("i-network");
+      const includeValue = val("i-include");
+      const argv = ["inspect", ...inputs, ...flag("--compare", compare), ...flag("--view", view), ...flag("--include", includeValue), ...flag("--network-throttling", network)];
+      const check = () => {
+        if (!inputs.length) return helpPlan("inspect");
+        const net = network || "none";
+        if (!NETWORKS.includes(net)) usage("Unknown network throttling preset", [`presets: ${NETWORKS.join(", ")}`]);
+        const include = includeValue ? includeValue.split(",").map((item) => item.trim()) : [];
+        if (include.some((item) => item !== "load-time")) usage("Unknown --include metric", ["Proposed metrics: load-time; use a comma-separated list"]);
+        const px = view === "" ? 1024 : Number(view);
+        if (!Number.isInteger(px) || px < 16) usage("--view render image size must be an integer of at least 16", ["e.g. --view 1024; not max texture size"]);
+        const plan = [
+          inputsLine(inputs),
+          "Default headless metrics: file bytes, estimated GPU memory, triangles, textures, codecs and required extensions. No default browser load-time measurement.",
+          "Reports each codec's cost once per model. A viewer may reuse/cache codecs across models; no shared-cost arithmetic predicts that.",
+        ];
+        if (compare) {
+          plan.push(
+            isDir(compare)
+              ? `Renders each file and the same-named original in ${code(compare)} (extension ignored) in ${px} px images from 4 views. Reports worst-region SSIM with no pass/fail limit; needs a browser.`
+              : `Renders each file and ${code(compare)} in ${px} px images from 4 views. Reports worst-region SSIM with no pass/fail limit; needs a browser.`,
+          );
+        } else if (view !== "") {
+          plan.push(`${code("--view")} sizes comparison images, so without ${code("--compare")} it has no effect.`);
+        }
+        if (include.includes("load-time")) plan.push(`Requests opt-in browser load-time via a comma-separated include list, throttling ${code(net)}. Measurement implementation and exact rates are pending; no measured values are simulated.`);
+        else {
+          plan.push("No opt-in load-time requested. Without a comparison, no browser is needed.");
+          if (network !== "") plan.push(`${code("--network-throttling")} has no load-time measurement to configure without ${code("--include load-time")}.`);
+        }
+        plan.push("Writes nothing. Work exit 0, or 1 if an input fails; this simulator does not inspect the filesystem.");
+        return plan;
+      };
+      return { argv, check, files: "packages/cli/src/commands/inspect.ts" };
+    },
+
+    tune() {
+      const inputs = words("t-inputs");
+      const forValue = val("t-for");
+      const out = val("t-out");
+      const fidelity = val("t-fidelity");
+      const view = val("t-view");
+      const network = val("t-network");
+      const keepValue = val("t-keep");
+      const time = val("t-time");
+      const argv = ["tune", ...inputs, ...flag("--for", forValue), ...flag("-o", out), ...flag("--fidelity", fidelity), ...flag("--view", view), ...flag("--network-throttling", network), ...flag("--keep", keepValue), ...flag("--timeout", time)];
+      const check = () => {
+        if (!inputs.length) return helpPlan("tune");
+        if (!forValue) usage("missing --for <goal>", [`goals: ${GOALS.join(", ")}`]);
+        const goals = [];
+        for (const goal of forValue.split(",").map((g) => g.trim())) {
+          if (!GOALS.includes(goal)) usage(`unknown goal "${goal}"`, [`goals: ${GOALS.join(", ")}`]);
+          if (!goals.includes(goal)) goals.push(goal);
+        }
+        const floor = Number(fidelity === "" ? 0.9 : fidelity);
+        if (!(floor > 0 && floor <= 1)) usage("--fidelity must be greater than 0 and at most 1", ["e.g. --fidelity 0.9"]);
+        const px = Number(view === "" ? 1024 : view);
+        if (!Number.isInteger(px) || px < 64 || px > 4096) usage("--view must be an integer from 64 to 4096", ["e.g. --view 1024"]);
+        const net = network || "none";
+        if (!NETWORKS.includes(net)) usage("Unknown network throttling preset", [`presets: ${NETWORKS.join(", ")}`]);
+        const keep = new Set(keepValue === "" ? [] : keepValue.split(",").map((k) => k.trim()));
+        for (const k of keep) if (!KEEP.includes(k)) usage("--keep accepts hierarchy, texture-size, geometry", []);
+        const raw = time || "420";
+        const seconds = /^(?:\d+(?:\.\d*)?|\.\d+)$/.test(raw) ? Number(raw) : NaN;
+        if (!Number.isFinite(seconds) || seconds <= 0) usage(`invalid --timeout "${raw}"`, ["Use positive numeric seconds, e.g. --timeout 60 (default 420); no unit suffixes"]);
+        const output = out || ".";
+        const fileOutput = !output.endsWith("/") && extname(output) === ".toon";
+        if (fileOutput && (inputs.length !== 1 || goals.length !== 1)) usage("-o FILE.toon requires exactly one input and one goal", ["Use -o graphs for several inputs or goals; trailing slash not required"]);
+        const files = inputs.filter((input) => !isDir(input));
+        const destinations = new Set();
+        for (const input of files)
+          for (const goal of goals) {
+            const key = norm(fileOutput ? output : join(output, `${stem(input)}.${goal}.toon`));
+            if (destinations.has(key)) usage("Inputs would produce the same graph file", ["Tune these inputs separately with different -o paths"]);
+            destinations.add(key);
+          }
+        const dirs = inputs.filter(isDir);
+        const writes = fileOutput
+          ? [`${output}`, `${output.slice(0, -5)}.png`]
+          : [...files.flatMap((input) => goals.flatMap((goal) => [join(output, `${stem(input)}.${goal}.toon`), join(output, `${stem(input)}.${goal}.png`)])), ...dirs.flatMap((dir) => goals.map((goal) => join(output, `<model>.${goal}.toon + .png`)))];
+        const plan = [
+          inputsLine(inputs),
+          `Renders each original from 4 views at ${px} px, then searches settings for ${goals.map(code).join(", ")}. A candidate passes only if its worst 64 px region scores SSIM ≥ ${floor}.`,
+        ];
+        if (goals.includes("load")) plan.push(`Requests ${code(net)} network throttling for load scoring. Measured load ranking and exact rates are pending; none is not a fixed bandwidth. No load-time number is invented.`);
+        else if (network !== "") plan.push(`${code("--network-throttling")} applies to load scoring, not size/gpu.`);
+        plan.push("Codec bytes count once per model, without shared-codec adjustment. Viewer caching/sharing may differ; goal naming/split remains pending.");
+        if (keep.has("hierarchy")) plan.push("Keeps the node hierarchy: no flattening or instancing.");
+        if (keep.has("texture-size")) plan.push("Keeps texture sizes: no downscaling.");
+        if (keep.has("geometry")) plan.push("Keeps all triangles: no simplification.");
+        plan.push(`Stops starting new search work after ${seconds} seconds. Each input's baseline is always checked. A cut-short run reports ${code("search: partial")}. This timeout and all fidelity limits are temporary to this tune run, never saved in the graph.`);
+        if (fileOutput && dirs.length) plan.push(`If ${code(dirs[0])} holds more than one model, this fails at run time: ${code("-o FILE.toon")} takes one model.`);
+        plan.push(`Writes ${writes.map(code).join(", ")}. Saved graphs contain recipes without limits. Writes no models; use ${code("run")} for that. Paths need no trailing slash; filesystem validity must be checked by the real CLI.`);
+        plan.push("Needs a browser. Exit 0, or 1 if any input fails.");
+        return plan;
+      };
+      return { argv, check, files: "packages/cli/src/commands/tune.ts, packages/cli/src/tune/search.ts" };
+    },
+
+    run() {
+      const graph = val("r-graph");
+      const inputs = words("r-inputs");
+      const out = val("r-out");
+      const force = $("#r-force").checked;
+      const argv = ["run", ...(graph ? [graph] : []), ...inputs, ...flag("-o", out), ...(force ? ["--force"] : [])];
+      const check = () => {
+        if (!graph || !inputs.length || !out) return helpPlan("run");
+        const multi = inputs.length > 1 || inputs.some(isDir);
+        const directory = isDir(out) || extname(out) !== ".glb";
+        if (multi && !directory) usage("Several inputs or a directory cannot write one .glb file", ["Use -o public; no trailing slash required"]);
+        const files = inputs.filter((input) => !isDir(input));
+        const mapping = files.map((input) => [input, directory ? join(out, `${stem(input)}.glb`) : out]);
+        const seen = new Set();
+        for (const [, output] of mapping) {
+          if (seen.has(norm(output))) usage("Inputs would produce the same output file", ["Run these inputs separately with different -o paths"]);
+          seen.add(norm(output));
+          if (files.some((input) => norm(input) === norm(output))) usage("An output is also an input; nothing written", ["Choose a separate output file or directory"]);
+        }
+        const graphLine = builtinOrFile(graph);
+        const plan = [graphLine, inputsLine(inputs)];
+        for (const [input, output] of mapping) plan.push(`${code(input)} → ${code(output)}`);
+        for (const dir of inputs.filter(isDir)) plan.push(`Each model in ${code(dir)} → ${code(join(out, "<model>.glb"))}`);
+        plan.push("Writes no CLI provenance hashes in GLB extras. No-op detection and existing-output/overwrite policy after removing hashes are unresolved; no replacement mechanism is assumed.");
+        if (force) plan.push(`${code("--force")} requests overwrite, but exact existing-output semantics remain pending; this simulator cannot promise replacement.`);
+        plan.push("No rendering, saved limits or threshold enforcement. Needs no browser. To report a score separately, use inspect --compare.");
+        plan.push("Output path kind comes from the filesystem in the real CLI; no trailing slash is required.");
+        plan.push("Exit 0 if every input succeeds, else 1.");
+        return plan;
+      };
+      return { argv, check, files: "packages/cli/src/commands/run.ts" };
+    },
+
+    show() {
+      const graphs = words("s-graph");
+      const argv = ["show", ...graphs];
+      const check = () => {
+        if (!graphs.length) return helpPlan("show");
+        if (graphs.length !== 1) usage("show requires one graph", [USAGE.show]);
+        return [builtinOrFile(graphs[0]), "Prints it as TOON on stdout with every block setting filled in. Writes nothing.", `Save a copy to edit: ${code(`node-assets show ${graphs[0]} > graphs/mine.toon`)}`];
+      };
+      return { argv, check, files: "packages/cli/src/commands/show.ts" };
+    },
+
+    help() {
+      const argv = words("h-input");
+      const scope = Object.hasOwn(USAGE, argv[0]) ? argv[0] : "";
+      return { argv, check: () => helpPlan(scope), files: "packages/cli/src/cli.ts, packages/cli/src/help.ts" };
+    },
+  };
+
+  const builder = $("#builder");
+  const selected = () => $('input[name="b-cmd"]:checked', builder).value;
+  let lastResult = { line: "", text: "", files: "" };
+
+  function updateBuilder() {
+    const cmd = selected();
+    for (const group of $$("div.fields[data-cmd]", builder)) group.classList.toggle("hidden", group.dataset.cmd !== cmd);
+    const { argv, check, files } = COMMANDS[cmd]();
+    const line = ["node-assets", ...argv].map(shellWord).join(" ");
+    $("#b-line").innerHTML = `<span class="cmd">$</span> ${esc(line)}`;
+    const status = $("#b-status");
+    const body = $("#b-body");
+    try {
+      const plan = check();
+      status.className = "status ok";
+      status.textContent = "✓ Illustrative proposed plan · not executed";
+      body.innerHTML = `<ul class="small">${plan.map((item) => `<li>${item}</li>`).join("")}</ul>`;
+      lastResult = { line, text: plan.map((item) => `- ${item.replace(/<[^>]+>/g, "").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&").replace(/&quot;/g, '"').replace(/&#39;/g, "'")}`).join("\n"), files };
+    } catch (error) {
+      if (!(error instanceof Fail)) throw error;
+      const exit = error.code === "USAGE" ? 2 : 1;
+      const out = toonError(error.code, error.message, error.help);
+      status.className = "status err";
+      status.textContent = `✕ Proposed validation · ${error.code} · illustrative exit ${exit}`;
+      body.innerHTML = `<pre class="term">${esc(out)}</pre>`;
+      lastResult = { line, text: `${out}\n[exit ${exit}]`, files };
+    }
+  }
+
+  const EXAMPLES = {
+    "tune-ok": { cmd: "tune", set: {} },
+    "tune-view": { cmd: "tune", set: { "t-view": "32" } },
+    "tune-file": { cmd: "tune", set: { "t-out": "graphs/duck.toon" } },
+    "tune-time": { cmd: "tune", set: { "t-time": "2d" } },
+    "tune-time-ok": { cmd: "tune", set: { "t-time": "60" } },
+    "run-check": { cmd: "run", set: { "r-graph": "graphs/duck.size.toon", "r-inputs": "assets/", "r-out": "public" } },
+    "run-dir": { cmd: "run", set: { "r-inputs": "assets/", "r-out": "public/models.glb" } },
+    "inspect-against": { cmd: "inspect", set: { "i-inputs": "public/", "i-against": "assets/" } },
+    "inspect-net": { cmd: "inspect", set: { "i-include": "load-time", "i-network": "3g" } },
+    "help-top": { cmd: "help", set: { "h-input": "foo" } },
+    "help-tune": { cmd: "help", set: { "h-input": "tune foo" } },
+    "show-bad": { cmd: "show", set: { "s-graph": "optimise" } },
+  };
+
+  $("#b-example").addEventListener("change", (event) => {
+    const example = EXAMPLES[event.target.value];
+    if (!example) return;
+    $(`input[name="b-cmd"][value="${example.cmd}"]`, builder).checked = true;
+    for (const input of $$(`div.fields[data-cmd="${example.cmd}"] input`, builder)) {
+      if (input.type === "checkbox") input.checked = input.defaultChecked;
+      else input.value = input.defaultValue;
+    }
+    for (const [id, value] of Object.entries(example.set)) {
+      const input = $(`#${id}`);
+      if (input.type === "checkbox") input.checked = value;
+      else input.value = value;
+    }
+    updateBuilder();
+  });
+
+  builder.addEventListener("input", updateBuilder);
+  builder.addEventListener("change", updateBuilder);
+
+  $("#b-copy").addEventListener("click", async (event) => {
+    const button = event.currentTarget;
+    const ok = await copyText(lastResult.line);
+    button.textContent = ok ? "Copied" : "Copy failed";
+    setTimeout(() => (button.textContent = "Copy"), 1500);
+  });
+
+  $("#b-suggest").addEventListener("click", (event) => {
+    openSuggest({
+      target: `Behavior of: ${lastResult.line}`,
+      files: lastResult.files,
+      section: "try",
+      context: `$ ${lastResult.line}\n${lastResult.text}`,
+      element: event.currentTarget,
+    });
+  });
+
+  updateBuilder();
+  window.guide.toonString = toonString;
+  window.guide.commands = COMMANDS;
+})();
+</script>

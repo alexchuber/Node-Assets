@@ -1,0 +1,260 @@
+
+<section class="card" id="output" aria-labelledby="output-h">
+  <div class="section-head">
+    <div>
+      <div class="eyebrow">Output &amp; errors</div>
+      <h2 id="output-h">Reading what the CLI prints</h2>
+      <p>The proposal retains TOON results/errors on <b>stdout</b> and progress on <b>stderr</b>. Help uses conventional usage/flags/examples. Unknown commands show nearest help instead of the old usage-error recording below. No new output has been verified.</p>
+    </div>
+    <button class="btn suggest small" type="button" data-suggest-target="Output format (TOON on stdout, progress on stderr)" data-suggest-files="packages/cli/src/output.ts" data-suggest-section="output">Suggest</button>
+  </div>
+  <div class="grid2">
+    <div class="soft">
+      <h3>TOON in 4 lines</h3>
+      <ul class="small">
+        <li><code>key: value</code> is one field.</li>
+        <li><code>help[2]: a,b</code> is a list of 2 values.</li>
+        <li><code>results[2]{input,goal,bytes}:</code> is a table: 2 rows follow, each comma-separated in that column order.</li>
+        <li>Strings are quoted only when needed: commas, colons, quotes, brackets, a leading <code>-</code> or <code>#</code>, or text that looks like a number or <code>true</code>.</li>
+      </ul>
+    </div>
+    <div class="soft">
+      <h3>Proposed structured error shape (illustrative)</h3>
+<pre class="term">error: "unknown goal \"speed\""
+code: USAGE
+help[1]: "goals: size, gpu, load"</pre>
+      <p class="small">Read <code>code</code> to decide what to do, and <code>help</code> for the fix. When one of many inputs fails, the others still run: <code>inspect</code> and <code>run</code> show it as a row with <code>status: failed</code>, and <code>tune</code> lists it under <code>failed</code>.</p>
+    </div>
+  </div>
+
+  <h3 style="margin-top: 16px;">Legacy evidence, not recommended commands</h3>
+  <details id="legacy-evidence">
+  <summary>Show unchanged baseline recordings and old flags</summary>
+  <p class="small muted">These are historical stdout/stderr, not updated proposed output. They deliberately retain old flags, current-folder discovery, estimated load_s, saved limits and hash-based no-op behavior. None proves the proposed removals/renames or measured loads. Do not copy these as the new contract.</p>
+  <div class="btn-row" role="group" aria-label="Choose an example run" id="ex-buttons"></div>
+  <div class="label-row" id="ex-label"></div>
+  <pre class="term" id="ex-out"></pre>
+  </details>
+
+  <h3 style="margin-top: 16px;">Exit codes</h3>
+  <div class="grid4">
+    <div class="soft"><h3>0 · success</h3><p class="small">Work succeeded. No-op success semantics after hash removal are pending.</p></div>
+    <div class="soft"><h3>1 · something failed</h3><p class="small">An input or processing step failed. There is no proposed run threshold check.</p></div>
+    <div class="soft"><h3>2 · usage error</h3><p class="small">Bad arguments. Nothing was done.</p></div>
+  </div>
+  <p class="small muted">Retained baseline work/error statuses, not new execution evidence. Help-fallback exit status still needs a decision; don't infer exit 2 from the legacy missing-input transcript.</p>
+
+  <h3 style="margin-top: 16px;">Error codes</h3>
+  <div class="filter">
+    <label for="err-filter" class="small">Filter</label>
+    <input type="text" id="err-filter" placeholder="e.g. graph, browser, exists">
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Code</th><th>When</th><th>Fix the CLI suggests</th><th>Source</th><th></th></tr></thead>
+      <tbody id="err-rows">
+        <tr><td><code>USAGE</code></td><td>Bad flag/value remains a validation error. Missing/unknown command input shows nearest help; ambiguous positional paths are unresolved.</td><td>Valid values or command help, as applicable</td><td><code>arguments.ts</code>, <code>cli.ts</code>, <code>commands/*</code></td><td><button class="btn suggest small" type="button" data-suggest-target="USAGE and nearest help" data-suggest-files="packages/cli/src/arguments.ts, packages/cli/src/commands/" data-suggest-section="errors">Suggest</button></td></tr>
+        <tr><td><code>INPUT_NOT_FOUND</code></td><td>An input path doesn't exist</td><td>"Paths are relative to &lt;cwd&gt;"</td><td><code>inputs.ts</code></td><td><button class="btn suggest small" type="button" data-suggest-target="INPUT_NOT_FOUND (missing input)" data-suggest-files="packages/cli/src/inputs.ts" data-suggest-section="errors">Suggest</button></td></tr>
+        <tr><td><code>INPUT_NOT_FOUND</code></td><td><code>--compare</code> folder has no same-named original</td><td>Pass the original directly: <code>--compare &lt;original&gt;</code></td><td><code>commands/inspect.ts</code></td><td><button class="btn suggest small" type="button" data-suggest-target="INPUT_NOT_FOUND (no original for --compare)" data-suggest-files="packages/cli/src/commands/inspect.ts" data-suggest-section="errors">Suggest</button></td></tr>
+        <tr><td><code>INPUT_NOT_FOUND</code></td><td>A graph file can't be read</td><td>"node-assets show optimize &gt; mine.toon"</td><td><code>graphFiles.ts</code></td><td><button class="btn suggest small" type="button" data-suggest-target="INPUT_NOT_FOUND (graph file)" data-suggest-files="packages/cli/src/graphFiles.ts" data-suggest-section="errors">Suggest</button></td></tr>
+        <tr><td><code>UNSUPPORTED_FORMAT</code></td><td>File extension isn't supported</td><td>How to export it (Blender, Maya, 3ds Max…) or the supported list</td><td><code>inputs.ts</code></td><td><button class="btn suggest small" type="button" data-suggest-target="UNSUPPORTED_FORMAT" data-suggest-files="packages/cli/src/inputs.ts" data-suggest-section="errors">Suggest</button></td></tr>
+        <tr><td><code>INVALID_INPUT</code></td><td>Not a regular file, broken model, disallowed resource paths, or no tune candidate met that run's temporary limit</td><td>e.g. longer <code>--timeout</code> or lower SSIM threshold with <code>--fidelity</code> (name pending)</td><td><code>inputs.ts</code>, <code>tune/search.ts</code></td><td><button class="btn suggest small" type="button" data-suggest-target="INVALID_INPUT" data-suggest-files="packages/cli/src/inputs.ts, packages/cli/src/tune/search.ts" data-suggest-section="errors">Suggest</button></td></tr>
+        <tr><td><code>OUTPUT_EXISTS</code></td><td>Existing output safety; exact policy after hash removal is unresolved</td><td>Choose a separate output; <code>--force</code> semantics remain pending</td><td><code>commands/run.ts</code>, <code>files.ts</code></td><td><button class="btn suggest small" type="button" data-suggest-target="OUTPUT_EXISTS after provenance removal" data-suggest-files="packages/cli/src/commands/run.ts, packages/cli/src/files.ts" data-suggest-section="errors">Suggest</button></td></tr>
+        <tr><td><code>BAD_GRAPH</code></td><td>Unknown built-in, invalid TOON, unknown key or block or setting, value out of range</td><td>Names the valid choices</td><td><code>graphFiles.ts</code></td><td><button class="btn suggest small" type="button" data-suggest-target="BAD_GRAPH" data-suggest-files="packages/cli/src/graphFiles.ts" data-suggest-section="errors">Suggest</button></td></tr>
+        <tr><td><code>NO_BROWSER</code></td><td>No usable browser for rendering, or <code>$NODE_ASSETS_CHROMIUM</code> isn't an executable</td><td>"npx playwright install chromium"</td><td><code>render/browser.ts</code></td><td><button class="btn suggest small" type="button" data-suggest-target="NO_BROWSER" data-suggest-files="packages/cli/src/render/browser.ts" data-suggest-section="errors">Suggest</button></td></tr>
+        <tr><td><code>INTERNAL</code></td><td>Anything unexpected. Shows the first line of the message.</td><td>None</td><td><code>output.ts</code></td><td><button class="btn suggest small" type="button" data-suggest-target="INTERNAL errors" data-suggest-files="packages/cli/src/output.ts" data-suggest-section="errors">Suggest</button></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="small muted hidden" id="err-empty">No error codes match that filter.</p>
+</section>
+
+<section class="card" id="browser" aria-labelledby="browser-h">
+  <div class="section-head">
+    <div>
+      <div class="eyebrow">Browser</div>
+      <h2 id="browser-h">Which browser renders, and how</h2>
+      <p><code>tune</code> and <code>inspect --compare</code> render; <code>run</code> and default inspect do not. Browser-based <code>inspect --include load-time</code> is proposed, not implemented. The discovery ladder below describes baseline rendering only; it is not evidence of load measurement.</p>
+    </div>
+    <button class="btn suggest small" type="button" data-suggest-target="Browser discovery" data-suggest-files="packages/cli/src/render/browser.ts" data-suggest-section="browser">Suggest</button>
+  </div>
+  <div class="grid2">
+    <ol class="ladder">
+      <li><span class="rung">1</span><div><code>$NODE_ASSETS_CHROMIUM</code><div class="small muted">If set but not an executable, fail with <code>NO_BROWSER</code>. No fallback, so a typo can't silently pick another browser.</div></div></li>
+      <li><span class="rung">2</span><div>Google Chrome<div class="small muted">Standard install paths on macOS, Windows, Linux.</div></div></li>
+      <li><span class="rung">3</span><div>Microsoft Edge<div class="small muted">Same.</div></div></li>
+      <li><span class="rung">4</span><div>Chromium (Linux only)<div class="small muted"><code>chromium</code> / <code>chromium-browser</code> on PATH, <code>/usr/bin</code>, <code>/snap/bin</code>.</div></div></li>
+      <li><span class="rung">5</span><div>Playwright's Chromium<div class="small muted">If <code>npx playwright install chromium</code> was run.</div></div></li>
+      <li><span class="rung end">✕</span><div><code>NO_BROWSER</code><div class="small muted">help: <code>npx playwright install chromium</code></div></div></li>
+    </ol>
+    <div class="soft">
+      <h3>Render setup</h3>
+      <ul class="small">
+        <li>Headless, with software WebGL (SwiftShader), so results don't depend on the GPU.</li>
+        <li>Files are served from <code>127.0.0.1</code> on a random port. Requests to any other origin are blocked.</li>
+        <li>Browser profile and scratch files go in <code>./_render-&lt;uuid&gt;</code> and are removed afterwards.</li>
+        <li>Scores can still differ slightly between browsers and machines.</li>
+      </ul>
+      <p class="small"><code>--network-throttling</code>: <code>none</code> (default), <code>fast-4g</code>, <code>slow-4g</code>, <code>3g</code>. Familiar Chrome labels, not guaranteed fixed rates. Exact rates and measurement implementation are pending. Baseline estimated load_s does not exercise real browser throttling.</p>
+    </div>
+  </div>
+</section>
+
+<section class="card" id="code" aria-labelledby="code-h">
+  <div class="section-head">
+    <div>
+      <div class="eyebrow">Code map</div>
+      <h2 id="code-h">Where the code lives</h2>
+      <p><b>Unchanged source map at baseline ab42afe</b> (about 2,630 TypeScript lines), not an implemented proposal. Click a module to discuss a future change. Counts, files and old tests remain historical source context.</p>
+    </div>
+  </div>
+  <div class="layers">
+    <div class="layer"><div class="lname">Entry<span>parse, dispatch, print</span></div><div class="mods">
+      <button class="mod" type="button" data-file="packages/cli/src/cli.ts"><b>cli.ts</b><span class="lines">29</span><span class="role">Picks the command, sets the exit code</span></button>
+      <button class="mod" type="button" data-file="packages/cli/src/arguments.ts"><b>arguments.ts</b><span class="lines">54</span><span class="role">Flag definitions per command, shared checks</span></button>
+      <button class="mod" type="button" data-file="packages/cli/src/output.ts"><b>output.ts</b><span class="lines">73</span><span class="role">TOON output, CliError, progress</span></button>
+      <button class="mod" type="button" data-file="packages/cli/src/help.ts"><b>help.ts</b><span class="lines">69</span><span class="role">Per-command --help, manual from the man page</span></button>
+    </div></div>
+    <div class="layer-arrow">↓</div>
+    <div class="layer"><div class="lname">Commands<span>one file each</span></div><div class="mods">
+      <button class="mod" type="button" data-file="packages/cli/src/commands/home.ts"><b>home.ts</b><span class="lines">55</span><span class="role">Baseline discovery; proposal uses help, no listing</span></button>
+      <button class="mod" type="button" data-file="packages/cli/src/commands/help.ts"><b>help.ts</b><span class="lines">12</span><span class="role">Legacy command; proposal uses --help</span></button>
+      <button class="mod" type="button" data-file="packages/cli/src/commands/inspect.ts"><b>inspect.ts</b><span class="lines">107</span></button>
+      <button class="mod" type="button" data-file="packages/cli/src/commands/tune.ts"><b>tune.ts</b><span class="lines">218</span></button>
+      <button class="mod" type="button" data-file="packages/cli/src/commands/run.ts"><b>run.ts</b><span class="lines">160</span></button>
+      <button class="mod" type="button" data-file="packages/cli/src/commands/show.ts"><b>show.ts</b><span class="lines">14</span></button>
+    </div></div>
+    <div class="layer-arrow">↓</div>
+    <div class="layer"><div class="lname">Shared<span>used by several commands</span></div><div class="mods">
+      <button class="mod" type="button" data-file="packages/cli/src/inputs.ts"><b>inputs.ts</b><span class="lines">200</span><span class="role">Find, check, and load input files</span></button>
+      <button class="mod" type="button" data-file="packages/cli/src/measure.ts"><b>measure.ts</b><span class="lines">116</span><span class="role">Baseline estimates; 4 B/px TODO still to add</span></button>
+      <button class="mod" type="button" data-file="packages/cli/src/loadModel.ts"><b>loadModel.ts</b><span class="lines">47</span><span class="role">Decode-time model + coefficients JSON</span></button>
+      <button class="mod" type="button" data-file="packages/cli/src/graphFiles.ts"><b>graphFiles.ts</b><span class="lines">107</span><span class="role">Baseline parsing/hash; proposed graphs have no limits</span></button>
+      <button class="mod" type="button" data-file="packages/cli/src/provenance.ts"><b>provenance.ts</b><span class="lines">54</span><span class="role">Baseline only: GLB hashes removed from proposal</span></button>
+      <button class="mod" type="button" data-file="packages/cli/src/document.ts"><b>document.ts</b><span class="lines">36</span><span class="role">Read/write GLB</span></button>
+      <button class="mod" type="button" data-file="packages/cli/src/execution.ts"><b>execution.ts</b><span class="lines">35</span><span class="role">Run a graph with the core library</span></button>
+      <button class="mod" type="button" data-file="packages/cli/src/files.ts"><b>files.ts</b><span class="lines">22</span><span class="role">Atomic file writes</span></button>
+    </div></div>
+    <div class="layer-arrow">↓</div>
+    <div class="layer"><div class="lname">tune/<span>search only</span></div><div class="mods">
+      <button class="mod" type="button" data-file="packages/cli/src/tune/search.ts"><b>search.ts</b><span class="lines">317</span><span class="role">The search plan and ranking</span></button>
+      <button class="mod" type="button" data-file="packages/cli/src/tune/stages.ts"><b>stages.ts</b><span class="lines">115</span><span class="role">Settings → blocks</span></button>
+      <button class="mod" type="button" data-file="packages/cli/src/tune/plan.ts"><b>plan.ts</b><span class="lines">39</span><span class="role">What each goal tries</span></button>
+      <button class="mod" type="button" data-file="packages/cli/src/tune/cache.ts"><b>cache.ts</b><span class="lines">52</span><span class="role">Reuse intermediate models</span></button>
+      <button class="mod" type="button" data-file="packages/cli/src/tune/budget.ts"><b>budget.ts</b><span class="lines">3</span><span class="role">Baseline 7m; proposed --timeout 420 seconds</span></button>
+    </div></div>
+    <div class="layer-arrow">↓</div>
+    <div class="layer"><div class="lname">render/<span>browser + scoring</span></div><div class="mods">
+      <button class="mod" type="button" data-file="packages/cli/src/render/index.ts"><b>index.ts</b><span class="lines">243</span><span class="role">Server, browser launch, renderer API</span></button>
+      <button class="mod" type="button" data-file="packages/cli/src/render/page.ts"><b>page.ts</b><span class="lines">176</span><span class="role">Babylon.js scene and cameras (runs in page)</span></button>
+      <button class="mod" type="button" data-file="packages/cli/src/render/ssim.ts"><b>ssim.ts</b><span class="lines">135</span><span class="role">Tile SSIM scoring</span></button>
+      <button class="mod" type="button" data-file="packages/cli/src/render/browser.ts"><b>browser.ts</b><span class="lines">86</span><span class="role">Find a browser</span></button>
+      <button class="mod" type="button" data-file="packages/cli/src/render/protocol.ts"><b>protocol.ts</b><span class="lines">32</span><span class="role">Node ↔ page types</span></button>
+      <button class="mod" type="button" data-file="packages/cli/src/render/codecs.ts"><b>codecs.ts</b><span class="lines">19</span><span class="role">Local KTX2 decoder URLs</span></button>
+      <button class="mod" type="button" data-file="packages/cli/src/render/errors.ts"><b>errors.ts</b><span class="lines">4</span></button>
+    </div></div>
+    <div class="layer-arrow">↓</div>
+    <div class="layer"><div class="lname">Core library<span>bundled into the CLI</span></div><div class="mods">
+      <button class="mod" type="button" data-file="packages/core/"><b>@babylonjs/node-assets</b><span class="role">Blocks, graphs, codecs (packages/core)</span></button>
+    </div></div>
+  </div>
+  <div class="grid2" style="margin-top: 14px;">
+    <div class="soft small"><b>Baseline docs only</b><br><code>graphs/optimize.toon</code> · <code>docs/node-assets.1.md</code> (man page) · <code>docs/calibration.md</code> + <code>dev/calibrate</code> (load-model fitting, not run) · <code>README.md</code><br><code>skills/node-assets-cli/SKILL.md</code> still points at the legacy manual command. The proposal calls for <code>node-assets --help</code>; no skill/source file was edited.</div>
+    <div class="soft small"><b>Baseline test map, not new checks</b> (repo root <code>tests/</code>)<br>e2e: <code>cli</code>, <code>cliTune</code>, <code>cliTuneOptions</code> · integration: <code>cliRender</code> · unit: <code>cliBrowser</code>, <code>cliCalibrate</code>, <code>cliCommands</code>, <code>cliDiagnostics</code>, <code>cliExecution</code>, <code>cliGraphFiles</code>, <code>cliInputs</code>, <code>cliMeasure</code>, <code>cliProvenance</code>, <code>cliRun</code>, <code>cliTuneBudget</code>, <code>cliTuneCache</code>, <code>cliTuneCompat</code>, <code>cliTuneRanking</code>, <code>cliTuneStages</code>. Legacy compat/provenance tests do not make those features part of the proposal.</div>
+  </div>
+</section>
+
+<section class="card" id="evidence" aria-labelledby="evidence-h">
+  <div class="section-head">
+    <div>
+      <div class="eyebrow">Evidence &amp; limits</div>
+      <h2 id="evidence-h">What's proven, and on which code</h2>
+      <p><b>No new CLI tests, render runs or calibration in this guide update.</b> Historical checks below apply only to their recorded baseline, never to the proposed flags, removals or measured loads.</p>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Claim</th><th>Status</th><th>Basis</th></tr></thead>
+      <tbody>
+        <tr><td>Historical install, help, show, inspect, run optimize, hash-based no-op re-run, usage error</td><td><span class="tag verified">baseline only · ab42afe</span></td><td>Previously recorded disposable install of <span class="mono">node-assets-cli-0.1.0.tgz</span> (sha256 <span class="mono">8e111cc1…9b76</span>). No rendering. Full source identity: <code>ab42afe1ac1816cc4232b89bc123375c82d3dfbd</code>.</td></tr>
+        <tr><td>Legacy tune, run with its old check flag, and inspect with its old comparison flag on duck/helmet</td><td><span class="tag older">legacy render · a9329e2</span></td><td>Real render run before the 6-commit structure cleanup. The cleanup was checked by tests and an output comparison, not a new render. Old stdout is folded under legacy evidence.</td></tr>
+        <tr><td>Agents using tune got within 1.09× of the best result, vs 2.11× worse setting options by hand</td><td><span class="tag historical">historical</span></td><td>54 graded agent runs on the research prototype, with a different renderer. Not re-run on this build. Source: <code>research/cli-v2/docs/node-assets.2.md</code></td></tr>
+        <tr><td>SSIM ≥ 0.9 means "looks the same"</td><td><span class="tag provisional">numeric only</span></td><td>A numeric check, not a perceptual guarantee. Not re-validated on Babylon.js yet; a Scout handoff is drafted.</td></tr>
+        <tr><td>Baseline load_s</td><td><span class="tag provisional">estimate, not measured</span></td><td>Headless download + decode estimate with provisional coefficients. No real load measurement/throttling exists; proposed include-list and throttle labels do not change this fact.</td></tr>
+        <tr><td>Platforms</td><td><span class="tag older">macOS only</span></td><td>Windows and Linux browser paths exist but are untested.</td></tr>
+        <tr><td>Proposed <code>size</code> score</td><td><span class="tag inferred">not implemented</span></td><td>File bytes plus codec bytes once per model, no shared adjustment; not measured gzip/Brotli transfer size. Goal naming/split is pending.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="card" id="noticed" aria-labelledby="noticed-h">
+  <div class="section-head">
+    <div>
+      <div class="eyebrow">Noticed while writing this</div>
+      <h2 id="noticed-h">Remaining questions, with your comments already recorded</h2>
+      <p>These are unresolved details, not a request to repeat decided changes. Compat, shared-cost calculations, saved limits and provenance extras are already removed from the proposal. The source remains unchanged.</p>
+    </div>
+  </div>
+  <div class="grid2" id="noticed-list"></div>
+</section>
+
+<section class="card" id="next" aria-labelledby="next-h">
+  <div class="eyebrow">What's left</div>
+  <h2 id="next-h">Not in v0.1.0</h2>
+  <div class="grid2" style="margin-top: 10px;">
+    <ul class="small">
+      <li>A stronger built-in <code>optimize</code> preset (deferred).</li>
+      <li>A strict "clean tree" guard before packing (deferred).</li>
+      <li>Measured load-time implementation and precise throttling rates are pending; the old coefficient model is only an explainer.</li>
+      <li>Re-validating the 0.9 SSIM default remains separate work (no rendering in this pass).</li>
+      <li>Windows and Linux testing.</li>
+      <li>USD input needs <code>NODE_OPTIONS=--experimental-web-worker</code> on Node versions that offer it.</li>
+    </ul>
+    <ul class="small">
+      <li><b>Proposal details:</b> goal naming/split, render size naming/default, metric naming, no-op/overwrite policy and positional help ambiguity remain open inline.</li>
+      <li>No implementation, push, publication or release is authorized by this doc update.</li>
+      <li>Deeper reading: <code>packages/cli/README.md</code>, <code>packages/cli/docs/node-assets.1.md</code>, <code>research/cli-v2/HANDOFF.md</code>.</li>
+    </ul>
+  </div>
+</section>
+
+<div class="queue-bar" id="queue-bar">
+  <div>
+    <b id="queue-count">No suggestions queued yet.</b>
+    <ol id="queue-list"></ol>
+  </div>
+  <div class="toast" id="queue-toast" role="status"></div>
+</div>
+
+</main>
+</div>
+
+<dialog id="suggest-dialog" aria-labelledby="sd-title">
+  <form method="dialog" id="suggest-form">
+    <div>
+      <div class="eyebrow">Suggest a change</div>
+      <h2 id="sd-title" style="font-size: 19px; margin-top: 4px;">About: <span id="sd-target-label"></span></h2>
+    </div>
+    <div class="field"><label for="sd-kind">Kind of change</label>
+      <select id="sd-kind">
+        <option>Change behavior</option>
+        <option>Rename or reword</option>
+        <option>Change output</option>
+        <option>Add something</option>
+        <option>Remove something</option>
+        <option>Docs only</option>
+        <option>Question, no change yet</option>
+      </select>
+    </div>
+    <div class="field"><label for="sd-details">What should change, and why?</label>
+      <textarea id="sd-details" required placeholder="e.g. Clarify render image size separately from maximum texture size."></textarea>
+    </div>
+    <div class="files" id="sd-files"></div>
+    <div class="files hidden" id="sd-context" style="white-space: pre-wrap; font-family: Consolas, 'Courier New', Courier, monospace; max-height: 160px; overflow: auto;"></div>
+    <div class="btn-row" style="justify-content: flex-end;">
+      <button class="btn" type="button" id="sd-cancel">Cancel</button>
+      <button class="btn primary" type="submit" id="sd-submit" value="queue">Queue suggestion</button>
+    </div>
+  </form>
+</dialog>

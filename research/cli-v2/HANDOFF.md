@@ -1,5 +1,8 @@
 # Handoff: node-assets CLI v2 (goal-tuned recipes)
 
+> Historical prototype handoff. For the packaged TypeScript preview and the current review, start with
+> [preview/HANDOFF.md](preview/HANDOFF.md). The implementation and Alex's later comments supersede the status below.
+
 Branch `cli-redesign-v2`, based on `cli-redesign`. Everything for this work lives in `research/cli-v2/`. The only
 change outside it is one line in `eslint.config.mjs`, which ignores `research/**` so `pnpm lint` stays green.
 

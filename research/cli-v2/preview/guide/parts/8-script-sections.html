@@ -1,0 +1,338 @@
+
+<script>
+(() => {
+  "use strict";
+  const { $, $$, esc } = window.guide;
+  const code = (text) => `<code>${esc(text)}</code>`;
+  const suggestButton = (target, files, section, label = "Suggest") =>
+    `<button class="btn suggest small" type="button" data-suggest-target="${esc(target)}" data-suggest-files="${esc(files)}" data-suggest-section="${esc(section)}">${esc(label)}</button>`;
+
+  // ---------- Legacy provisional-estimate explainer ----------
+  const COEF = { c0: 38.28, draco: 39.84, meshopt: 0, ktx2: 271.48, draco_mb: 180.93, meshopt_mb: 19.58, plain_mb: 7.53, mp_avif: 9, mp_webp: 8.77, mp_jpeg: 8.41, mp_png: 13.27, mp_ktx2: 22.03 };
+  const DECODER_BYTES = { draco: 74865, meshopt: 6694, ktx2: 264668 };
+  const PRESETS = {
+    orig: { bytes: 120484, img: 16302, fmt: "png", mp: 0.262144, geo: "plain" },
+    size: { bytes: 22724, img: 4000, fmt: "avif", mp: 0.065536, geo: "meshopt" },
+    gpu: { bytes: 28140, img: 10000, fmt: "ktx2", mp: 0.065536, geo: "meshopt" },
+  };
+  const calcFields = ["c-bytes", "c-img", "c-fmt", "c-mp", "c-geo", "c-net"];
+  const fmtMs = (ms) => `${ms.toFixed(1)} ms`;
+  const fmtInt = (n) => Math.round(n).toLocaleString("en-US");
+
+  function applyPreset(name) {
+    const preset = PRESETS[name];
+    if (!preset) return;
+    $("#c-bytes").value = preset.bytes;
+    $("#c-img").value = preset.img;
+    $("#c-fmt").value = preset.fmt;
+    $("#c-mp").value = preset.mp;
+    $("#c-geo").value = preset.geo;
+    $("#c-net").value = "9";
+  }
+
+  function computeLoad() {
+    const num = (id) => ($(`#${id}`).value.trim() === "" ? NaN : Number($(`#${id}`).value));
+    const bytes = num("c-bytes");
+    const fmt = $("#c-fmt").value;
+    const img = fmt === "none" ? 0 : num("c-img");
+    const mp = fmt === "none" ? 0 : num("c-mp");
+    const geo = $("#c-geo").value;
+    const mbps = num("c-net");
+    if (![bytes, img, mp].every((n) => Number.isFinite(n) && n >= 0) || img > bytes || !Number.isFinite(mbps) || mbps <= 0) {
+      $("#c-total").textContent = "—";
+      $("#c-cli").textContent = "Enter numbers ≥ 0, image bytes ≤ file bytes, and illustrative bandwidth > 0 Mbps.";
+      $("#c-parts").innerHTML = "";
+      $("#c-size").textContent = "";
+      return;
+    }
+    const geometryMB = Math.max(0, bytes - img) / 1e6;
+    const terms = [["c0", "Fixed overhead", 1]];
+    if (geo !== "plain") terms.push([geo, `${geo} decoder start-up`, 1]);
+    if (fmt === "ktx2") terms.push(["ktx2", "ktx2 decoder start-up", 1]);
+    terms.push([`${geo}_mb`, `Geometry: ${geometryMB.toFixed(3)} MB × ${COEF[`${geo}_mb`]} ms/MB`, geometryMB]);
+    if (fmt !== "none" && mp > 0) terms.push([`mp_${fmt}`, `Images: ${mp} MP ${fmt.toUpperCase()} × ${COEF[`mp_${fmt}`]} ms/MP`, mp]);
+    const decodeRows = terms.map(([key, label, amount]) => [label, COEF[key] * amount]);
+    const decodeMs = Math.max(0, decodeRows.reduce((sum, [, ms]) => sum + ms, 0));
+    const decoders = [...(geo !== "plain" ? [geo] : []), ...(fmt === "ktx2" ? ["ktx2"] : [])];
+    const decoderBytes = decoders.reduce((sum, name) => sum + DECODER_BYTES[name], 0);
+    const sent = bytes + decoderBytes;
+    const downloadS = (sent * 8) / (mbps * 1e6);
+    const total = downloadS + decodeMs / 1000;
+    $("#c-total").textContent = `${total.toFixed(3)} s`;
+    $("#c-cli").innerHTML = `Legacy-style rounded estimate: ${code(Math.round(total * 100) / 100)} s. Not proposed measured output.`;
+    $("#c-parts").innerHTML = [
+      `<tr><th>Download</th><th class="num">${fmtMs(downloadS * 1000)}</th></tr>`,
+      `<tr><td>${fmtInt(bytes)} B file${decoderBytes ? ` + ${fmtInt(decoderBytes)} B codecs (${decoders.join(" + ")}, once per model)` : ""} at illustrative ${mbps} Mbps</td><td class="num"></td></tr>`,
+      `<tr><th>Decode (provisional)</th><th class="num">${fmtMs(decodeMs)}</th></tr>`,
+      ...decodeRows.map(([label, ms]) => `<tr><td>${esc(label)}</td><td class="num">${fmtMs(ms)}</td></tr>`),
+    ].join("");
+    $("#c-size").textContent = `Per-model byte cost: ${fmtInt(bytes)} + ${fmtInt(decoderBytes)} = ${fmtInt(sent)} B. Real viewers may share/cache codecs; no cross-model prediction. Goal naming is pending.`;
+  }
+
+  $("#c-preset").addEventListener("change", (event) => {
+    applyPreset(event.target.value);
+    computeLoad();
+  });
+  for (const id of calcFields)
+    $(`#${id}`).addEventListener("input", (event) => {
+      $("#c-preset").value = "custom";
+      if (id === "c-fmt" && event.target.value === "none") {
+        $("#c-img").value = 0;
+        $("#c-mp").value = 0;
+      }
+      computeLoad();
+    });
+  applyPreset("orig");
+  computeLoad();
+
+  // ---------- Baseline search adapted to the proposed goals ----------
+  const STEPS = [
+    {
+      title: "Reference render",
+      what: `Renders the original from 4 views at ${code("--view")} px (default 1024). Every candidate is compared to these images.`,
+      fn: "setReferenceAsync",
+      goals: { size: "Same for every goal.", gpu: "Same for every goal.", load: "Same for every goal." },
+    },
+    {
+      title: "Baseline",
+      what: `Lossless cleanup, plus quantized geometry. The progress line calls it ${code("baseline (cleanup only)")}, which hides the quantize. Always checked, even when time is up.`,
+      fn: "evaluateAsync(\"baseline (cleanup only)\")",
+      goals: {
+        size: "Cleanup + quantize.",
+        gpu: "Cleanup + quantize.",
+        load: "Cleanup + quantize.",
+      },
+    },
+    {
+      title: "First geometry options",
+      what: "Tries each goal's first geometry choices on top of the baseline.",
+      fn: "geoEvalAsync, PLAN[goal].geo[0]",
+      goals: {
+        size: "Draco (14/10/12 bits), then meshopt high.",
+        gpu: "meshopt medium.",
+        load: "meshopt high, then Draco (14/10/12 bits).",
+      },
+    },
+    {
+      title: "First textures, largest size",
+      what: "Tries each goal's first texture format at the original's largest texture size, quality 90/90. If that fails, the format is dropped.",
+      fn: "sizeTopAsync",
+      goals: { size: "AVIF.", gpu: null, load: "AVIF." },
+      skip: { gpu: "KTX2 has no quality setting, so nothing renders here. Its largest size is tried in the size search." },
+    },
+    {
+      title: "Combine",
+      what: "Pairs every passing texture result with every passing geometry result. Predicted bytes = textures + geometry − baseline. Builds the best 4 predictions per goal, stopping at the first that passes or when none can beat the current best by 0.5%. Skips pairs at least as lossy as one that already failed.",
+      fn: "combineAsync",
+      goals: { size: "Ranked by file bytes + each codec's bytes once per model.", gpu: "Ranked by estimated GPU memory.", load: "Load measurement/ranking is pending; baseline provisional estimates are not measured loads." },
+    },
+    {
+      title: "Texture size search",
+      what: `Binary search for the smallest texture size that passes. Sizes are 256, 512, 768, 1024, 1536, 2048, 3072, 4096 below the original's largest, plus the original's largest. With ${code("--keep texture-size")}, only the original size.`,
+      fn: "sizeSearchAsync",
+      goals: { size: "AVIF, if step 4 passed.", gpu: "KTX2 (ETC1S color + UASTC data), all sizes.", load: "AVIF, if step 4 passed." },
+    },
+    { title: "Combine", what: "Same as step 5, with the new texture results.", fn: "combineAsync", goals: { size: "", gpu: "", load: "" } },
+    {
+      title: "Texture quality search",
+      what: "At the chosen size: the lowest quality below 90 that passes with both maps equal, then a lower color quality, then a lower data quality. Levels are 30–90 in steps of 10.",
+      fn: "qualitySearchAsync",
+      goals: { size: "AVIF.", gpu: null, load: "AVIF." },
+      skip: { gpu: "KTX2 quality isn't searched." },
+    },
+    {
+      title: "Second geometry options",
+      what: "Tries each goal's second geometry choices.",
+      fn: "geoEvalAsync, PLAN[goal].geo[1]",
+      goals: { size: "Draco low (11/8/10 bits).", gpu: null, load: "meshopt medium." },
+      skip: { gpu: "No second choice." },
+    },
+    {
+      title: "Simplify",
+      what: `Only for models with more than 2,000 triangles and no ${code("--keep geometry")}. Finds the lowest ratio of 0.25, 0.5 or 0.75 that passes. The ratio is a target: an error limit of 0.002 can make it keep more triangles. If a ratio passes, retries the first geometry options at that ratio.`,
+      fn: "simplifySearchAsync",
+      goals: { size: "Searched with quantize; then retries Draco and meshopt high.", gpu: "Searched with quantize; then retries meshopt medium.", load: "Searched with quantize; then retries meshopt high and Draco." },
+    },
+    { title: "Combine", what: "Same as step 5, with the new geometry results.", fn: "combineAsync", goals: { size: "", gpu: "", load: "" } },
+    {
+      title: "Second texture formats",
+      what: "Tries each goal's fallback texture formats.",
+      fn: "sizeSearchAsync, qualitySearchAsync",
+      goals: {
+        size: "WebP: largest size, size search, quality search.",
+        gpu: "KTX2 all-UASTC at sizes below the step 6 winner, and KTX2 all-ETC1S at the same size. If step 6 found nothing, a full size search for each.",
+        load: "WebP: largest size, size search, quality search.",
+      },
+    },
+    { title: "Combine", what: "Same as step 5, with the new texture results.", fn: "combineAsync", goals: { size: "", gpu: "", load: "" } },
+    {
+      title: "Pick winners",
+      what: `Lowest score among candidates passing this tune run's SSIM threshold. Retain the baseline 1% tie rule: higher fidelity (2 decimals), then fewer bytes. Write a recipe and preview PNG, never limits or timeout in the graph. If nothing passed: ${code("INVALID_INPUT")}; try a longer ${code("--timeout")} or lower SSIM threshold via ${code("--fidelity")} (name pending).`,
+      fn: "winners loop at the end of tuneAsync",
+      goals: { size: "", gpu: "", load: "" },
+    },
+  ];
+  let goal = "size";
+  let stepIndex = 0;
+  const stepList = $("#t-steps");
+  const detail = $("#t-detail");
+
+  stepList.innerHTML = STEPS.map((step, i) => `<div role="listitem"><button type="button" data-step="${i}"><span class="n">${i + 1}</span>${esc(step.title)}</button></div>`).join("");
+  const stepButtons = $$("button[data-step]", stepList);
+
+  function renderStepper() {
+    stepButtons.forEach((button, i) => {
+      button.classList.toggle("na", STEPS[i].goals[goal] === null);
+      if (i === stepIndex) button.setAttribute("aria-current", "step");
+      else button.removeAttribute("aria-current");
+    });
+    for (const button of $$("[data-goal]")) button.setAttribute("aria-pressed", String(button.dataset.goal === goal));
+    const step = STEPS[stepIndex];
+    const forGoal = step.goals[goal];
+    const goalLine = forGoal === null ? `<p><b>For ${esc(goal)}:</b> skipped. ${step.skip?.[goal] ?? ""}</p>` : forGoal ? `<p><b>For ${esc(goal)}:</b> ${forGoal}</p>` : "";
+    detail.innerHTML = `
+      <div class="eyebrow">Step ${stepIndex + 1} of ${STEPS.length}</div>
+      <h3>${esc(step.title)}</h3>
+      <p>${step.what}</p>
+      ${goalLine}
+      <p class="small muted">Adapted baseline source: ${code("packages/cli/src/tune/search.ts")} · ${code(step.fn)}${step.fn.includes("PLAN") ? ` · lists in ${code("tune/plan.ts")}` : ""}. Proposed flow, not new run evidence. Timeout defaults to 420 seconds; steps after the baseline may be skipped. All limits are temporary to this tune run.</p>
+      <div class="btn-row">
+        <button class="btn small" type="button" data-move="-1" ${stepIndex === 0 ? "disabled" : ""}>← Previous</button>
+        <button class="btn small" type="button" data-move="1" ${stepIndex === STEPS.length - 1 ? "disabled" : ""}>Next →</button>
+        ${suggestButton(`tune step ${stepIndex + 1}: ${step.title}`, "packages/cli/src/tune/search.ts, packages/cli/src/tune/plan.ts", "tune")}
+      </div>`;
+  }
+
+  stepList.addEventListener("click", (event) => {
+    const button = event.target.closest("button[data-step]");
+    if (!button) return;
+    stepIndex = Number(button.dataset.step);
+    renderStepper();
+  });
+  stepList.addEventListener("keydown", (event) => {
+    const delta = { ArrowDown: 1, ArrowUp: -1 }[event.key];
+    if (!delta) return;
+    event.preventDefault();
+    stepIndex = Math.min(STEPS.length - 1, Math.max(0, stepIndex + delta));
+    renderStepper();
+    stepButtons[stepIndex].focus();
+  });
+  detail.addEventListener("click", (event) => {
+    const button = event.target.closest("button[data-move]");
+    if (!button) return;
+    stepIndex = Math.min(STEPS.length - 1, Math.max(0, stepIndex + Number(button.dataset.move)));
+    renderStepper();
+  });
+  for (const button of $$("[data-goal]"))
+    button.addEventListener("click", () => {
+      goal = button.dataset.goal;
+      renderStepper();
+    });
+  renderStepper();
+
+  // ---------- Real runs ----------
+  const examples = $$("script.example").map((script) => ({
+    id: script.id.replace(/^ex-/, ""),
+    label: script.dataset.label,
+    commit: script.dataset.commit,
+    note: script.dataset.note,
+    render: script.dataset.render === "true",
+    text: script.textContent.replace(/^\n/, "").replace(/\n$/, ""),
+  }));
+  const exButtons = $("#ex-buttons");
+  exButtons.innerHTML = examples.map((example) => `<button class="btn small" type="button" data-example="${esc(example.id)}" aria-pressed="false">${esc(example.label)}</button>`).join("");
+
+  function lineHtml(line) {
+    if (line.startsWith("$ ")) return `<span class="cmd">${esc(line)}</span>`;
+    if (/^(run|tune|inspect): /.test(line) || /^\[exit \d+\]$/.test(line)) return `<span class="stderr">${esc(line)}</span>`;
+    return esc(line);
+  }
+
+  function showExample(id) {
+    const example = examples.find((e) => e.id === id) ?? examples[0];
+    for (const button of $$("button[data-example]", exButtons)) button.setAttribute("aria-pressed", String(button.dataset.example === example.id));
+    const verified = example.commit === "ab42afe";
+    $("#ex-label").innerHTML = [
+      `<span class="tag ${verified ? "verified" : "older"}">legacy ${verified ? "baseline" : "render-era baseline"} · ${esc(example.commit)}</span>`,
+      example.render ? `<span class="chip">historical browser run</span>` : `<span class="chip">historical non-render run</span>`,
+      `<span class="small muted">${esc(example.note)} · unchanged old stdout/flags, not proposed commands</span>`,
+      suggestButton(`Legacy baseline output (not proposed): ${example.label}`, "packages/cli/src/output.ts", "output"),
+    ].join("");
+    $("#ex-out").innerHTML = example.text.split("\n").map(lineHtml).join("\n");
+  }
+
+  exButtons.addEventListener("click", (event) => {
+    const button = event.target.closest("button[data-example]");
+    if (button) showExample(button.dataset.example);
+  });
+  if (examples.length) showExample(examples.find((e) => e.id === "tune")?.id ?? examples[0].id);
+
+  // ---------- Error filter ----------
+  const errRows = $$("#err-rows tr");
+  $("#err-filter").addEventListener("input", (event) => {
+    const query = event.target.value.trim().toLowerCase();
+    let shown = 0;
+    for (const row of errRows) {
+      const match = !query || row.textContent.toLowerCase().includes(query);
+      row.classList.toggle("hidden", !match);
+      shown += match;
+    }
+    $("#err-empty").classList.toggle("hidden", shown > 0);
+  });
+
+  // ---------- Noticed ----------
+  const NOTICED = [
+    {
+      title: "Goal names and support filter",
+      body: `Compat removal is decided. The ${code("disk-size")} / ${code("download-size")} / ${code("load-speed")} split is not. Current size/gpu/load names remain placeholders. A roughly 97% browser-support threshold is deferred, not implemented.`,
+      files: "packages/cli/src/measure.ts, packages/cli/src/tune/plan.ts",
+    },
+    {
+      title: "Render image size vs texture size",
+      body: `${code("--view")} sizes rendered comparison images, not textures: baseline default 1024, tune range 64–4096 (baseline inspect accepts integers ≥16). Alex's ${code("--max-texture-size")} / 4096 request assumed a different meaning. Keep render control naming/default open; don't silently change its purpose or impose a new validation rule.`,
+      files: "packages/cli/src/arguments.ts, packages/cli/src/commands/tune.ts",
+    },
+    {
+      title: "Requested metric name doesn't match SSIM",
+      body: `${code("--min-pixel-diff-ratio")} was requested for the visual threshold, but the retained metric is worst-region SSIM over four views, not pixel difference. Keep ${code("--fidelity")} with an explicit SSIM label until metric/naming is decided. The &gt;0..1 threshold is temporary to tune only.`,
+      files: "packages/cli/src/commands/tune.ts, packages/cli/src/render/ssim.ts",
+    },
+    {
+      title: "Opt-in loads and real throttle rates",
+      body: `${code("--include load-time")} is a comma-separated opt-in interface; no second metric has been invented. ${code("--network-throttling")} accepts none/fast-4g/slow-4g/3g, default none. Baseline load_s is headless provisional arithmetic. Browser measurement and exact rates remain pending; none has no fixed Mbps.`,
+      files: "packages/cli/src/commands/inspect.ts, packages/cli/src/measure.ts, packages/cli/src/loadModel.ts",
+    },
+    {
+      title: "No-op and overwrite after removing hashes",
+      body: `No provenance hashes in extras is decided. Baseline no-op detection uses those hashes, so no-op/overwrite policy and ${code("--force")} details need a decision. No sidecars or alternative tracking are assumed. Old graph migration after removing saved limits also remains open.`,
+      files: "packages/cli/src/provenance.ts, packages/cli/src/commands/run.ts, packages/cli/src/graphFiles.ts",
+    },
+    {
+      title: "Nearest help vs positional file failures",
+      body: `No-args/unknown commands show nearest help with ${code("--help")}; no live folder discovery. But ${code("tune foo")} can contain a model path. Missing/unsupported positional-path policy and help exit status need a decision, not a blanket conversion of file errors to help.`,
+      files: "packages/cli/src/cli.ts, packages/cli/src/help.ts, packages/cli/src/inputs.ts",
+    },
+    {
+      title: "GPU approximation TODO is recorded, not coded",
+      body: `Keep the 4 B/px non-KTX2 approximation. Actual R/RG/RGB/RGBA storage needs checking; add the source TODO during an approved implementation, not this guide-only pass.`,
+      files: "packages/cli/src/measure.ts",
+    },
+    {
+      title: "Retained baseline cautions",
+      body: `“baseline (cleanup only)” also quantizes geometry. “simplify 0.25” is a target, not guaranteed 25%: the older a9329e2 duck kept 2,526/4,212 triangles (about 60%) with the 0.002 block error setting. These are historical details, not new tests.`,
+      files: "packages/cli/src/tune/search.ts, packages/cli/src/tune/stages.ts",
+    },
+  ];
+  $("#noticed-list").innerHTML = NOTICED.map(
+    (item) => `<div class="soft">
+      <div class="label-row" style="margin-top: 0;"><span class="tag inferred">inferred</span></div>
+      <h3>${esc(item.title)}</h3>
+      <p class="small">${item.body}</p>
+      <p class="small muted mono">${esc(item.files)}</p>
+      ${suggestButton(item.title, item.files, "noticed")}
+    </div>`,
+  ).join("");
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,16 @@
+OK   rc=0
+OK   rc=0                help
+OK   rc=0                inspect assets/
+OK   rc=1                tune assets/duck.glb --for size -o graphs/
+OK   rc=1                tune assets/duck.glb --for size,gpu,load,compat -o graphs/
+OK   rc=1                tune assets/duck.glb --for gpu -o graphs/duck-quest.toon
+OK   rc=1                tune assets/duck.glb --for gpu --view 2048 -o graphs/
+OK   rc=1                tune assets/duck.glb assets/duck2.glb --for size -o graphs/
+OK   rc=2 USAGE          tune assets/duck.glb --for size,gpu -o graphs/x.toon
+OK   rc=2 USAGE          tune assets/duck.glb --for speed
+OK   rc=0                run optimize assets/duck.glb -o public/duck.glb
+OK   rc=0                show optimize
+OK   rc=0                run mine.toon assets/duck.glb -o out/mine.glb
+OK   rc=0                run mine.toon assets/ -o public2/
+OK   rc=1                run mine.toon assets/ -o public3/ --check
+OK   rc=1 NO_BROWSER     inspect public/ --against assets/

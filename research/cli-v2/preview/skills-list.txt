@@ -1,0 +1,19 @@
+
+│
+●   github_copilot_app_agent  Agent detected — installing non-interactively
+│
+◇  Source: <checkout>
+│
+◇  Local path validated
+│
+◇  Found 1 skill
+
+│
+◇  Available Skills
+│
+│    node-assets-cli
+│
+│      Make 3D models (.glb, .gltf, .fbx, .obj, .stl, .usd) small and web-ready without visible quality loss. Use when asked to optimize, compress, shrink, or tune 3D assets for download size, GPU memory, load time, or compatibility, or to check that an optimized model still looks like the original.
+
+│
+└  Use --skill <name> to install specific skills

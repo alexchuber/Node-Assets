@@ -1,0 +1,153 @@
+
+<section class="card" id="try" aria-labelledby="try-h">
+  <div class="section-head">
+    <div>
+      <div class="eyebrow">Try a command</div>
+      <h2 id="try-h">Build a command and see what it would do</h2>
+      <p><b>Illustrative proposed-command simulator, not the installed CLI.</b> Pick a command and fill in flags to see the proposed plan or validation. It does not execute commands, measure loads or guarantee baseline output. Leave a field empty to omit a flag.</p>
+    </div>
+  </div>
+  <div class="field" style="max-width: 420px;">
+    <label for="b-example">Load an example</label>
+    <select id="b-example">
+      <option value="">Pick an example…</option>
+      <option value="tune-ok">tune the duck for size and gpu</option>
+      <option value="tune-view">tune with --view 32 (error)</option>
+      <option value="tune-file">tune two goals into one .toon file (error)</option>
+      <option value="tune-time">tune with --timeout 2d (error)</option>
+      <option value="tune-time-ok">tune with --timeout 60 (seconds)</option>
+      <option value="run-check">run a tuned graph (no saved limits)</option>
+      <option value="run-dir">run on a folder into a .glb (error)</option>
+      <option value="inspect-against">inspect output with --compare</option>
+      <option value="inspect-net">opt into load-time with 3g throttling</option>
+      <option value="help-top">node-assets foo → top-level help</option>
+      <option value="help-tune">node-assets tune foo → tune help (path ambiguity)</option>
+      <option value="show-bad">show an unknown built-in (error)</option>
+    </select>
+  </div>
+  <div class="builder">
+    <form class="fields" id="builder" autocomplete="off" onsubmit="return false">
+      <fieldset class="checks" style="border: none; padding: 0; margin: 0;">
+        <legend class="small" style="font-weight: 600; margin-bottom: 4px;">Command</legend>
+        <label><input type="radio" name="b-cmd" value="inspect"> inspect</label>
+        <label><input type="radio" name="b-cmd" value="tune" checked> tune</label>
+        <label><input type="radio" name="b-cmd" value="run"> run</label>
+        <label><input type="radio" name="b-cmd" value="show"> show</label>
+        <label><input type="radio" name="b-cmd" value="help"> help / fallback</label>
+      </fieldset>
+
+      <div class="fields" data-cmd="inspect">
+        <div class="field"><label for="i-inputs">Inputs</label><input type="text" id="i-inputs" value="assets/"><span class="hint">Files or folders, separated by spaces.</span></div>
+        <div class="field"><label for="i-against">--compare</label><input type="text" id="i-against" value=""><span class="hint">An original file, or folder of same-named originals. Renders SSIM, without a pass/fail limit.</span></div>
+        <div class="field"><label for="i-view">--view · render comparison image size</label><input type="text" id="i-view" value=""><span class="hint">Not texture size. Default 1024 px; baseline inspect accepts integers ≥16 (tune: 64–4096). Naming/default decision below.</span></div>
+        <div class="field"><label for="i-include">--include</label><input type="text" id="i-include" value=""><span class="hint">Comma-separated list; currently only load-time is proposed. Browser measurement is pending.</span></div>
+        <div class="field"><label for="i-network">--network-throttling</label><input type="text" id="i-network" value=""><span class="hint">none (default), fast-4g, slow-4g, 3g. Exact rates pending; none has no fixed Mbps.</span></div>
+      </div>
+
+      <div class="fields" data-cmd="tune">
+        <div class="field"><label for="t-inputs">Inputs</label><input type="text" id="t-inputs" value="assets/duck.glb"><span class="hint">Files or folders, separated by spaces.</span></div>
+        <div class="field"><label for="t-for">--for</label><input type="text" id="t-for" value="size,gpu"><span class="hint">Required. size, gpu, load; comma-separated. Goal naming/split pending.</span></div>
+        <div class="field"><label for="t-out">-o</label><input type="text" id="t-out" value="graphs"><span class="hint">A folder (default .), or one .toon file. No trailing slash required; the real CLI must check the filesystem.</span></div>
+        <div class="field"><label for="t-fidelity">--fidelity · minimum worst-region SSIM</label><input type="text" id="t-fidelity" value=""><span class="hint">Temporary tune limit: &gt;0 to 1, default 0.9. Requested --min-pixel-diff-ratio name pending because SSIM is not pixel diff.</span></div>
+        <div class="field"><label for="t-view">--view · render comparison image size</label><input type="text" id="t-view" value=""><span class="hint">Whole number, 64–4096; baseline default 1024. Not max texture size. Requested rename/4096 need a decision.</span></div>
+        <div class="field"><label for="t-network">--network-throttling</label><input type="text" id="t-network" value=""><span class="hint">none (default), fast-4g, slow-4g, 3g. Proposed interface; measured load ranking/rates pending.</span></div>
+        <p class="small muted" id="t-amortize" data-feedback-uids="17">No shared-codec flag or amortization. Each codec's bytes count once per model; viewer sharing/caching is a note, not a score adjustment.</p>
+        <div class="field"><label for="t-keep">--keep</label><input type="text" id="t-keep" value=""><span class="hint">hierarchy, texture-size, geometry; comma-separated.</span></div>
+        <div class="field"><label for="t-time">--timeout</label><input type="text" id="t-time" value=""><span class="hint">Positive numeric seconds, e.g. --timeout 60. Default 420 seconds. No unit suffixes.</span></div>
+      </div>
+
+      <div class="fields" data-cmd="run">
+        <div class="field"><label for="r-graph">Graph</label><input type="text" id="r-graph" value="optimize"><span class="hint">A built-in name (optimize), or a path / .toon file.</span></div>
+        <div class="field"><label for="r-inputs">Inputs</label><input type="text" id="r-inputs" value="assets/duck.glb"><span class="hint">Files or folders, separated by spaces.</span></div>
+        <div class="field"><label for="r-out">-o</label><input type="text" id="r-out" value="public/duck.glb"><span class="hint">Required. A .glb file or a folder; no required trailing slash. Simulator cannot stat paths.</span></div>
+        <p class="small muted" id="r-check" data-feedback-uids="8,11">No run check flag or saved limits. For a comparison score, use inspect --compare; it does not enforce a threshold.</p>
+        <div class="checks"><label><input type="checkbox" id="r-force"> --force (overwrite policy pending)</label></div>
+      </div>
+
+      <div class="fields" data-cmd="show">
+        <div class="field"><label for="s-graph">Graph</label><input type="text" id="s-graph" value="optimize"><span class="hint">A built-in name (optimize), or a path / .toon file.</span></div>
+      </div>
+      <div class="fields" data-cmd="help">
+        <div class="field"><label for="h-input">Arguments after node-assets</label><input type="text" id="h-input" value="--help"><span class="hint">Try empty, foo, tune, tune --help, or tune foo. This illustrates help routing, not filesystem validation.</span></div>
+      </div>
+    </form>
+
+    <div class="result" aria-live="polite">
+      <div class="cmdline">
+        <pre class="term" id="b-line"></pre>
+        <button class="btn small" type="button" id="b-copy">Copy</button>
+      </div>
+      <div class="status" id="b-status"></div>
+      <div id="b-body"></div>
+      <div class="btn-row">
+        <button class="btn suggest small" type="button" id="b-suggest">Suggest a change to this behavior</button>
+      </div>
+      <p class="small muted">Proposal only; this deliberately differs from baseline <span class="mono">ab42afe</span>. The simulator guesses extensionless input paths are folders and .toon/.glb outputs are files. Real path kind/validity must come from the filesystem, so dotted folders and extensionless files cannot be resolved here. File failures remain distinct from usage help.</p>
+    </div>
+  </div>
+</section>
+
+<section class="card" id="goals" aria-labelledby="goals-h">
+  <div class="section-head">
+    <div>
+      <div class="eyebrow">Goals &amp; scores</div>
+      <h2 id="goals-h">What "best" means for each goal</h2>
+      <p>Every candidate must pass the fidelity limit first. Among those that pass, <code>tune</code> keeps the one with the lowest score. Scores within 1% of the best count as a tie; ties go to higher fidelity, then fewer bytes.</p>
+    </div>
+    <button class="btn suggest small" type="button" data-suggest-target="Proposed goal scoring (size / gpu / load)" data-suggest-files="packages/cli/src/measure.ts, packages/cli/src/tune/search.ts, packages/cli/src/loadModel.ts" data-suggest-section="goals">Suggest</button>
+  </div>
+  <div class="grid4">
+    <div class="soft">
+      <h3>size</h3>
+      <div class="formula">file bytes + bytes of each required codec once per model</div>
+      <p class="small">No shared-codec adjustment. This is not a measured gzip/Brotli transfer size. Pending: split into disk-size (file only) and download-size (includes codecs)?</p>
+    </div>
+    <div class="soft">
+      <h3>gpu</h3>
+      <div class="formula">Σ textures w·h·(KTX2 ? 1 : 4)·4/3 + Σ vertex data</div>
+      <p class="small" data-feedback-uids="20">Least estimated GPU memory. Use the existing 4 B/px approximation for non-KTX2 images, not a claim that every image has four channels. 4/3 approximates mipmaps; KTX2 and Draco handling retain baseline estimates. <b>Implementation TODO:</b> check actual R/RG/RGB/RGBA channel/storage behavior; no source TODO was added in this doc-only pass.</p>
+    </div>
+    <div class="soft">
+      <h3>load</h3>
+      <div class="formula">load ranking: measurement model pending</div>
+      <p class="small">Keep the load name while load-speed naming is discussed. Baseline uses provisional download + decode estimates, not measured browser loads. Proposed throttle presets don't yet define numeric rates. Each codec counts once per model, never shared across the batch.</p>
+    </div>
+    <div class="soft">
+      <h3>Goal names need a decision</h3>
+      <p class="small" data-feedback-uids="1,4">Compat is removed, not renamed. <code>disk-size</code> / <code>download-size</code> / <code>load-speed</code> were questions, so they are not accepted builder values yet. A browser-support filter around 97% global coverage is deferred, not a goal or working feature.</p>
+    </div>
+  </div>
+
+  <h3 style="margin-top: 18px;">Legacy provisional-estimate explainer</h3>
+  <p class="small muted">Historical decode coefficients from <code>measure.ts</code> / <code>loadModel.ts</code>, not proposed measured behavior. Duck presets come from <span class="mono">a9329e2</span>; tuned image bytes are estimates. This explainer removes the old shared-cost calculation and uses explicit, editable Mbps—not a mapping for none or Chrome presets. Its numbers are neither new evidence nor proposed CLI stdout.</p>
+  <div class="calc">
+    <div class="calc-fields">
+      <div class="field" style="grid-column: 1 / -1;"><label for="c-preset">Preset</label>
+        <select id="c-preset">
+          <option value="orig">Duck original (120,484 B, PNG)</option>
+          <option value="size">Duck tuned for size (meshopt + AVIF)</option>
+          <option value="gpu">Duck tuned for gpu (meshopt + KTX2)</option>
+          <option value="custom">Custom</option>
+        </select>
+      </div>
+      <div class="field"><label for="c-bytes">File bytes</label><input type="text" id="c-bytes" inputmode="numeric"></div>
+      <div class="field"><label for="c-img">Image bytes (inside file)</label><input type="text" id="c-img" inputmode="numeric"></div>
+      <div class="field"><label for="c-fmt">Image format</label>
+        <select id="c-fmt"><option value="png">PNG</option><option value="jpeg">JPEG</option><option value="webp">WebP</option><option value="avif">AVIF</option><option value="ktx2">KTX2</option><option value="none">No images</option></select>
+      </div>
+      <div class="field"><label for="c-mp">Image megapixels (total)</label><input type="text" id="c-mp" inputmode="decimal"></div>
+      <div class="field"><label for="c-geo">Geometry</label>
+        <select id="c-geo"><option value="plain">Plain or quantized</option><option value="meshopt">meshopt</option><option value="draco">Draco</option></select>
+      </div>
+      <div class="field"><label for="c-net">Illustrative bandwidth (Mbps)</label><input type="text" id="c-net" inputmode="decimal" value="9"><span class="hint">Legacy example only, not a Chrome preset or measured connection.</span></div>
+      <p class="small muted" id="c-amort">Codec bytes count once per model. Viewer reuse or caching may change real download costs; no cross-model prediction.</p>
+    </div>
+    <div class="calc-out" aria-live="polite">
+      <div class="small muted">Illustrative legacy estimate · not a measurement</div>
+      <div class="big" id="c-total"></div>
+      <div class="small" id="c-cli"></div>
+      <div class="table-wrap"><table><tbody id="c-parts"></tbody></table></div>
+      <p class="small muted" id="c-size"></p>
+    </div>
+  </div>
+</section>

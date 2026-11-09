@@ -1,0 +1,206 @@
+
+<section class="card" id="tune" aria-labelledby="tune-h">
+  <div class="section-head">
+    <div>
+      <div class="eyebrow">How tune searches</div>
+      <h2 id="tune-h">A fixed search plan, not trial and error</h2>
+      <p>The retained baseline search plan tests textures and geometry separately, narrows them, then builds promising pairs. Below it is adapted to three proposed goals and per-model codec costs; it has not been run on the proposal. Fidelity limits live only in this tune run, not the resulting graph.</p>
+    </div>
+    <button class="btn suggest small" type="button" data-suggest-target="tune search order" data-suggest-files="packages/cli/src/tune/search.ts, packages/cli/src/tune/plan.ts" data-suggest-section="tune">Suggest</button>
+  </div>
+  <div class="btn-row" role="group" aria-label="Show steps for goal">
+    <span class="small muted">Goal:</span>
+    <button class="btn small" type="button" data-goal="size" aria-pressed="true">size</button>
+    <button class="btn small" type="button" data-goal="gpu" aria-pressed="false">gpu</button>
+    <button class="btn small" type="button" data-goal="load" aria-pressed="false">load</button>
+  </div>
+  <div class="stepper">
+    <div class="steps" id="t-steps" role="list"></div>
+    <div class="step-detail soft" id="t-detail" aria-live="polite"></div>
+  </div>
+  <div class="grid2" style="margin-top: 16px;">
+    <div class="soft">
+      <h3>Shortcuts that save renders</h3>
+      <ul class="small">
+        <li><b>Cache:</b> a candidate with the same settings is never rendered twice. Intermediate models (after cleanup, after textures) are cached by their block list, so a new candidate re-runs only the stages that changed. Up to 6 are kept.</li>
+        <li><b>Predicted pairs:</b> pair bytes ≈ texture result + geometry result − baseline. Only the best 4 predictions per goal get built each round.</li>
+        <li><b>Early stop:</b> a round stops when the next pair can't beat the current best by 0.5%, or at the first pair that passes.</li>
+        <li><b>Skip doomed pairs:</b> if a pair failed, any pair whose texture and geometry are both the same or lossier is skipped.</li>
+      </ul>
+    </div>
+    <div class="soft">
+      <h3>Temporary tune timeout</h3>
+      <ul class="small">
+        <li><code>--timeout</code> (default <b>420 seconds</b>) covers the whole run, all inputs. <code>--timeout 60</code> means 60 seconds; unit suffixes such as <code>2d</code>, <code>90s</code> or <code>7m</code> are not accepted.</li>
+        <li>When time runs out, tune stops starting new work but always checks each input's baseline.</li>
+        <li>The retained search behavior writes the best result so far and reports <code>search: partial</code> in command output. Rerun with a longer timeout to continue searching; limits and timeout are not saved to the recipe.</li>
+        <li>Each candidate prints one progress line on stderr:<br><code>tune: &lt;label&gt;: &lt;MB&gt; MB, GPU &lt;MiB&gt; MiB, fidelity &lt;score&gt;</code>, plus <code>(below limit)</code> when it fails.</li>
+      </ul>
+    </div>
+  </div>
+  <h3 style="margin-top: 16px;">Which blocks each setting becomes</h3>
+  <p class="small muted">tune searches over a few "stages" and compiles the winner into blocks. Source: <code>tune/stages.ts</code>.</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Stage</th><th>Blocks, in order</th><th>When</th></tr></thead>
+      <tbody>
+        <tr><td>cleanup</td><td class="wrap"><code>metal-rough</code>, <code>dedup</code>, <code>cull-unused</code>, <code>weld</code></td><td>Always (lossless)</td></tr>
+        <tr><td></td><td class="wrap"><code>flatten</code></td><td>No animations, and no <code>--keep hierarchy</code></td></tr>
+        <tr><td></td><td class="wrap"><code>instance {min: 2}</code></td><td>No <code>--keep hierarchy</code></td></tr>
+        <tr><td>textures</td><td class="wrap"><code>resize-textures {maxSize, slots: all}</code></td><td>Chosen size is below the original's largest texture</td></tr>
+        <tr><td></td><td class="wrap"><code>encode-ktx2 {mode, slots: all, etc1sQuality 128, uastcQuality 1, zstd}</code></td><td>KTX2. Mode is etc1s or uastc if both map kinds match, else auto</td></tr>
+        <tr><td></td><td class="wrap"><code>encode-textures</code> ×2 (color at quality, data at data quality)</td><td>WebP, AVIF, JPEG, PNG. AVIF quality is scaled by 0.7, so q30 → 21</td></tr>
+        <tr><td>geometry</td><td class="wrap"><code>simplify {ratio, error: 0.002}</code></td><td>Ratio below 1</td></tr>
+        <tr><td></td><td class="wrap">one of <code>dequantize</code> · <code>quantize</code> · <code>encode-meshopt {level}</code> · <code>encode-draco</code> (14/10/12 or 11/8/10 bits)</td><td>Per the chosen geometry mode</td></tr>
+        <tr><td></td><td class="wrap"><code>cull-unused</code></td><td>Always last</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="card" id="fidelity" aria-labelledby="fidelity-h">
+  <div class="section-head">
+    <div>
+      <div class="eyebrow">Fidelity check</div>
+      <h2 id="fidelity-h">How "still looks like the original" is measured</h2>
+      <p>The retained metric is <b>worst-64px-region SSIM over four rendered views</b>. In tune, a candidate below that run's threshold is rejected. <code>inspect --compare</code> reports the score only: no pass/fail limit.</p>
+    </div>
+    <button class="btn suggest small" type="button" data-suggest-target="Fidelity check (render + SSIM)" data-suggest-files="packages/cli/src/render/index.ts, packages/cli/src/render/page.ts, packages/cli/src/render/ssim.ts" data-suggest-section="fidelity">Suggest</button>
+  </div>
+  <svg class="diagram" viewBox="0 0 960 150" role="img" aria-labelledby="fi-title fi-desc">
+    <title id="fi-title">Fidelity pipeline</title>
+    <desc id="fi-desc">Both GLBs are decoded in Node, served from a loopback server to a headless browser, rendered by Babylon.js from 4 views, and scored by the worst 64 pixel tile.</desc>
+    <defs>
+      <marker id="arrow2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path class="arrowhead" d="M0,0 L10,5 L0,10 z"/>
+      </marker>
+    </defs>
+    <path class="edge" d="M150,70 L166,70" marker-end="url(#arrow2)"/>
+    <path class="edge" d="M308,70 L324,70" marker-end="url(#arrow2)"/>
+    <path class="edge" d="M466,70 L482,70" marker-end="url(#arrow2)"/>
+    <path class="edge" d="M624,70 L640,70" marker-end="url(#arrow2)"/>
+    <path class="edge" d="M782,70 L798,70" marker-end="url(#arrow2)"/>
+    <g class="node"><title>The original model and one candidate result</title>
+      <rect x="10" y="30" width="140" height="80" rx="10"/>
+      <text x="80" y="64" text-anchor="middle">original</text>
+      <text x="80" y="84" text-anchor="middle">+ candidate</text>
+    </g>
+    <g class="node"><title>Draco and meshopt are decoded in Node before the browser sees the file</title>
+      <rect x="168" y="30" width="140" height="80" rx="10"/>
+      <text x="238" y="64" text-anchor="middle">decode in Node</text>
+      <text class="sub" x="238" y="84" text-anchor="middle">Draco, meshopt</text>
+    </g>
+    <g class="node"><title>A local HTTP server on 127.0.0.1, random port. Requests to any other origin are blocked.</title>
+      <rect x="326" y="30" width="140" height="80" rx="10"/>
+      <text x="396" y="64" text-anchor="middle">loopback server</text>
+      <text class="sub" x="396" y="84" text-anchor="middle">127.0.0.1 only</text>
+    </g>
+    <g class="node accent"><title>Headless Chrome, Edge or Chromium with software WebGL (SwiftShader); a Babylon.js scene loads the file. KTX2 decodes in the page from local files.</title>
+      <rect x="484" y="30" width="140" height="80" rx="10"/>
+      <text x="554" y="64" text-anchor="middle">headless browser</text>
+      <text class="sub" x="554" y="84" text-anchor="middle">Babylon.js scene</text>
+    </g>
+    <g class="node"><title>4 views around the model, 35° field of view, slightly above. Candidates reuse the original's camera framing.</title>
+      <rect x="642" y="30" width="140" height="80" rx="10"/>
+      <text x="712" y="64" text-anchor="middle">4 views</text>
+      <text class="sub" x="712" y="84" text-anchor="middle">render image: --view px</text>
+    </g>
+    <g class="node accent"><title>SSIM per 64 px tile on luminance. Tiles less than a quarter covered by the model are ignored. Score = worst tile, rounded to 3 decimals.</title>
+      <rect x="800" y="30" width="150" height="80" rx="10"/>
+      <text x="875" y="58" text-anchor="middle">worst 64 px tile</text>
+      <text x="875" y="78" text-anchor="middle">SSIM ≥ limit?</text>
+      <text class="sub" x="875" y="96" text-anchor="middle">tune only · default 0.9</text>
+    </g>
+  </svg>
+  <div class="soft small" data-feedback-uids="12,13,16">
+    <b>Render image size is not texture size.</b> At baseline, <code>--view</code> sets the comparison image resolution: default 1024 px, tune range 64–4096. Alex requested <code>--max-texture-size</code> and a 4096 default assuming it capped textures. Those changes remain an open question; this guide does not silently rename the render-size control or change its default.
+    <br><b>SSIM is not pixel diff.</b> <code>--fidelity</code> is a minimum SSIM threshold (&gt;0 to 1, default 0.9). Requested <code>--min-pixel-diff-ratio</code> naming needs a metric/naming decision; neither a new metric nor a rename is implemented here.
+  </div>
+  <div class="grid2">
+    <div>
+      <h3>Details that matter</h3>
+      <ul class="small">
+        <li>Score is SSIM on brightness (Rec. 709), over a 50% gray background. 1 means identical.</li>
+        <li>Only tiles more than 25% covered by the model count. The model mask is grown by 3 px so edges are included.</li>
+        <li>Candidates use the original's camera position, so a model that shrinks or moves loses points.</li>
+        <li>The tune limit holds only for that run at its render image size. For a larger comparison image (zoom, VR), use <code>--view 2048</code>; this does not set a maximum texture size.</li>
+        <li>Static pose only. Animations aren't checked.</li>
+        <li><b>It's a numeric check, not a perceptual guarantee.</b> The 0.9 default hasn't been re-validated on the Babylon.js renderer yet. Look at the preview images.</li>
+      </ul>
+    </div>
+    <figure>
+      <img src="duck.size.preview.png" alt="Side-by-side render: original duck on the left, size-tuned duck on the right, at the worst-scoring view." loading="lazy">
+      <figcaption>Legacy render evidence only: duck preview from <span class="mono">a9329e2</span>, original | result at the worst view, SSIM 0.929. Not a new render or verification of this proposal.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<section class="card" id="graphs" aria-labelledby="graphs-h">
+  <div class="section-head">
+    <div>
+      <div class="eyebrow">Graph files</div>
+      <h2 id="graphs-h">A graph is the recipe, saved as text</h2>
+      <p>Blocks run top to bottom; <code>run</code> adds input and output blocks. The proposed graph is a recipe, not a policy: <b>no fidelity or other limits, timeout, or saved tune constraints</b>. Applying it does not enforce the tune session's limits.</p>
+    </div>
+    <button class="btn suggest small" type="button" data-suggest-target="Graph file format" data-suggest-files="packages/cli/src/graphFiles.ts, packages/cli/graphs/optimize.toon" data-suggest-section="graphs">Suggest</button>
+  </div>
+  <div class="grid2">
+    <div>
+      <div class="label-row"><span class="tag inferred">proposed recipe · illustrative</span></div>
+<pre class="term">graph: 1
+name: duck.size
+goal: size
+blocks[2]:
+  - type: transform.dedup
+  - type: transform.cull-unused</pre>
+      <p class="small muted">Schema example, not a claimed tune winner. No saved limits or provenance extras.</p>
+      <details>
+      <summary class="small">Legacy baseline recording: show optimize (unchanged stdout)</summary>
+      <div class="label-row"><span class="tag verified">real output · ab42afe</span><span class="small muted">non-render smoke</span></div>
+<pre class="term"><span class="cmd">$ node-assets show optimize</span>
+graph: 1
+name: optimize
+blocks[9]:
+  - type: transform.metal-rough
+  - type: transform.dedup
+  - type: transform.cull-unused
+  - type: transform.weld
+  - type: transform.resize-textures
+    config:
+      maxSize: 2048
+      slots: all
+  - type: transform.encode-textures
+    config:
+      format: webp
+      quality: 90
+      slots: color
+  - type: transform.encode-textures
+    config:
+      format: webp
+      quality: 95
+      slots: data
+  - type: transform.quantize
+  - type: transform.cull-unused</pre>
+      </details>
+    </div>
+    <div>
+      <h3>Keys</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Key</th><th>Meaning</th></tr></thead>
+          <tbody>
+            <tr><td><code>graph</code></td><td>Format version. Must be 1.</td></tr>
+            <tr><td><code>name</code>, <code>goal</code></td><td>Labels. tune writes <code>duck.size</code> and <code>size</code>.</td></tr>
+            <tr><td><code>blocks</code></td><td>The steps. Each has a <code>type</code> and optional <code>config</code>; omitted settings use the block's defaults.</td></tr>
+            <tr><td>No limits</td><td>The baseline <code>check</code> field is removed. No threshold, timeout or other tune constraints are persisted.</td></tr>
+            <tr><td><code>tuned</code></td><td>If retained, descriptive observations only (e.g. input and result numbers), never constraints or shared-codec state. <code>run</code> does not turn observations into limits.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <h3 style="margin-top: 14px;">No provenance hashes in extras</h3>
+      <p class="small" data-feedback-uids="2">Proposed output has no CLI provenance hashes in <code>extras.nodeAssets</code>. The baseline's automatic no-op detection depends on those hashes, so <b>no-op and overwrite policy are unresolved</b>. No sidecar or replacement mechanism is proposed here, and preserved no-op behavior is not promised. Keep the existing safety rule against overwriting an input.</p>
+      <h3 style="margin-top: 14px;">Strict on purpose</h3>
+      <p class="small">Retain validation of unknown keys, blocks, settings and out-of-range block values as <code>BAD_GRAPH</code>. To customize: <code>node-assets show optimize &gt; graphs/mine.toon</code>, edit, apply with <code>run</code>, then optionally use <code>inspect output.glb --compare original.glb</code> for a score, not a saved pass/fail policy. Existing graphs with the removed field will need a migration decision; no silent compatibility is promised.</p>
+    </div>
+  </div>
+</section>

@@ -1,0 +1,151 @@
+<body>
+<div class="layout">
+<nav class="toc" aria-label="Sections">
+  <div class="toc-title">node-assets CLI</div>
+  <a href="#overview">Overview</a>
+  <a href="#commands">Commands</a>
+  <a href="#try">Try a command</a>
+  <a href="#goals">Goals &amp; scores</a>
+  <a href="#tune">How tune searches</a>
+  <a href="#fidelity">Fidelity check</a>
+  <a href="#graphs">Graph files</a>
+  <a href="#output">Output &amp; errors</a>
+  <a href="#browser">Browser</a>
+  <a href="#code">Code map</a>
+  <a href="#evidence">Evidence &amp; limits</a>
+  <a href="#noticed">Noticed while writing</a>
+  <a href="#next">What's left</a>
+</nav>
+<main>
+
+<header class="card hero" id="top">
+  <div class="eyebrow">Interactive review guide · proposed contract</div>
+  <h1>node-assets CLI, updated from Alex's comments</h1>
+  <p class="question">What does the CLI do, how does each part work, and where is the code?</p>
+  <p class="answer"><b>tune</b> renders candidate settings in a headless browser, keeps the smallest (or fastest) result that still looks like the original, and saves the recipe as a small graph file. <b>run</b> applies that graph, or the built-in <code>optimize</code> graph, to as many models as you like.</p>
+  <div class="chips">
+    <span class="chip accent">Proposal · 17 comments received</span>
+    <span class="chip">unchanged baseline <span class="mono">ab42afe</span></span>
+    <span class="chip">Babylon.js renderer</span>
+    <span class="chip">preview package · unreleased</span>
+    <button class="btn small" type="button" id="theme-toggle" aria-label="Switch light or dark theme">Light / dark</button>
+  </div>
+  <p class="small"><b>This is the proposed contract, not the installed package.</b> Source baseline: <code>ab42afe1ac1816cc4232b89bc123375c82d3dfbd</code>. Only this guide changed; no source changes or code approval are implied.</p>
+  <div class="soft small" data-feedback-uids="2,4,1,6,7,8,9,10,11,12,13,14,15,16,17,19,20">
+    <b>Applied to the proposal:</b> drop compat, provenance extras, saved limits, run checks, and shared-codec calculations; use help flags, --compare, opt-in load-time, Chrome-style throttling names, numeric-second timeouts, and paths without a required trailing slash.
+    <br><b>Needs a decision:</b> goal naming/split; render image size vs max texture size (and 4096); SSIM vs pixel-diff naming; load measurement and throttle rates; no-op/overwrite policy; ambiguous missing positional paths. Details are inline. A 97% browser-support filter is deferred, not added.
+  </div>
+</header>
+
+<section class="card" id="how-to-suggest" aria-labelledby="how-to-suggest-h">
+  <div class="section-head">
+    <div>
+      <h2 id="how-to-suggest-h">Suggest a change to the CLI</h2>
+      <p>This page is a review surface for the proposal. Your 17 delivered comments are already incorporated or recorded inline; you don't need to submit them again. Further suggestions don't approve source changes.</p>
+    </div>
+    <button class="btn suggest" type="button" data-suggest-target="The CLI in general" data-suggest-files="packages/cli/" data-suggest-section="general">Suggest a change</button>
+  </div>
+  <div class="howto">
+    <div class="soft"><b>1 · Point at it</b>Use Lavish's annotate tool to mark any text, row, or diagram box and type a note.</div>
+    <div class="soft"><b>2 · Or use a form</b>Press a <span class="mono">✎ Suggest</span> button. It fills in the command or file for you.</div>
+    <div class="soft"><b>3 · Send to agent</b>Suggestions queue up in Lavish. Press <b>Send to Agent</b> when you're done to deliver them all at once.</div>
+  </div>
+</section>
+
+<section class="card" id="overview" aria-labelledby="overview-h">
+  <div class="section-head">
+    <div>
+      <div class="eyebrow">Overview</div>
+      <h2 id="overview-h">Two main jobs: find settings, then apply them</h2>
+      <p><code>inspect</code> reports a model's properties; <code>show</code> prints the recipe. Limits belong only to a temporary <code>tune</code> run, never to the saved graph.</p>
+    </div>
+    <button class="btn suggest small" type="button" data-suggest-target="Overall workflow (tune → graph → run)" data-suggest-files="packages/cli/src/commands/" data-suggest-section="overview">Suggest</button>
+  </div>
+  <svg class="diagram" viewBox="0 0 960 300" role="img" aria-labelledby="ov-title ov-desc">
+    <title id="ov-title">CLI data flow</title>
+    <desc id="ov-desc">A model goes into tune, which writes a recipe with no saved limits. run applies that graph, or optimize, and writes GLB without provenance hashes in extras.</desc>
+    <defs>
+      <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+        <path class="arrowhead" d="M0,0 L10,5 L0,10 z"/>
+      </marker>
+    </defs>
+    <path class="edge" d="M170,140 C200,140 200,60 228,60" marker-end="url(#arrow)"/>
+    <path class="edge" d="M400,60 L458,60" marker-end="url(#arrow)"/>
+    <path class="edge" d="M650,60 C690,60 680,140 708,140" marker-end="url(#arrow)"/>
+    <path class="edge" d="M650,240 C690,240 680,162 708,162" marker-end="url(#arrow)"/>
+    <path class="edge" d="M170,152 L708,152" marker-end="url(#arrow)"/>
+    <path class="edge" d="M820,150 L858,150" marker-end="url(#arrow)"/>
+    <text class="edge-label" x="330" y="146">same model (or any others)</text>
+
+    <g class="node" id="ov-model"><title>Your model: .glb .gltf .fbx .obj .stl .usd .usda .usdc .usdz</title>
+      <rect x="20" y="118" width="150" height="64" rx="10"/>
+      <text x="95" y="146" text-anchor="middle">model</text>
+      <text class="sub" x="95" y="164" text-anchor="middle">.glb .gltf .fbx .obj .stl .usd*</text>
+    </g>
+    <g class="node accent" id="ov-tune"><title>tune: search for the best settings per goal</title>
+      <rect x="230" y="28" width="170" height="64" rx="10"/>
+      <text x="315" y="56" text-anchor="middle">tune</text>
+      <text class="sub" x="315" y="74" text-anchor="middle">--for size,gpu,load</text>
+    </g>
+    <g class="node" id="ov-graph"><title>Graph file: recipe only, no fidelity or other run limits</title>
+      <rect x="460" y="28" width="190" height="64" rx="10"/>
+      <text class="mono-sm" x="555" y="56" text-anchor="middle">&lt;model&gt;.&lt;goal&gt;.toon</text>
+      <text class="sub" x="555" y="74" text-anchor="middle">+ preview .png</text>
+    </g>
+    <g class="node" id="ov-builtin"><title>Built-in optimize graph: a safe default recipe, no search</title>
+      <rect x="460" y="208" width="190" height="64" rx="10"/>
+      <text x="555" y="236" text-anchor="middle">built-in optimize</text>
+      <text class="sub" x="555" y="254" text-anchor="middle">no browser needed</text>
+    </g>
+    <g class="node accent" id="ov-run"><title>run: apply a graph to one or many models</title>
+      <rect x="710" y="118" width="110" height="64" rx="10"/>
+      <text x="765" y="146" text-anchor="middle">run</text>
+      <text class="sub" x="765" y="164" text-anchor="middle">many inputs</text>
+    </g>
+    <g class="node" id="ov-out"><title>Output GLB, no provenance hashes in extras in the proposal</title>
+      <rect x="860" y="118" width="90" height="64" rx="10"/>
+      <text x="905" y="146" text-anchor="middle">out.glb</text>
+      <text class="sub" x="905" y="164" text-anchor="middle">no hashes</text>
+    </g>
+    <text class="note" x="315" y="112" text-anchor="middle">needs a browser</text>
+    <text class="note" x="765" y="200" text-anchor="middle">no saved limits</text>
+    <text class="note" x="20" y="250">inspect: headless metrics by default</text>
+    <text class="note" x="20" y="270">--compare: render · --include load-time: proposed opt-in</text>
+    <text class="note" x="20" y="290">show: print a graph</text>
+  </svg>
+  <dl class="glossary">
+    <dt>graph</dt><dd>An ordered list of processing steps (blocks) plus a few settings. The CLI adds the input and output steps when it runs one.</dd>
+    <dt>block</dt><dd>One step from the core library, e.g. <code>weld</code>, <code>resize-textures</code>, <code>encode-draco</code>. Each has a <code>type</code> and a <code>config</code>.</dd>
+    <dt>TOON</dt><dd>A compact, line-based text format, similar to YAML. Graph files and all command output use it, so both people and agents can read them.</dd>
+    <dt>goal</dt><dd>Keep <b>size</b>, <b>gpu</b>, and <b>load</b> for now; compat is removed. Alex's question about <code>disk-size</code>, <code>download-size</code>, and <code>load-speed</code> is pending, not an accepted rename.</dd>
+    <dt>fidelity</dt><dd>Worst-64px-region SSIM over four rendered views. The default 0.9 threshold applies only during that tune run; it is not saved. This is not a pixel-difference ratio.</dd>
+    <dt>decoder</dt><dd>Code needed to read Draco, meshopt or KTX2. Count each required codec once per model for size/load scoring; do not divide its cost across inputs. A viewer may share or cache codecs across models, but the CLI doesn't predict that.</dd>
+  </dl>
+</section>
+
+<section class="card" id="commands" aria-labelledby="commands-h">
+  <div class="section-head">
+    <div>
+      <div class="eyebrow">Commands</div>
+      <h2 id="commands-h">What each command does</h2>
+      <p>Four work commands and <code>--help</code>. Structured results use TOON on stdout; progress goes to stderr. Source paths below refer to the unchanged baseline, not completed implementation.</p>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Command</th><th>What it does</th><th>Browser?</th><th>Writes files</th><th>Source</th><th></th></tr></thead>
+      <tbody>
+        <tr><td><code>node-assets</code></td><td>Same help as <code>node-assets --help</code>; no current-folder model or graph listing. An unknown top-level command also shows this help.</td><td>No</td><td>Nothing</td><td><code>cli.ts</code>, <code>commands/home.ts</code></td><td><button class="btn suggest small" type="button" data-suggest-target="node-assets (top-level help)" data-suggest-files="packages/cli/src/commands/home.ts" data-suggest-section="commands">Suggest</button></td></tr>
+        <tr><td><code>--help</code></td><td>Conventional usage, description, flags and examples. Use <code>node-assets tune --help</code> for a command. Missing/unknown command input shows its nearest command's help, not a help pseudo-command.</td><td>No</td><td>Nothing</td><td><code>help.ts</code>, <code>cli.ts</code></td><td><button class="btn suggest small" type="button" data-suggest-target="node-assets --help" data-suggest-files="packages/cli/src/help.ts, packages/cli/src/cli.ts" data-suggest-section="commands">Suggest</button></td></tr>
+        <tr><td><code>inspect</code></td><td>Headless metrics only by default: bytes, GPU estimate, triangles, textures, codecs and extensions. Codec download cost is per model, with a shared/cache-cost note rather than batch calculations.</td><td>No</td><td>Nothing</td><td><code>commands/inspect.ts</code></td><td><button class="btn suggest small" type="button" data-suggest-target="node-assets inspect" data-suggest-files="packages/cli/src/commands/inspect.ts" data-suggest-section="commands">Suggest</button></td></tr>
+        <tr><td><code>inspect --compare</code></td><td>Adds SSIM against one original, or same-named originals in a folder (extension ignored). Renamed from the baseline comparison flag; same usage.</td><td>Yes</td><td>Nothing</td><td><code>commands/inspect.ts</code></td><td><button class="btn suggest small" type="button" data-suggest-target="node-assets inspect --compare" data-suggest-files="packages/cli/src/commands/inspect.ts, packages/cli/src/render/" data-suggest-section="commands">Suggest</button></td></tr>
+        <tr><td><code>tune</code></td><td>Searches settings for each goal. Saves the winning graph and a preview image.</td><td>Yes</td><td><code>.toon</code> + <code>.png</code></td><td><code>commands/tune.ts</code>, <code>tune/</code></td><td><button class="btn suggest small" type="button" data-suggest-target="node-assets tune" data-suggest-files="packages/cli/src/commands/tune.ts, packages/cli/src/tune/" data-suggest-section="commands">Suggest</button></td></tr>
+        <tr><td><code>run</code></td><td>Applies a graph to one or more models, without rendering, saved limits or provenance extras. No-op/overwrite behavior after removing hashes still needs a decision.</td><td>No</td><td><code>.glb</code></td><td><code>commands/run.ts</code></td><td><button class="btn suggest small" type="button" data-suggest-target="node-assets run" data-suggest-files="packages/cli/src/commands/run.ts" data-suggest-section="commands">Suggest</button></td></tr>
+        <tr><td><code>inspect --include load-time</code></td><td>Proposed comma-separated opt-in list. Only <code>load-time</code> is named so far. Actual browser load measurement and throttle rates are pending, not implemented.</td><td>Proposed</td><td>Nothing</td><td><code>commands/inspect.ts</code></td><td><button class="btn suggest small" type="button" data-suggest-target="Opt-in load-time measurement" data-suggest-files="packages/cli/src/commands/inspect.ts" data-suggest-section="commands">Suggest</button></td></tr>
+        <tr><td><code>show</code></td><td>Prints a graph (built-in or file) so you can read or copy it.</td><td>No</td><td>Nothing</td><td><code>commands/show.ts</code></td><td><button class="btn suggest small" type="button" data-suggest-target="node-assets show" data-suggest-files="packages/cli/src/commands/show.ts" data-suggest-section="commands">Suggest</button></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="small muted" data-feedback-uids="6,7">Help examples: <code>node-assets foo</code> → top-level help; <code>node-assets tune</code> or <code>node-assets tune foo</code> → tune help in principle. But <code>foo</code> can also be a positional model path: deciding when a nonexistent/unsupported path means help versus a file error is still open. Valid command file failures must not all become help. Help-fallback exit status is not decided here.</p>
+  <p class="small muted">The man page at <code>packages/cli/docs/node-assets.1.md</code> and <code>packages/cli/README.md</code> still describe the baseline.</p>
+</section>

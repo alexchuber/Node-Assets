@@ -1,0 +1,94 @@
+$ node-assets --version
+0.1.0
+[exit 0]
+
+$ node-assets show optimize
+graph: 1
+name: optimize
+blocks[9]:
+  - type: transform.metal-rough
+  - type: transform.dedup
+  - type: transform.cull-unused
+  - type: transform.weld
+  - type: transform.resize-textures
+    config:
+      maxSize: 2048
+      slots: all
+  - type: transform.encode-textures
+    config:
+      format: webp
+      quality: 90
+      slots: color
+  - type: transform.encode-textures
+    config:
+      format: webp
+      quality: 95
+      slots: data
+  - type: transform.quantize
+  - type: transform.cull-unused
+[exit 0]
+
+$ node-assets run --help
+usage: "node-assets run <graph> <input>... -o <out.glb|dir/> [--check] [--force]"
+description: Apply a graph file or built-in graph. Several inputs or a directory require a directory output. Identical graph and input provenance is a no-op; other existing outputs need --force. Never overwrites an input.
+flags[4]: "-o, --out FILE.glb|DIR/: required output","--check: render against input at check.view and check.fidelity (defaults 1024 and 0.9); below limit exits 1","-f, --force: replace existing outputs","-h, --help"
+examples[2]: node-assets run optimize model.glb -o public/model.glb,node-assets run graphs/model.size.toon assets/ -o public/models/ --check --force
+[exit 0]
+
+$ node-assets
+bin: <temporary-project>/node_modules/.bin/node-assets
+description: "Make 3D models small and web-ready: inspect models, tune a graph for size, gpu, load or compat, and run graphs"
+models[1]{file,bytes}:
+  duck.glb,120484
+graphs: 0 graphs found under the current directory
+builtins[1]{name,file,description}:
+  optimize,<temporary-project>/node_modules/node-assets-cli/graphs/optimize.toon,"WebP up to 2048 px (color q90, data q95), quantized geometry, lossless cleanup"
+help[5]: "node-assets inspect <file|dir>: size, GPU memory, load time and decoders","node-assets tune <input> --for size|gpu|load|compat -o graphs/: search for a goal within a fidelity limit","node-assets run optimize <input> -o <out.glb|dir/>: apply the built-in graph","node-assets show optimize: print every block setting","node-assets <command> --help: flags and examples; node-assets help: full manual"
+[exit 0]
+
+$ node-assets inspect duck.glb
+file: duck.glb
+status: ok
+bytes: 120484
+gpu_mib: 1.4
+load_s: 0.15
+triangles: 4212
+textures: 1x png 512x512
+decoders: none
+required_extensions: none
+[exit 0]
+
+$ node-assets run optimize duck.glb -o out/duck.glb
+run: duck.glb
+count: "1 written or up to date, 0 failed, 0 skipped"
+results[1]{input,output,status,bytes_before,bytes_after,gpu_mib,decoders}:
+  duck.glb,out/duck.glb,ok,120484,82852,1.4,none
+total: 120484 bytes -> 82852 bytes
+help[1]: "node-assets inspect <output> --against <input>: measure fidelity and load time"
+[exit 0]
+
+$ node-assets run optimize duck.glb -o out/duck.glb
+count: "1 written or up to date, 0 failed, 0 skipped"
+results[1]{input,output,status,bytes_before,bytes_after,gpu_mib,decoders}:
+  duck.glb,out/duck.glb,up to date (no-op),120484,82852,1.4,none
+total: 120484 bytes -> 82852 bytes
+help[1]: "node-assets inspect <output> --against <input>: measure fidelity and load time"
+[exit 0]
+
+$ node-assets inspect out/duck.glb
+file: out/duck.glb
+status: ok
+bytes: 82852
+gpu_mib: 1.4
+load_s: 0.11
+triangles: 4212
+textures: 1x webp 512x512
+decoders: none
+required_extensions: EXT_texture_webp+KHR_mesh_quantization
+[exit 0]
+
+$ node-assets tune
+error: missing <input>
+code: USAGE
+help[1]: "node-assets tune <input>... --for GOAL[,GOAL...] [-o <dir/|file.toon>] [--fidelity F] [--view PX] [--network NET] [--amortize N] [--keep hierarchy,texture-size,geometry] [--time-limit DUR]"
+[exit 2]
